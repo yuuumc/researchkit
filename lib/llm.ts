@@ -12,7 +12,7 @@ const openai = new OpenAI({
   baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
 })
 
-// 模型名称（DeepSeek 用户：在 .env.local 中设置 LLM_MODEL=deepseek-chat）
+// 模型名称（DeepSeek 用户：在 .env.local 中设置 LLM_MODEL=deepseek-v4-flash）
 const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o-mini'
 
 export interface KnowledgeCard {
