@@ -1,0 +1,39 @@
+# 依赖
+node_modules/
+.pnp
+.pnp.js
+
+# 测试
+coverage/
+
+# Next.js
+.next/
+out/
+build/
+
+# 生产
+dist/
+
+# 环境变量（包含密钥，绝对不能提交）
+.env*.local
+.env
+
+# 调试
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# 系统
+.DS_Store
+*.pem
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Vercel
+.vercel
