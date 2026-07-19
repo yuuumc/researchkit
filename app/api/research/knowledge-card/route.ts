@@ -87,25 +87,13 @@ export async function POST(request: NextRequest) {
 
     const processingTimeMs = Date.now() - startTime
 
-    // 如果请求 markdown 格式
-    if (exportFormat === 'markdown') {
-      const markdown = exportToMarkdown(knowledgeCard, parsed.source)
-      return NextResponse.json({
-        success: true,
-        knowledge_card: knowledgeCard,
-        markdown,
-        metadata: {
-          word_count: content.length,
-          processing_time_ms: processingTimeMs,
-          source: parsed.source,
-        },
-      })
-    }
+    // 始终生成 markdown（不管 export_format 是否传入）
+    const markdown = exportToMarkdown(knowledgeCard, parsed.source)
 
-    // 默认响应
     return NextResponse.json({
       success: true,
       knowledge_card: knowledgeCard,
+      markdown,
       metadata: {
         word_count: content.length,
         processing_time_ms: processingTimeMs,

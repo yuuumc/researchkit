@@ -87,23 +87,13 @@ export async function POST(request: NextRequest) {
 
     const processingTimeMs = Date.now() - startTime
 
-    if (exportFormat === 'markdown') {
-      const markdown = exportToMarkdown(knowledgeCard, parsed.source)
-      return NextResponse.json({
-        success: true,
-        knowledge_card: knowledgeCard,
-        markdown,
-        metadata: {
-          word_count: content.length,
-          processing_time_ms: processingTimeMs,
-          source: parsed.source,
-        },
-      })
-    }
+    // 始终生成 markdown
+    const markdown = exportToMarkdown(knowledgeCard, parsed.source)
 
     return NextResponse.json({
       success: true,
       knowledge_card: knowledgeCard,
+      markdown,
       metadata: {
         word_count: content.length,
         processing_time_ms: processingTimeMs,
