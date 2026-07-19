@@ -10,9 +10,10 @@
   },
   "dependencies": {
     "next": "14.2.5",
+    "openai": "^4.52.0",
+    "pdf-parse": "^2.4.5",
     "react": "^18",
-    "react-dom": "^18",
-    "openai": "^4.52.0"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",
