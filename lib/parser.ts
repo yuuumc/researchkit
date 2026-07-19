@@ -120,7 +120,9 @@ export async function parsePdf(file: File): Promise<ParsedContent> {
 
   try {
     // 动态导入避免构建时依赖
-    const pdfParse = (await import('pdf-parse')).default
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdfParseModule: any = await import('pdf-parse')
+    const pdfParse = pdfParseModule.default || pdfParseModule
     const buffer = Buffer.from(arrayBuffer)
     const data = await pdfParse(buffer)
     return {

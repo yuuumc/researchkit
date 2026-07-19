@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
-    const language = (formData.get('language') as string) || 'zh'
-    const detailLevel = (formData.get('detail_level') as string) || 'standard'
+    const language = ((formData.get('language') as string) || 'zh') as 'zh' | 'en'
+    const detailLevel = ((formData.get('detail_level') as string) || 'standard') as 'brief' | 'standard' | 'detailed'
     const exportFormat = formData.get('export_format') as string
 
     if (!file) {

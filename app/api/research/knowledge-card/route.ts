@@ -70,8 +70,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const language = options.language || 'zh'
-    const detailLevel = options.detail_level || 'standard'
+    const language = (options.language || 'zh') as 'zh' | 'en'
+    const detailLevel = (options.detail_level || 'standard') as 'brief' | 'standard' | 'detailed'
 
     // 调用 LLM 生成知识卡
     const knowledgeCard = await generateKnowledgeCard({
