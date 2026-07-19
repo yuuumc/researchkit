@@ -9,11 +9,11 @@ import { KNOWLEDGE_CARD_SYSTEM_PROMPT, KNOWLEDGE_CARD_USER_PROMPT } from './prom
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   // DeepSeek 用户：在 .env.local 中设置 OPENAI_BASE_URL=https://api.deepseek.com/v1
-  baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+  baseURL: (process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').trim(),
 })
 
-// 模型名称（DeepSeek 用户：在 .env.local 中设置 LLM_MODEL=deepseek-v4-flash）
-const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o-mini'
+// 模型名称（DeepSeek 最新模型：deepseek-v4-flash / deepseek-v4-pro）
+const LLM_MODEL = process.env.LLM_MODEL?.trim() || 'deepseek-v4-flash'
 
 export interface KnowledgeCard {
   title: string
