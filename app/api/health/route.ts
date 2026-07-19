@@ -9,8 +9,8 @@ export async function GET() {
   return NextResponse.json({
     success: true,
     service: 'ResearchKit',
-    version: '0.3.0',
+    version: '0.4.0',
     timestamp: new Date().toISOString(),
-    features: ['text', 'url', 'pdf', 'markdown-export'],
+    features: ['text', 'url', 'pdf', 'batch', 'markdown-export', 'obsidian-bilink'],
   })
 }

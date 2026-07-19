@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { generateKnowledgeCard } from '@/lib/llm'
-import { parseContent, exportToMarkdown } from '@/lib/parser'
+import { parseContent, exportToMarkdown, exportToObsidian } from '@/lib/parser'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -87,13 +87,15 @@ export async function POST(request: NextRequest) {
 
     const processingTimeMs = Date.now() - startTime
 
-    // 始终生成 markdown（不管 export_format 是否传入）
+    // 同时生成 Markdown 和 Obsidian 双链格式
     const markdown = exportToMarkdown(knowledgeCard, parsed.source)
+    const obsidian = exportToObsidian(knowledgeCard, parsed.source)
 
     return NextResponse.json({
       success: true,
       knowledge_card: knowledgeCard,
       markdown,
+      obsidian,
       metadata: {
         word_count: content.length,
         processing_time_ms: processingTimeMs,

@@ -1,0 +1,135 @@
+/**
+ * 批量处理 Endpoint
+ * POST /api/research/batch
+ *
+ * 一次提交多个 URL，并发生成多张知识卡
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { generateKnowledgeCard } from '@/lib/llm'
+import { fetchFromUrl, exportToMarkdown, exportToObsidian } from '@/lib/parser'
+
+export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+
+  try {
+    const body = await request.json()
+    const urls: string[] = body.urls || []
+    const concurrency = Math.min(body.concurrency || 3, 5) // 最多 5 并发
+
+    if (!Array.isArray(urls) || urls.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '缺少 urls 数组' },
+        { status: 400 }
+      )
+    }
+
+    if (urls.length > 10) {
+      return NextResponse.json(
+        { success: false, error: '单次最多 10 个 URL' },
+        { status: 400 }
+      )
+    }
+
+    // 处理单个 URL 的完整流程
+    const processOne = async (url: string) => {
+      try {
+        const parsed = await fetchFromUrl(url)
+
+        if (!parsed.content || parsed.content.length < 50) {
+          return {
+            url,
+            success: false,
+            error: '内容过短或为空',
+          }
+        }
+
+        const truncated = parsed.content.length > 50000
+          ? parsed.content.substring(0, 50000) + '...'
+          : parsed.content
+
+        const knowledgeCard = await generateKnowledgeCard({
+          content: truncated,
+          language: 'zh',
+          detailLevel: 'brief', // 批量模式默认 brief，节省 token
+        })
+
+        if (parsed.title && parsed.title.length > 0) {
+          knowledgeCard.title = parsed.title
+        }
+
+        const markdown = exportToMarkdown(knowledgeCard, parsed.source)
+        const obsidian = exportToObsidian(knowledgeCard, parsed.source)
+
+        return {
+          url,
+          success: true,
+          knowledge_card: knowledgeCard,
+          markdown,
+          obsidian,
+        }
+      } catch (err) {
+        return {
+          url,
+          success: false,
+          error: err instanceof Error ? err.message : '处理失败',
+        }
+      }
+    }
+
+    // 简单的并发控制器
+    const results: any[] = []
+    const queue = [...urls]
+    const workers: Promise<void>[] = []
+
+    const worker = async () => {
+      while (queue.length > 0) {
+        const url = queue.shift()
+        if (!url) break
+        const result = await processOne(url)
+        results.push(result)
+      }
+    }
+
+    for (let i = 0; i < concurrency; i++) {
+      workers.push(worker())
+    }
+
+    await Promise.all(workers)
+
+    const successCount = results.filter(r => r.success).length
+    const processingTimeMs = Date.now() - startTime
+
+    return NextResponse.json({
+      success: true,
+      total: urls.length,
+      succeeded: successCount,
+      failed: urls.length - successCount,
+      results,
+      metadata: {
+        concurrency,
+        processing_time_ms: processingTimeMs,
+      },
+    })
+  } catch (error) {
+    console.error('Batch API 错误:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : '服务器内部错误',
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  })
+}

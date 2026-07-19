@@ -2,24 +2,32 @@
 
 import { useState, useRef } from 'react'
 
-type InputMode = 'text' | 'url' | 'pdf'
+type InputMode = 'text' | 'url' | 'pdf' | 'batch'
 
 export default function Home() {
   const [mode, setMode] = useState<InputMode>('text')
   const [input, setInput] = useState('')
   const [result, setResult] = useState<any>(null)
+  const [batchResults, setBatchResults] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'md' | 'obsidian' | null>(null)
   const [markdown, setMarkdown] = useState('')
+  const [obsidian, setObsidian] = useState('')
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [showObsidian, setShowObsidian] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSubmit = async () => {
     if (mode === 'pdf') {
       if (!pdfFile) {
         setError('请上传 PDF 文件')
+        return
+      }
+    } else if (mode === 'batch') {
+      if (!input.trim()) {
+        setError('请输入多个 URL（每行一个）')
         return
       }
     } else if (!input.trim()) {
@@ -30,8 +38,10 @@ export default function Home() {
     setLoading(true)
     setError('')
     setResult(null)
+    setBatchResults([])
     setMarkdown('')
-    setCopied(false)
+    setObsidian('')
+    setCopied(null)
 
     try {
       let response: Response
@@ -46,6 +56,13 @@ export default function Home() {
         response = await fetch('/api/research/upload-pdf', {
           method: 'POST',
           body: formData,
+        })
+      } else if (mode === 'batch') {
+        const urls = input.split('\n').map(u => u.trim()).filter(u => u.length > 0)
+        response = await fetch('/api/research/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls, concurrency: 3 }),
         })
       } else {
         const payload =
@@ -67,8 +84,13 @@ export default function Home() {
         return
       }
 
-      setResult(data.knowledge_card)
-      setMarkdown(data.markdown || '')
+      if (mode === 'batch') {
+        setBatchResults(data.results || [])
+      } else {
+        setResult(data.knowledge_card)
+        setMarkdown(data.markdown || '')
+        setObsidian(data.obsidian || '')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败')
     } finally {
@@ -76,19 +98,23 @@ export default function Home() {
     }
   }
 
-  const copyMarkdown = () => {
-    navigator.clipboard.writeText(markdown)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const copyMarkdown = (format: 'md' | 'obsidian') => {
+    const content = format === 'md' ? markdown : obsidian
+    navigator.clipboard.writeText(content)
+    setCopied(format)
+    setTimeout(() => setCopied(null), 2000)
   }
 
-  const downloadMarkdown = () => {
+  const downloadMarkdown = (format: 'md' | 'obsidian') => {
+    const content = format === 'md' ? markdown : obsidian
+    const ext = format === 'md' ? 'md' : 'md'
+    const prefix = format === 'md' ? '' : 'obsidian-'
     const title = result?.title || 'knowledge-card'
-    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' })
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${title.replace(/[^\w\u4e00-\u9fa5]+/g, '_')}.md`
+    a.download = `${prefix}${title.replace(/[^\w\u4e00-\u9fa5]+/g, '_')}.${ext}`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -123,19 +149,11 @@ Transformer 的并行化能力使其训练速度远快于 RNN，为后续大规�
         {/* Input Card */}
         <div style={{ background: 'white', borderRadius: '20px', padding: '28px', boxShadow: '0 4px 20px rgba(99, 102, 241, 0.08)', marginBottom: '24px' }}>
           {/* Mode tabs */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-            <button
-              onClick={() => { setMode('text'); setError('') }}
-              style={tabStyle(mode === 'text')}
-            >📝 文本输入</button>
-            <button
-              onClick={() => { setMode('url'); setError('') }}
-              style={tabStyle(mode === 'url')}
-            >🔗 URL 抓取</button>
-            <button
-              onClick={() => { setMode('pdf'); setError('') }}
-              style={tabStyle(mode === 'pdf')}
-            >📄 PDF 上传</button>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+            <button onClick={() => { setMode('text'); setError('') }} style={tabStyle(mode === 'text')}>📝 文本</button>
+            <button onClick={() => { setMode('url'); setError('') }} style={tabStyle(mode === 'url')}>🔗 URL</button>
+            <button onClick={() => { setMode('pdf'); setError('') }} style={tabStyle(mode === 'pdf')}>📄 PDF</button>
+            <button onClick={() => { setMode('batch'); setError('') }} style={tabStyle(mode === 'batch')}>⚡ 批量</button>
           </div>
 
           {/* Input field */}
@@ -156,10 +174,26 @@ Transformer 的并行化能力使其训练速度远快于 RNN，为后续大规�
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="https://arxiv.org/abs/2301.00001 或任意网页链接"
-              style={inputStyle}
+              style={{ ...inputStyle, minHeight: 'auto' }}
               onFocus={(e) => (e.target.style.borderColor = '#6366f1')}
               onBlur={(e) => (e.target.style.borderColor = '#e2e8f2')}
             />
+          )}
+
+          {mode === 'batch' && (
+            <>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={'每行一个 URL，最多 10 个：\nhttps://arxiv.org/abs/1706.03762\nhttps://arxiv.org/abs/1810.04805\nhttps://arxiv.org/abs/2005.14165'}
+                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '13px' }}
+                onFocus={(e) => (e.target.style.borderColor = '#6366f1')}
+                onBlur={(e) => (e.target.style.borderColor = '#e2e8f2')}
+              />
+              <div style={{ marginTop: '8px', fontSize: '13px', color: '#94a3b8' }}>
+                ⚡ 3 并发处理 · 默认 brief 模式（节省 token）· 失败的 URL 不会中断其他
+              </div>
+            </>
           )}
 
           {mode === 'pdf' && (
@@ -320,22 +354,93 @@ Transformer 的并行化能力使其训练速度远快于 RNN，为后续大规�
             )}
 
             {/* Export toolbar */}
-            {markdown && (
+            {(markdown || obsidian) && (
               <div style={{ background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)', marginTop: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>📥 导出</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>📥 导出</h3>
+                    {/* Format toggle */}
+                    <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px' }}>
+                      <button
+                        onClick={() => setShowObsidian(false)}
+                        style={{
+                          padding: '6px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer',
+                          background: !showObsidian ? 'white' : 'transparent',
+                          color: !showObsidian ? '#6366f1' : '#5a6478',
+                          fontWeight: 600, fontSize: '13px', boxShadow: !showObsidian ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        }}
+                      >Markdown</button>
+                      <button
+                        onClick={() => setShowObsidian(true)}
+                        style={{
+                          padding: '6px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer',
+                          background: showObsidian ? 'white' : 'transparent',
+                          color: showObsidian ? '#8b5cf6' : '#5a6478',
+                          fontWeight: 600, fontSize: '13px', boxShadow: showObsidian ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        }}
+                      >🔮 Obsidian 双链</button>
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={copyMarkdown} style={btnSecondary}>
-                      {copied ? '✓ 已复制' : '📋 复制 Markdown'}
+                    <button onClick={() => copyMarkdown(showObsidian ? 'obsidian' : 'md')} style={btnSecondary}>
+                      {copied === (showObsidian ? 'obsidian' : 'md') ? '✓ 已复制' : '📋 复制'}
                     </button>
-                    <button onClick={downloadMarkdown} style={btnPrimary}>
+                    <button onClick={() => downloadMarkdown(showObsidian ? 'obsidian' : 'md')} style={btnPrimary}>
                       ⬇️ 下载 .md
                     </button>
                   </div>
                 </div>
-                <pre style={{ background: '#0f172a', color: '#e2e8f0', padding: '16px', borderRadius: '8px', fontSize: '12px', overflow: 'auto', maxHeight: '300px', margin: 0 }}>
-                  {markdown}
+                {showObsidian && (
+                  <div style={{ marginBottom: '12px', padding: '10px 12px', background: '#f5f3ff', border: '1px solid #ddd6fe', color: '#6d28d9', borderRadius: '8px', fontSize: '13px' }}>
+                    🔮 Obsidian 双链格式：术语自动用 <code style={{ background: '#ede9fe', padding: '2px 6px', borderRadius: '4px' }}>[[term]]</code> 包裹，含 YAML frontmatter，导入 Obsidian 后可形成知识图谱。
+                  </div>
+                )}
+                <pre style={{ background: '#0f172a', color: '#e2e8f0', padding: '16px', borderRadius: '8px', fontSize: '12px', overflow: 'auto', maxHeight: '300px', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {showObsidian ? obsidian : markdown}
                 </pre>
+              </div>
+            )}
+
+            {/* Batch results */}
+            {batchResults.length > 0 && (
+              <div style={{ marginTop: '20px' }}>
+                <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)', borderRadius: '16px', padding: '20px', color: 'white', marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>⚡ 批量处理结果</h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '14px', opacity: 0.9 }}>
+                    共 {batchResults.length} 个 URL · 成功 {batchResults.filter(r => r.success).length} · 失败 {batchResults.filter(r => !r.success).length}
+                  </p>
+                </div>
+                {batchResults.map((r, i) => (
+                  <div key={i} style={{ background: 'white', borderRadius: '12px', padding: '16px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', borderLeft: `4px solid ${r.success ? '#10b981' : '#ef4444'}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '4px', wordBreak: 'break-all' }}>{r.url}</div>
+                        {r.success ? (
+                          <div style={{ fontWeight: 700, color: '#0f1729' }}>{r.knowledge_card?.title}</div>
+                        ) : (
+                          <div style={{ color: '#dc2626', fontSize: '14px' }}>❌ {r.error}</div>
+                        )}
+                      </div>
+                      {r.success && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(r.markdown)
+                            setCopied('md')
+                            setTimeout(() => setCopied(null), 2000)
+                          }}
+                          style={{ ...btnSecondary, fontSize: '12px', padding: '6px 10px' }}
+                        >{copied === 'md' ? '✓' : '📋'}</button>
+                      )}
+                    </div>
+                    {r.success && r.knowledge_card?.core_arguments?.length > 0 && (
+                      <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', fontSize: '13px', color: '#5a6478', lineHeight: 1.6 }}>
+                        {r.knowledge_card.core_arguments.slice(0, 3).map((arg: string, j: number) => (
+                          <li key={j}>{arg}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -343,8 +448,8 @@ Transformer 的并行化能力使其训练速度远快于 RNN，为后续大规�
 
         {/* Footer */}
         <div style={{ textAlign: 'center', marginTop: '40px', padding: '20px', color: '#94a3b8', fontSize: '13px' }}>
-          <strong style={{ color: '#5a6478' }}>ResearchKit v0.2.0</strong> — 一站式 AI Research Agent<br />
-          <span style={{ fontSize: '12px' }}>Powered by DeepSeek · Built for OKX.AI Genesis Hackathon</span>
+          <strong style={{ color: '#5a6478' }}>ResearchKit v0.4.0</strong> — 一站式 AI Research Agent<br />
+          <span style={{ fontSize: '12px' }}>Powered by DeepSeek · 4 输入模式 · 2 导出格式 · Built for OKX.AI Genesis Hackathon</span>
         </div>
       </main>
     </div>
