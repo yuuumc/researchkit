@@ -30,11 +30,12 @@ import type {
   ExecutedStep,
   ReflectionResult,
   ReflectionIteration,
+  AgentContext,
+  AnalyzerField,
 } from '@/types'
 import { runPlanner, fallbackPlan } from './planner'
 import { executePlan, executeToolCalls, callAgent } from './executor'
 import { runReflectionLoop, extractKnowledgeCard } from './workflow'
-import { createMessage } from '@/lib/mcp'
 
 // ============================================================================
 // 公开类型 — 重新导出供 SSE route 使用
@@ -149,20 +150,39 @@ export async function coordinate(input: CoordinatorInput): Promise<CoordinatorOu
     searchKeywords: [],
   }
 
-  // 重新执行 Export（用最终 KB 结果）— 确保导出的是最新版本
-  // 注意：用 knowledgeCard 变量（已兜底），不用 results['KnowledgeBuilder']（可能 undefined）
-  const exportMessage = createMessage('task', 'Coordinator', 'Export', {
-    knowledgeCard: knowledgeCard,
-    recommendations: results['Recommendation'] || { recommendations: [], searchKeywords: [], searchIntents: [] },
-    source: input.source,
-  })
-  const exportResult = await callAgent(ExportAgent, exportMessage)
-  const exports: ExportOutput = exportResult.result?.markdown !== undefined
-    ? exportResult.result
-    : { markdown: '', obsidian: '', json: '' }
+  // 重新执行 Export（用最终 KB 结果）— 走 v2.0 统一 AgentInterface
+  // 构造 ExportAgent 的 AgentContext
+  const exportCtx: AgentContext = {
+    document: {
+      content: input.content || '',
+      language: 'en',
+      locale: sourceLocale,
+      title: input.title,
+      source: input.source,
+    },
+    workflow: {
+      inputType: plan.input_type as AgentContext['workflow']['inputType'],
+      requiredSchema: (plan.required_schema || []) as AnalyzerField[],
+      complexity: plan.complexity as 'low' | 'medium' | 'high',
+      plan,
+    },
+    previous: {
+      knowledgeCard,
+      recommendation: results['Recommendation'] as RecommendationOutput | undefined,
+    },
+    options: {
+      locale: targetLocale,
+      sourceLocale,
+      languageDirective,
+    },
+  }
+  const exportResult = await callAgent(new ExportAgent(), exportCtx)
+  const exports: ExportOutput = exportResult.success && exportResult.data?.markdown !== undefined
+    ? exportResult.data as ExportOutput
+    : { markdown: '', obsidian: '', json: '', mindmap: '' }
 
   // 如果 Export 重跑了，加到 execution trace
-  if (!exportResult.error) {
+  if (exportResult.success) {
     execution.push({
       step: {
         id: 'step-final-export',
@@ -174,7 +194,7 @@ export async function coordinate(input: CoordinatorInput): Promise<CoordinatorOu
       },
       success: true,
       durationMs: exportResult.durationMs,
-      output: exportResult.result,
+      output: exportResult.data,
     })
   }
 

@@ -10,11 +10,12 @@
  *   - Evidence: Strong / Medium / Weak（基于 results/quantitative 数据数量）
  */
 
-import { Agent, AgentMessage, createMessage } from '@/lib/mcp'
+import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import type { ReaderOutput } from '@/lib/agents/reader'
 import type { AnalyzerOutput } from '@/lib/agents/analyzer'
 import type { TerminologyOutput } from '@/lib/agents/terminology'
 import type { Locale } from '@/lib/locale'
+import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 /**
  * 知识卡评分 — 给用户质量信号
@@ -79,47 +80,73 @@ export interface KnowledgeCard {
   evaluation?: KnowledgeCardEvaluation
 }
 
-export const KnowledgeBuilderAgent: Agent = {
-  name: 'KnowledgeBuilder',
-  description: '汇总各 Agent 结果，构建完整知识卡 + 质量评分',
-  capabilities: [
+/**
+ * Knowledge Builder Agent — class 化（v2.0）
+ */
+export class KnowledgeBuilderAgent implements AgentInterface {
+  name = 'KnowledgeBuilder' as const
+  description = '汇总各 Agent 结果，构建完整知识卡 + 质量评分'
+  capabilities: AgentCapability[] = [
     {
       name: 'build',
       description: '汇总多 Agent 结果，构建知识卡 + 评估 Completeness/Confidence/Evidence',
       inputs: ['readerOutput', 'analyzerOutput', 'terminologyOutput'],
       outputs: ['knowledgeCard', 'evaluation'],
     },
-  ],
+  ]
+
+  async execute(ctx: AgentContext): Promise<AgentResult> {
+    const start = Date.now()
+    try {
+      const payload = {
+        title: ctx.document.title,
+        readerOutput: ctx.previous.reader,
+        analyzerOutput: ctx.previous.analyzer,
+        terminologyOutput: ctx.previous.terminology,
+      }
+      const data = await this._run(payload)
+      return { success: true, data, durationMs: Date.now() - start }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'KnowledgeBuilder failed'
+      return { success: false, data: { error: msg }, durationMs: Date.now() - start, error: msg }
+    }
+  }
 
   async handleMessage(message: AgentMessage): Promise<AgentMessage> {
     if (message.type !== 'task') {
       return createMessage('error', 'KnowledgeBuilder', message.from, { error: '只处理 task 类型消息' })
     }
+    try {
+      const output = await this._run(message.payload)
+      return createMessage('result', 'KnowledgeBuilder', message.from, output, message.id)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'KnowledgeBuilder failed'
+      return createMessage('error', 'KnowledgeBuilder', message.from, { error: msg }, message.id)
+    }
+  }
 
+  private async _run(payload: any): Promise<KnowledgeCard> {
     const {
       title,
       readerOutput,
       analyzerOutput,
       terminologyOutput,
-    } = message.payload
+    } = payload
 
     const reader = readerOutput as ReaderOutput
     const analyzer = analyzerOutput as AnalyzerOutput
     const terminology = terminologyOutput as TerminologyOutput
 
-    // 自动生成 tags
     const tags = ['researchkit']
     if (analyzer?.methodology) tags.push('methodology')
     if ((terminology?.terms || []).length > 0) tags.push('terms')
     if (reader?.structure || analyzer?.structure) tags.push('structured')
 
-    // 推断难度：优先用 Reader 的 readingDifficulty（人感判断），否则按字段密度推断
     const difficulty: 'Beginner' | 'Intermediate' | 'Advanced' =
       reader?.readingDifficulty ||
       ((analyzer?.limitations?.length || 0) > 3 ? 'Advanced' :
        (terminology?.terms || []).length > 7 ? 'Advanced' : 'Intermediate')
 
-    // 生成 title（兜底逻辑不变）
     const fallbackSummary: string = reader?.takeaway || reader?.summary
       || (analyzer?.innovation && analyzer.innovation.length > 0 ? analyzer.innovation[0] : '')
       || analyzer?.methodology
@@ -134,11 +161,9 @@ export const KnowledgeBuilderAgent: Agent = {
       return firstSentence || 'Untitled'
     }
 
-    // ===== 计算 evaluation 评分 =====
     const filled: string[] = []
     const missing: string[] = []
 
-    // 核心字段清单 — 用于评估 completeness
     const coreFields: Array<{ name: string; value: any; isFilled: boolean }> = [
       { name: 'title',           value: generateTitle(),                       isFilled: !!generateTitle() && generateTitle() !== 'Untitled' },
       { name: 'summary',         value: fallbackSummary,                       isFilled: !!fallbackSummary },
@@ -165,26 +190,19 @@ export const KnowledgeBuilderAgent: Agent = {
 
     const completeness = Math.round((filled.length / coreFields.length) * 100)
 
-    // Confidence: 基于字段质量信号
-    let confidenceScore = 50  // 基础分
-    // 有数字证据 +15
+    let confidenceScore = 50
     const hasNumbers = (analyzer?.results || []).some(r => /\d+(\.\d+)?%?/.test(r))
     if (hasNumbers) confidenceScore += 15
-    // 有具体创新点（非泛泛）+15
     const hasSpecificInnovation = (analyzer?.innovation || []).some(i => i.length > 20 && !/novel|new approach/i.test(i))
     if (hasSpecificInnovation) confidenceScore += 15
-    // 有术语图谱 +10
     if ((terminology?.terms || []).length >= 3) confidenceScore += 10
-    // 有 takeaway +10
     if (reader?.takeaway) confidenceScore += 10
-    // 罚分：缺失关键字段 -5 each
     if (!analyzer?.methodology) confidenceScore -= 5
     if (!(analyzer?.results?.length)) confidenceScore -= 5
     if (!(analyzer?.innovation?.length)) confidenceScore -= 10
 
     const confidence = Math.max(0, Math.min(100, confidenceScore))
 
-    // Evidence: 基于定量证据数量
     const quantitativeCount = (analyzer?.results || []).filter(r => /\d+(\.\d+)?/.test(r)).length
     const evidence: 'Strong' | 'Medium' | 'Weak' =
       quantitativeCount >= 3 ? 'Strong' :
@@ -199,16 +217,13 @@ export const KnowledgeBuilderAgent: Agent = {
     }
 
     const card: KnowledgeCard = {
-      // 基础
       title: generateTitle(),
       authors: analyzer?.authors?.length ? analyzer.authors : (reader?.authors || []),
       field: analyzer?.field || '',
       difficulty,
       year: analyzer?.year,
-      language: reader?.language || 'other',  // 升级版新增：从 Reader 透传
-      locale: reader?.locale,                  // 升级版新增：完整 locale 透传
-
-      // 核心
+      language: reader?.language || 'other',
+      locale: reader?.locale,
       summary: fallbackSummary,
       research_goals: analyzer?.researchGoals || [],
       innovation: analyzer?.innovation || [],
@@ -217,14 +232,10 @@ export const KnowledgeBuilderAgent: Agent = {
       results: analyzer?.results || [],
       limitations: analyzer?.limitations || [],
       future_work: analyzer?.futureWork || [],
-
-      // Reader 新增（价值导向）
       takeaway: reader?.takeaway,
       why_it_matters: reader?.whyItMatters,
       what_surprised: reader?.whatSurprised,
       who_should_read: reader?.whoShouldRead,
-
-      // 术语（含 importance + prerequisite）
       key_terms: (terminology?.terms || []).map(t => ({
         term: t.term,
         definition: t.definition,
@@ -232,26 +243,20 @@ export const KnowledgeBuilderAgent: Agent = {
         importance: t.importance,
         prerequisite: t.prerequisite,
       })),
-
-      // 应用 & 关联
       applications: analyzer?.applications || [],
       datasets: analyzer?.datasets || [],
       citations: [],
       references: [],
-
-      // 元数据
       reading_time_min: reader?.readingTimeMin,
       structure: analyzer?.structure || reader?.structure,
       tags,
-
-      // 评分
       evaluation,
     }
 
-    return createMessage('result', 'KnowledgeBuilder', message.from, card, message.id)
-  },
+    return card
+  }
 
-  getCapabilities() {
+  getCapabilities(): AgentCapability[] {
     return this.capabilities
-  },
+  }
 }

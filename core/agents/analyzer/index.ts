@@ -14,9 +14,10 @@
  */
 
 import OpenAI from 'openai'
-import { Agent, AgentMessage, createMessage } from '@/lib/mcp'
+import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import type { ReaderOutput } from '@/lib/agents/reader'
 import { buildAnalyzerPrompt } from '@/prompts/analyzer'
+import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -80,24 +81,57 @@ export const DEFAULT_SCHEMA_BY_INPUT_TYPE: Record<string, AnalyzerField[]> = {
   unknown: ['authors', 'field', 'year', 'researchGoals', 'innovation', 'methodology', 'experiments', 'results', 'limitations', 'futureWork', 'applications', 'datasets', 'structure'],
 }
 
-export const AnalyzerAgent: Agent = {
-  name: 'Analyzer',
-  description: '深度分析论文，按 Planner 决定的 schema 输出结构化研究档案',
-  capabilities: [
+/**
+ * Analyzer Agent — class 化（v2.0）
+ */
+export class AnalyzerAgent implements AgentInterface {
+  name = 'Analyzer' as const
+  description = '深度分析论文，按 Planner 决定的 schema 输出结构化研究档案'
+  capabilities: AgentCapability[] = [
     {
       name: 'analyze',
       description: '按 required_schema 提取字段，未在 schema 中的字段不返回',
       inputs: ['text', 'readerOutput', 'required_schema'],
       outputs: ['researchGoals', 'innovation', 'methodology', 'experiments', 'results', 'limitations', 'futureWork', 'applications', 'datasets', 'authors', 'field', 'year', 'structure'],
     },
-  ],
+  ]
+
+  async execute(ctx: AgentContext): Promise<AgentResult> {
+    const start = Date.now()
+    try {
+      const payload = {
+        content: ctx.document.content,
+        source_locale: ctx.options.sourceLocale,
+        target_locale: ctx.options.locale,
+        language_directive: ctx.options.languageDirective,
+        readerOutput: ctx.previous.reader || null,
+        required_schema: ctx.workflow.requiredSchema,
+        input_type: ctx.workflow.inputType,
+        prompt_patch: ctx.promptPatch,
+      }
+      const data = await this._run(payload)
+      return { success: true, data, durationMs: Date.now() - start }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Analyzer failed'
+      return { success: false, data: { error: msg }, durationMs: Date.now() - start, error: msg }
+    }
+  }
 
   async handleMessage(message: AgentMessage): Promise<AgentMessage> {
     if (message.type !== 'task') {
       return createMessage('error', 'Analyzer', message.from, { error: '只处理 task 类型消息' })
     }
+    try {
+      const output = await this._run(message.payload)
+      return createMessage('result', 'Analyzer', message.from, output, message.id)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Analyzer failed'
+      return createMessage('error', 'Analyzer', message.from, { error: msg }, message.id)
+    }
+  }
 
-    const { content, readerOutput, required_schema, input_type, prompt_patch, language_directive } = message.payload
+  private async _run(payload: any): Promise<AnalyzerOutput> {
+    const { content, readerOutput, required_schema, input_type, prompt_patch, language_directive } = payload
 
     // 决定 schema：Planner 传入的优先，否则按 input_type 选默认，再不行全部字段
     let schema: AnalyzerField[] = (Array.isArray(required_schema) && required_schema.length > 0)
@@ -105,17 +139,13 @@ export const AnalyzerAgent: Agent = {
       : (input_type ? DEFAULT_SCHEMA_BY_INPUT_TYPE[input_type] : undefined) || DEFAULT_SCHEMA_BY_INPUT_TYPE.unknown
 
     // 升级版：如果有 prompt_patch（Replan 阶段的补丁），调整 schema
-    // - focus_fields 加入 schema
-    // - ignore_fields 从 schema 移除
     let extraInstruction = ''
     if (prompt_patch) {
       const focus: string[] = prompt_patch.focus_fields || []
       const ignore: string[] = prompt_patch.ignore_fields || []
       extraInstruction = prompt_patch.extra_instruction || ''
 
-      // 移除 ignore
       schema = schema.filter(f => !ignore.includes(f))
-      // 加入 focus（去重）
       for (const f of focus) {
         if (!schema.includes(f as AnalyzerField)) {
           schema.push(f as AnalyzerField)
@@ -161,18 +191,14 @@ ${content.substring(0, 20000)}`,
       throw new Error('Analyzer LLM 返回非 JSON 格式（可能限流或返回错误文本）')
     }
 
-    // ===== 按 schema 提取，未在 schema 中的字段填默认值 =====
     const getArray = (f: AnalyzerField): string[] => schema.includes(f) ? (parsed[f] || []) : []
     const getString = (f: AnalyzerField): string => schema.includes(f) ? (parsed[f] || '') : ''
 
     const output: AnalyzerOutput = {
-      // 旧字段（向后兼容）
       coreArguments: getArray('innovation'),
       actionableTakeaways: getArray('applications'),
       methodology: getString('methodology'),
       limitations: getArray('limitations'),
-
-      // 新字段
       authors: getArray('authors'),
       field: getString('field'),
       year: schema.includes('year') ? (parsed.year || undefined) : undefined,
@@ -186,10 +212,10 @@ ${content.substring(0, 20000)}`,
       structure: getString('structure'),
     }
 
-    return createMessage('result', 'Analyzer', message.from, output, message.id)
-  },
+    return output
+  }
 
-  getCapabilities() {
+  getCapabilities(): AgentCapability[] {
     return this.capabilities
-  },
+  }
 }

@@ -12,7 +12,6 @@
  */
 
 import { reflect, replan } from '@/lib/planner'
-import { createMessage } from '@/lib/mcp'
 import { executePlan, runSingleAgent } from './executor'
 import type {
   Plan,
@@ -195,8 +194,8 @@ export async function runReflectionLoop(
         analyzerOutput: results['Analyzer'],
         terminologyOutput: results['Terminology'],
       })
-      if (kbResult.result && !kbResult.result.error) {
-        results['KnowledgeBuilder'] = kbResult.result
+      if (kbResult.success && kbResult.data && !kbResult.data.error) {
+        results['KnowledgeBuilder'] = kbResult.data
         execution.push({
           step: {
             id: `step-auto-kb-${iter}`,
@@ -206,9 +205,9 @@ export async function runReflectionLoop(
             depends_on: replanResult.supplementary_steps.map(s => s.id),
             required: true,
           },
-          success: !kbResult.error,
+          success: kbResult.success,
           durationMs: kbResult.durationMs,
-          output: kbResult.result,
+          output: kbResult.data,
           error: kbResult.error,
         })
       }

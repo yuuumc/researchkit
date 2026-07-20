@@ -13,9 +13,10 @@
  */
 
 import OpenAI from 'openai'
-import { Agent, AgentMessage, createMessage } from '@/lib/mcp'
+import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, localeToLanguage, localeDisplayName, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildReaderPrompt } from '@/prompts/reader'
+import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -85,33 +86,70 @@ function extractAuthorsByRegex(content: string): string[] {
   return authors.slice(0, 10)  // 上限 10 位
 }
 
-export const ReaderAgent: Agent = {
-  name: 'Reader',
-  description: '阅读理解输入内容，输出价值导向的阅读笔记（takeaway / whyItMatters / whatSurprised / whoShouldRead / readingDifficulty）',
-  capabilities: [
+/**
+ * Reader Agent — class 化（v2.0）
+ *
+ * v2.0 升级：实现统一 AgentInterface，新增 execute(ctx) 入口
+ * v1.0 handleMessage 保留以兼容，内部逻辑搬到 _run
+ */
+export class ReaderAgent implements AgentInterface {
+  name = 'Reader' as const
+  description = '阅读理解输入内容，输出价值导向的阅读笔记（takeaway / whyItMatters / whatSurprised / whoShouldRead / readingDifficulty）'
+  capabilities: AgentCapability[] = [
     {
       name: 'read',
       description: '以人类读者视角理解论文，输出价值判断',
       inputs: ['text'],
       outputs: ['takeaway', 'whyItMatters', 'whatSurprised', 'whoShouldRead', 'readingDifficulty', 'summary', 'keyPassages', 'structure', 'authors'],
     },
-  ],
+  ]
 
+  /**
+   * v2.0 统一执行入口 — 接收 AgentContext，构造 payload 后委托到 _run
+   */
+  async execute(ctx: AgentContext): Promise<AgentResult> {
+    const start = Date.now()
+    try {
+      const payload = {
+        content: ctx.document.content,
+        source_locale: ctx.options.sourceLocale,
+        target_locale: ctx.options.locale,
+        language_directive: ctx.options.languageDirective,
+        prompt_patch: ctx.promptPatch,
+      }
+      const data = await this._run(payload)
+      return { success: true, data, durationMs: Date.now() - start }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Reader failed'
+      return { success: false, data: { error: msg }, durationMs: Date.now() - start, error: msg }
+    }
+  }
+
+  /** v1.0 兼容接口 — handleMessage，内部委托到 _run */
   async handleMessage(message: AgentMessage): Promise<AgentMessage> {
     if (message.type !== 'task') {
       return createMessage('error', 'Reader', message.from, { error: '只处理 task 类型消息' })
     }
+    try {
+      const output = await this._run(message.payload)
+      return createMessage('result', 'Reader', message.from, output, message.id)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Reader failed'
+      return createMessage('error', 'Reader', message.from, { error: msg }, message.id)
+    }
+  }
 
-    const { content, language_directive } = message.payload
+  /** 内部统一执行逻辑（原 handleMessage 主体） */
+  private async _run(payload: any): Promise<ReaderOutput> {
+    const { content, language_directive } = payload
 
     // ===== 程序化预处理（不让 LLM 浪费 token） =====
     const readingTimeMin = computeReadingTimeMin(content)
     const regexAuthors = extractAuthorsByRegex(content)
 
     // ===== Locale 检测（升级版：从 coordinator 传入或本地检测） =====
-    // 优先用 coordinator 传入的 directive；否则本地检测
-    const sourceLocale = message.payload.source_locale || detectLocale(content)
-    const targetLocale = message.payload.target_locale || sourceLocale
+    const sourceLocale: Locale = payload.source_locale || detectLocale(content)
+    const targetLocale: Locale = payload.target_locale || sourceLocale
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     const response = await openai.chat.completions.create({
@@ -139,42 +177,33 @@ export const ReaderAgent: Agent = {
       throw new Error('Reader LLM 返回非 JSON 格式（可能限流或返回错误文本）')
     }
 
-    // ===== 校验关键字段 =====
-    // 优先用新字段 takeaway，兼容用 summary
     const effectiveSummary = parsed.takeaway || parsed.summary
     if (!effectiveSummary || typeof effectiveSummary !== 'string' || effectiveSummary.trim() === '') {
       console.error('[Reader] LLM 未返回有效 takeaway/summary:', raw.substring(0, 500))
       throw new Error('Reader 未返回有效 takeaway（可能 LLM 限流或返回空响应）')
     }
 
-    // ===== 合并 LLM 输出 + 程序化预处理 =====
-    // 语言字段：以程序化检测结果为准（LLM 偶尔会误判）
     const finalLanguage = localeToLanguage(sourceLocale)
 
     const output: ReaderOutput = {
-      // 旧字段
-      summary: parsed.summary || effectiveSummary,        // KB 仍用这个
+      summary: parsed.summary || effectiveSummary,
       keyPassages: parsed.keyPassages || [],
       structure: parsed.structure || '',
-      readingTimeMin,                                       // 程序计算
-      authors: regexAuthors,                                // 程序提取
-
-      // 新字段
+      readingTimeMin,
+      authors: regexAuthors,
       takeaway: parsed.takeaway || effectiveSummary,
       whyItMatters: parsed.whyItMatters || '',
       whatSurprised: parsed.whatSurprised || '',
       whoShouldRead: parsed.whoShouldRead || [],
       readingDifficulty: parsed.readingDifficulty || 'Intermediate',
-
-      // 语言字段：程序化检测的权威值
       language: finalLanguage,
       locale: sourceLocale,
     }
 
-    return createMessage('result', 'Reader', message.from, output, message.id)
-  },
+    return output
+  }
 
-  getCapabilities() {
+  getCapabilities(): AgentCapability[] {
     return this.capabilities
-  },
+  }
 }
