@@ -27,27 +27,53 @@ export async function fetchFromUrl(url: string): Promise<ParsedContent> {
   const arxivMatch = trimmedUrl.match(/arxiv\.org\/abs\/(\d+\.\d+)/)
   if (arxivMatch) {
     const arxivId = arxivMatch[1]
-    // 用 arXiv API 获取摘要
-    const apiUrl = `http://export.arxiv.org/api/query?id_list=${arxivId}`
-    const response = await fetch(apiUrl)
-    const xml = await response.text()
+    // 用 arXiv API 获取摘要 — 必须 HTTPS（http 会被强制重定向，Node fetch 默认不跟随跨协议）
+    const apiUrl = `https://export.arxiv.org/api/query?id_list=${arxivId}`
 
-    // 提取标题和摘要
-    const titleMatch = xml.match(/<title>([^<]+)<\/title>/g)
-    const summaryMatch = xml.match(/<summary>([^<]+)<\/summary>/)
+    // arXiv API 限流严格，批量并发常触发 429 → fetch failed
+    // 加重试退避：最多 3 次，间隔 1s / 2s / 4s
+    let lastErr: unknown
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await fetch(apiUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchKit/1.0)' },
+        })
+        if (response.status === 429) {
+          // 限流：按退避等待后重试
+          const waitMs = 1000 * Math.pow(2, attempt) // 1s, 2s, 4s
+          await new Promise(r => setTimeout(r, waitMs))
+          continue
+        }
+        if (!response.ok) {
+          throw new Error(`arXiv API HTTP ${response.status}`)
+        }
+        const xml = await response.text()
 
-    const title = titleMatch && titleMatch[1]
-      ? titleMatch[1].replace(/<[^>]+>/g, '').trim()
-      : undefined
-    const summary = summaryMatch && summaryMatch[1]
-      ? summaryMatch[1].replace(/<[^>]+>/g, '').trim()
-      : ''
+        // 提取标题和摘要
+        const titleMatch = xml.match(/<title>([^<]+)<\/title>/g)
+        const summaryMatch = xml.match(/<summary>([^<]+)<\/summary>/)
 
-    return {
-      content: summary,
-      source: trimmedUrl,
-      title,
+        const title = titleMatch && titleMatch[1]
+          ? titleMatch[1].replace(/<[^>]+>/g, '').trim()
+          : undefined
+        const summary = summaryMatch && summaryMatch[1]
+          ? summaryMatch[1].replace(/<[^>]+>/g, '').trim()
+          : ''
+
+        return {
+          content: summary,
+          source: trimmedUrl,
+          title,
+        }
+      } catch (err) {
+        lastErr = err
+        // 网络错误也重试（间隔 1s, 2s）
+        if (attempt < 2) {
+          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)))
+        }
+      }
     }
+    throw new Error(`arXiv 抓取失败（重试 3 次仍失败）：${lastErr instanceof Error ? lastErr.message : '未知错误'}`)
   }
 
   // 普通网页：抓取 HTML 并提取正文
