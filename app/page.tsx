@@ -458,15 +458,11 @@ export default function Home() {
 
   const loadExample = () => {
     setMode('text')
-    setInput(`Attention Is All You Need 是 Google 在 2017 年提出的 Transformer 架构论文。它完全摒弃了 RNN 和 CNN，只用 self-attention 机制处理序列。核心创新是 multi-head attention，让模型能同时关注序列中不同位置的信息。Transformer 在机器翻译任务上达到 SOTA，并成为后续 BERT、GPT 等大语言模型的基础架构。
+    setInput(`The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.
 
-该论文的主要贡献包括：
-1. 提出了完全基于注意力机制的 Transformer 模型
-2. 引入了 multi-head attention，让模型能同时关注不同表示子空间的信息
-3. 使用 positional encoding 为模型提供位置信息
-4. 在 WMT 2014 英语-德语翻译任务上达到 28.4 BLEU，比现有最好结果提升 2 BLEU以上
+Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU.
 
-Transformer 的并行化能力使其训练速度远快于 RNN，为后续大规模预训练模型奠定了基础。`)
+On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.`)
   }
 
   return (
