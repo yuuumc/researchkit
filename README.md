@@ -1,74 +1,214 @@
-# ResearchKit — 一站式 AI Research Agent
+# ResearchKit OS — AI Research Operating System
 
-ASP (Agentic Service Provider) for OKX.AI Genesis Hackathon.
+> Multi-agent research pipeline that turns any paper into a structured knowledge card.
+> Built for **OKX AI Genesis Hackathon** — ASP #6853 on [OKX.AI](https://www.okx.ai/agents/6853).
 
-## MVP 功能
+🌐 **Live demo**: https://researchkit-mu.vercel.app
 
-**论文/文档 → 结构化知识卡**
+---
 
-输入论文或技术文档内容，自动提取：
-- 核心观点
-- 关键术语
-- 方法论
-- 可操作建议
-- 参考文献
+## What it does
 
-## 技术栈
+Paste any paper, document, or URL → a team of 6 AI agents reads, analyzes, and synthesizes it into a structured **Knowledge Card** with:
 
-- **框架**: Next.js 14 (App Router)
-- **LLM**: DeepSeek (deepseek-chat)
-- **部署**: Vercel
-- **语言**: TypeScript
+- 🎯 **Takeaway** — the one-sentence core conclusion you'll remember in a year
+- 💭 **Why It Matters** — significance, novelty, impact
+- ✨ **What Surprised Me** — the most counterintuitive finding
+- 👥 **Who Should Read** — specific reader profiles (not "researchers" or "students")
+- 🔤 **Terminology DAG** — knowledge graph where each term links to its prerequisites
+- 📚 **4-intent Recommendations** — follow-up papers across `improve` / `challenge` / `apply` / `survey`
+- 📤 **Export** — Markdown / Obsidian / JSON
+
+---
+
+## Architecture
+
+### Multi-Agent Pipeline
+
+```
+User Input
+   ↓
+[Planner] ── decides which agents to invoke based on input_type
+   ↓
+[Reader] + [Analyzer] + [Terminology]   ← parallel
+   ↓
+[KnowledgeBuilder] ── assembles Knowledge Card
+   ↓
+[Recommendation] ── finds follow-up papers
+   ↓
+[Export] ── Markdown / Obsidian / JSON
+   ↓
+[Reflection] ── reviews result; if !satisfied → [Replan] → re-execute missing pieces
+   ↓
+[Tool Calls] ── MCP tools (memory / filesystem / arxiv / web_search)
+```
+
+### Two-Phase Language Architecture (Locale-Aware)
+
+Each agent runs in two phases to preserve information across languages:
+
+| Phase | What happens | Why |
+|---|---|---|
+| **1. Understanding** | Reason in the SOURCE language | Translation during reasoning loses details |
+| **2. Rendering** | Output in the TARGET locale | User-facing fields localized |
+
+Supported locales: `zh-CN` `en-US` `ja-JP` `ko-KR` `fr-FR` `de-DE` `es-ES` `other`
+
+Programmatic locale detection (Unicode character distribution) — no LLM call wasted on language guessing. Technical terms (model names, dataset names, algorithm names) are NEVER translated across languages.
+
+---
 
 ## API
 
-### `POST /api/research/knowledge-card`
+### `POST /api/research/multi-agent-stream`  (SSE)
 
-**请求:**
+Server-Sent Events endpoint that streams progress + final result in real time.
+
+**Request:**
 ```json
 {
-  "content": "论文/文档文本",
-  "options": {
-    "language": "zh" | "en",
-    "detail_level": "brief" | "standard" | "detailed"
-  }
+  "content": "Full paper text or abstract (min 200 chars)",
+  "title": "Optional paper title",
+  "source": "Optional source URL or filename"
 }
 ```
 
-**响应:**
+**Response**: SSE stream with `stage` events for progress + `result` event with full payload:
+
 ```json
 {
-  "success": true,
-  "knowledge_card": {
+  "plan": { "rationale": "...", "steps": [...], "input_type": "paper" },
+  "knowledgeCard": {
     "title": "...",
-    "core_arguments": ["..."],
-    "key_terms": [{"term": "...", "definition": "..."}],
-    "methodology": "...",
-    "actionable_takeaways": ["..."],
-    "references": ["..."]
+    "authors": ["..."],
+    "field": "NLP",
+    "takeaway": "...",
+    "whyItMatters": "...",
+    "whatSurprised": "...",
+    "whoShouldRead": ["..."],
+    "terms": [{ "term": "Self-attention", "importance": 5, "prerequisite": ["Embedding"] }],
+    "recommendations": [{ "intent": "improve", "title": "...", "reason": "..." }]
   },
-  "metadata": {
-    "word_count": 1234,
-    "processing_time_ms": 2345
-  }
+  "exports": { "markdown": "...", "obsidian": "...", "json": "..." },
+  "iterations": [...],  // reflection loop trace
+  "pipeline": [...]
 }
 ```
 
-## 开发
+### Other endpoints
+
+- `POST /api/research/multi-agent` — non-streaming variant
+- `POST /api/research/knowledge-card` — legacy single-agent endpoint
+- `POST /api/research/upload-pdf` — PDF upload + text extraction
+- `POST /api/research/fetch-url` — fetch URL content (with SSRF protection)
+- `POST /api/research/batch` — batch URL processing
+- `GET /api/tools/list` / `POST /api/tools/call` — MCP tool registry
+
+---
+
+## Tech Stack
+
+- **Framework**: Next.js 14 (App Router)
+- **LLM**: DeepSeek (`deepseek-v4-flash` or any OpenAI-compatible API)
+- **Language**: TypeScript (strict)
+- **Agents**: Custom multi-agent framework with MCP-style tool registry
+- **Visualization**: Mermaid (knowledge graph), custom progress UI
+- **Deploy**: Vercel
+- **Onchain OS**: ASP registered on X Layer (ASP ID #6853)
+
+---
+
+## Development
+
+### Prerequisites
+
+- Node.js 18+
+- DeepSeek API key (or any OpenAI-compatible endpoint)
+
+### Install & Run
 
 ```bash
 npm install
 npm run dev
 ```
 
-访问 http://localhost:3000
+Open http://localhost:3000
 
-## 环境变量
+### Environment Variables
 
-复制 `.env.local.example` 为 `.env.local` 并填入你的 API Key：
+Copy `.env.local.example` to `.env.local` and fill in:
 
-```
+```bash
 OPENAI_API_KEY=your-deepseek-api-key
 OPENAI_BASE_URL=https://api.deepseek.com/v1
-LLM_MODEL=deepseek-chat
+LLM_MODEL=deepseek-v4-flash
 ```
+
+### Start script (Windows)
+
+```bash
+start.bat
+```
+
+Includes dependency validation, port cleanup, and auto-open browser.
+
+---
+
+## Project Structure
+
+```
+researchkit/
+├── app/
+│   ├── page.tsx                      # Main UI (text/url/pdf/batch modes, progress, knowledge graph)
+│   ├── layout.tsx
+│   └── api/
+│       └── research/
+│           ├── multi-agent-stream/  # SSE endpoint (primary)
+│           ├── multi-agent/         # non-streaming variant
+│           ├── knowledge-card/     # legacy single-agent
+│           ├── upload-pdf/
+│           ├── fetch-url/
+│           └── batch/
+├── components/
+│   └── KnowledgeGraph.tsx           # Mermaid DAG renderer
+├── lib/
+│   ├── locale.ts                    # Two-phase language architecture (NEW)
+│   ├── coordinator.ts               # Plan-driven execution + Reflection loop
+│   ├── planner.ts                   # Planner + Reflection + Replan
+│   ├── mcp.ts                       # Agent message protocol
+│   ├── parser.ts                    # Markdown / Obsidian / JSON export
+│   ├── llm.ts                       # LLM client wrapper
+│   ├── agents/
+│   │   ├── reader.ts                # Value-judgment reader
+│   │   ├── analyzer.ts              # Dynamic schema (Planner-decided fields)
+│   │   ├── terminology.ts           # Term DAG with importance + prerequisite
+│   │   ├── knowledge-builder.ts     # Card assembly + quality scoring
+│   │   ├── recommendation.ts       # 4-intent recommendations
+│   │   └── export.ts                # Multi-format export
+│   └── tools/
+│       ├── memory.ts                # MCP memory tool
+│       ├── filesystem.ts            # MCP filesystem tool
+│       ├── arxiv.ts                 # arxiv search
+│       ├── web_search.ts            # web search
+│       └── registry.ts              # Tool registry
+└── public/
+```
+
+---
+
+## OKX.AI ASP Details
+
+| Field | Value |
+|---|---|
+| ASP ID | #6853 |
+| Service name | Paper Analysis Service |
+| Service type | A2MCP (free, 0 USDT) |
+| Endpoint | `https://researchkit-mu.vercel.app/api/research/multi-agent-stream` |
+| Network | X Layer |
+| Onchain OS TX | `0x86b24fdac27bc16e8ea70f0207bedeba4bdf3a399e529074e0cc720e1edec55d` |
+
+---
+
+## License
+
+MIT

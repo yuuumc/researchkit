@@ -1,6 +1,7 @@
 {
-  "name": "researchkit",
-  "version": "0.1.0",
+  "name": "researchkit-os",
+  "version": "1.0.0",
+  "description": "AI Research Operating System — multi-agent pipeline that turns any paper into a structured knowledge card. Built for OKX AI Genesis Hackathon (ASP #6853).",
   "private": true,
   "scripts": {
     "dev": "next dev",
