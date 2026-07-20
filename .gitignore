@@ -44,3 +44,9 @@ Thumbs.db
 
 # TypeScript 增量编译缓存
 *.tsbuildinfo
+
+# Release artifacts — 大文件用 LFS，普通文件按大小决定
+# 截图 PNG（< 1 MB）正常提交；视频 MP4（> 50 MB）建议 LFS 或外部链接
+releases/demo-video/*.mp4
+!releases/demo-video/.gitkeep
+!releases/demo-video/README.md

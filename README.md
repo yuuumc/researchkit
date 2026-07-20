@@ -3,7 +3,13 @@
 > Multi-agent research pipeline that turns any paper into a structured knowledge card.
 > Built for **OKX AI Genesis Hackathon** — ASP #6853 on [OKX.AI](https://www.okx.ai/agents/6853).
 
+![version](https://img.shields.io/badge/version-v2.0-blue)
+![status](https://img.shields.io/badge/status-live-brightgreen)
+![license](https://img.shields.io/badge/license-MIT-green)
+
 🌐 **Live demo**: https://researchkit-mu.vercel.app
+
+📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [Roadmap](./docs/roadmap.md) · [Branching](./docs/BRANCHING.md)
 
 ---
 
@@ -191,7 +197,16 @@ researchkit/
 │       ├── arxiv.ts                 # arxiv search
 │       ├── web_search.ts            # web search
 │       └── registry.ts              # Tool registry
-└── public/
+├── docs/                            # Project documentation
+│   ├── CHANGELOG.md                 # Versioned release history (v1.0 / v1.1 / v2.0)
+│   ├── roadmap.md                   # Future plans (v2.1 / v3.0 / long-term vision)
+│   └── BRANCHING.md                 # Git workflow (main / develop / feature/*)
+├── releases/                        # Release artifacts (screenshots, demo videos)
+│   ├── screenshots/                 # Versioned PNG screenshots for GitHub Releases
+│   └── demo-video/                  # ≤ 90s demo MP4 files for X posts
+├── demo-script.md                   # 90-second English demo script (6 time-coded segments)
+├── start.bat                        # Windows launcher with dependency validation
+└── README.md
 ```
 
 ---
