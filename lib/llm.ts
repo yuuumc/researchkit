@@ -100,8 +100,74 @@ export async function generateKnowledgeCard(
       throw new Error('LLM 返回内容为空')
     }
 
-    // 解析 JSON
-    const parsed = JSON.parse(rawContent)
+    // 解析 JSON — 加截断容错（max_tokens 不够时 LLM 会输出不完整 JSON）
+    let parsed: any
+    try {
+      parsed = JSON.parse(rawContent)
+    } catch (parseErr) {
+      // 截断兜底：尝试补全 JSON 末尾（最常见的截断场景：字符串/数组/对象中途被切）
+      const trimmed = rawContent.trim()
+      const lastQuote = trimmed.lastIndexOf('"')
+      const lastBracket = Math.max(trimmed.lastIndexOf(']'), trimmed.lastIndexOf('}'))
+      const lastComma = trimmed.lastIndexOf(',')
+
+      // 策略：从最后一个完整的 key-value 之后截断，丢弃不完整的尾巴，补全括号
+      let repaired = trimmed
+      // 移除可能的不完整尾巴：最后一个引号后到末尾的内容
+      if (lastQuote > lastBracket && lastQuote > lastComma) {
+        // 找到最后一个 `"` 前的逗号或冒号位置
+        const beforeQuote = trimmed.lastIndexOf(':', lastQuote)
+        const commaBeforeQuote = trimmed.lastIndexOf(',', lastQuote)
+        const cutPoint = Math.max(beforeQuote, commaBeforeQuote)
+        if (cutPoint > 0) {
+          // 如果是 key: "value 被截断 → 改成 key: "" 占位
+          if (beforeQuote > commaBeforeQuote) {
+            repaired = trimmed.substring(0, beforeQuote + 1) + ' ""'
+          } else {
+            repaired = trimmed.substring(0, cutPoint)
+          }
+        }
+      }
+
+      // 统计未闭合的 { 和 [
+      const openBraces = (repaired.match(/\{/g) || []).length
+      const closeBraces = (repaired.match(/\}/g) || []).length
+      const openBrackets = (repaired.match(/\[/g) || []).length
+      const closeBrackets = (repaired.match(/\]/g) || []).length
+      const missingBraces = openBraces - closeBraces
+      const missingBrackets = openBrackets - closeBrackets
+
+      // 移除末尾可能残留的逗号
+      repaired = repaired.replace(/,\s*$/, '')
+      // 补全括号
+      repaired = repaired + ']' .repeat(Math.max(0, missingBrackets))
+      repaired = repaired + '}'.repeat(Math.max(0, missingBraces))
+
+      try {
+        parsed = JSON.parse(repaired)
+        console.warn('[LLM] JSON 截断兜底成功，原始长度=' + rawContent.length + '，修复后长度=' + repaired.length)
+      } catch (repairErr) {
+        // 修复失败 → 重试一次，加大 max_tokens
+        console.warn('[LLM] JSON 截断兜底失败，重试一次（max_tokens +1000）')
+        const retryResponse = await openai.chat.completions.create({
+          model: LLM_MODEL,
+          messages: [
+            { role: 'system', content: KNOWLEDGE_CARD_SYSTEM_PROMPT },
+            { role: 'user', content: KNOWLEDGE_CARD_USER_PROMPT(content, language) },
+          ],
+          max_tokens: maxTokensMap[detailLevel] + 1000,
+          temperature: 0.3,
+          response_format: { type: 'json_object' },
+        })
+        const retryContent = retryResponse.choices[0].message.content
+        if (!retryContent) throw new Error('LLM 重试返回空内容')
+        try {
+          parsed = JSON.parse(retryContent)
+        } catch (finalErr) {
+          throw new Error(`JSON 解析失败（重试后仍失败）: ${(finalErr as Error).message}`)
+        }
+      }
+    }
 
     // 统一化为完整 schema（向后兼容缺字段）
     const knowledgeCard: KnowledgeCard = {
