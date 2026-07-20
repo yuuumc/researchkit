@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         const knowledgeCard = await generateKnowledgeCard({
           content: truncated,
           language: 'zh',
-          detailLevel: 'brief', // 批量模式默认 brief，节省 token
+          detailLevel: 'standard', // brief(1200) 会被截断导致 JSON 不完整，standard(2500) 才够完整 schema
         })
 
         if (parsed.title && parsed.title.length > 0) {
