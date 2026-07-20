@@ -1,5 +1,8 @@
 /**
  * OpenAI/DeepSeek 兼容 LLM 调用封装
+ *
+ * 升级版：KnowledgeCard 接口与 multi-agent 输出对齐
+ * 旧 endpoint (/api/research/knowledge-card) 现在也输出完整研究 schema
  */
 
 import OpenAI from 'openai'
@@ -16,15 +19,41 @@ const openai = new OpenAI({
 const LLM_MODEL = process.env.LLM_MODEL?.trim() || 'deepseek-v4-flash'
 
 export interface KnowledgeCard {
+  // 基础
   title: string
-  core_arguments: string[]
+  authors: string[]
+  field: string
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced'
+  year?: number
+
+  // 核心
+  summary: string
+  research_goals: string[]
+  innovation: string[]
+  methodology: string
+  experiments: string[]
+  results: string[]
+  limitations: string[]
+  future_work: string[]
+
+  // 术语
   key_terms: Array<{
     term: string
     definition: string
+    category?: string
   }>
-  methodology: string
+
+  // 应用 & 关联
+  applications: string[]
+  datasets: string[]
+
+  // 兼容旧字段（由 LLM 同时输出）
+  core_arguments: string[]
   actionable_takeaways: string[]
   references: string[]
+
+  // 元数据
+  tags: string[]
 }
 
 export interface GenerateKnowledgeCardOptions {
@@ -34,7 +63,7 @@ export interface GenerateKnowledgeCardOptions {
 }
 
 /**
- * 调用 LLM 生成结构化知识卡
+ * 调用 LLM 生成结构化知识卡（完整研究 schema）
  */
 export async function generateKnowledgeCard(
   options: GenerateKnowledgeCardOptions
@@ -43,9 +72,9 @@ export async function generateKnowledgeCard(
 
   // 根据 detail_level 调整 max_tokens
   const maxTokensMap = {
-    brief: 1000,
-    standard: 1500,
-    detailed: 2500,
+    brief: 1200,
+    standard: 2500,
+    detailed: 4000,
   }
 
   try {
@@ -72,11 +101,44 @@ export async function generateKnowledgeCard(
     }
 
     // 解析 JSON
-    const knowledgeCard: KnowledgeCard = JSON.parse(rawContent)
+    const parsed = JSON.parse(rawContent)
+
+    // 统一化为完整 schema（向后兼容缺字段）
+    const knowledgeCard: KnowledgeCard = {
+      title: parsed.title || 'Untitled',
+      authors: parsed.authors || [],
+      field: parsed.field || '',
+      difficulty: parsed.difficulty || 'Intermediate',
+      year: parsed.year || undefined,
+
+      summary: parsed.summary || '',
+      research_goals: parsed.research_goals || [],
+      innovation: parsed.innovation || parsed.core_arguments || [],
+      methodology: parsed.methodology || '',
+      experiments: parsed.experiments || [],
+      results: parsed.results || [],
+      limitations: parsed.limitations || [],
+      future_work: parsed.future_work || [],
+
+      key_terms: (parsed.key_terms || []).map((t: any) => ({
+        term: t.term || '',
+        definition: t.definition || '',
+        category: t.category,
+      })),
+
+      applications: parsed.applications || parsed.actionable_takeaways || [],
+      datasets: parsed.datasets || [],
+
+      core_arguments: parsed.core_arguments || parsed.innovation || [],
+      actionable_takeaways: parsed.actionable_takeaways || parsed.applications || [],
+      references: parsed.references || [],
+
+      tags: ['researchkit', ...(parsed.tags || [])],
+    }
 
     // 基础验证
-    if (!knowledgeCard.title || !Array.isArray(knowledgeCard.core_arguments)) {
-      throw new Error('返回的知识卡格式不正确')
+    if (!knowledgeCard.title) {
+      throw new Error('返回的知识卡格式不正确：缺少 title')
     }
 
     return knowledgeCard

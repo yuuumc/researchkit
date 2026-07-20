@@ -37,3 +37,10 @@ Thumbs.db
 
 # Vercel
 .vercel
+
+# ResearchKit 运行时产物（不应进仓库）
+.researchkit-memory.json
+.researchkit-output/
+
+# TypeScript 增量编译缓存
+*.tsbuildinfo
