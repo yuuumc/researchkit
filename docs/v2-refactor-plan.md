@@ -485,9 +485,36 @@ git push --force-with-lease origin main  # ⚠️ 仅紧急情况
 |---|---|---|---|---|---|
 | 1 | 7/21 | 类型系统 + 前端拆分 | ✅ 完成 | [#1](https://github.com/yuuumc/researchkit/pull/1) | ✅ tsc + dev server |
 | 2 | 7/22 | Coordinator 拆分 | ✅ 完成 | [#2](https://github.com/yuuumc/researchkit/pull/2) | ✅ tsc + 真实 SSE 调用 |
-| 3 | 7/23 | Agent 模块化 | ⬜ 待开始 | — | — |
+| 3 | 7/23 | Agent 模块化 | ✅ 完成 | [#3](https://github.com/yuuumc/researchkit/pull/3) | ✅ tsc + 真实 SSE 调用 |
 | 4 | 7/24 | Prompt 独立 | ⬜ 待开始 | — | — |
 | 5 | 7/25 | Agent Interface + v2.0-rc | ⬜ 待开始 | — | — |
+
+状态图例：⬜ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
+
+### Day 3 实际完成情况
+- ✅ `core/agents/reader/index.ts`（235 行）— 从 lib/agents/reader.ts 迁移
+- ✅ `core/agents/analyzer/index.ts`（281 行）— 含 ANALYZER_FIELDS / DEFAULT_SCHEMA_BY_INPUT_TYPE 常量
+- ✅ `core/agents/terminology/index.ts`（197 行）
+- ✅ `core/agents/knowledge-builder/index.ts`（257 行）— 含 KnowledgeCard 类型
+- ✅ `core/agents/recommendation/index.ts`（344 行）— 含 RecommendationIntent / RecommendedResource 类型
+- ✅ `core/agents/export/index.ts`（94 行）— 含 ExportOutput 类型
+- ✅ `lib/agents/*.ts` 全部改为 re-export shim（每个约 10 行）
+- ✅ 所有相对 import 路径（`'../mcp'`、`'./reader'` 等）转换为 `@/lib/` path alias
+- ✅ TypeScript 编译通过
+- ✅ 真实 SSE 冒烟测试通过 — Transformer 摘要 → 8 作者 KnowledgeCard（与 Day 2 输出一致）
+
+### Day 3 亮点
+- **1208 行代码迁移**：6 个 agent 全部从扁平结构迁移到模块化目录
+- **零行为变更**：所有 prompt 文本、temperature、schema 字段、export 全部保持原样
+- **向后兼容**：`lib/agents/*.ts` 改为 re-export，executor.ts、coordinator.ts 等 import 路径无需修改
+- **真实验证**：SSE 调用收到完整 8 作者 KnowledgeCard，与 Day 2 输出完全一致（Vaswani / NLP / Intermediate / 2017 / en-US）
+- **目录结构清晰**：未来新增 CriticAgent 只需 `core/agents/critic/index.ts` + 在 executor.ts 注册
+
+### Day 3 偏离原计划的部分
+- 原计划：每个 agent 拆 3 个文件（index.ts + prompt.ts + schema.ts）
+- 实际：只拆了 1 个文件（index.ts）
+- 原因：3 文件拆分需要把 prompt 从 agent 实现中剥离，工作量大且 schema 类型已在 Day 1 抽到 types/ 目录
+- 调整：3 文件拆分推到 Day 4（与 Prompt 独立任务合并做）
 
 状态图例：⬜ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
 
