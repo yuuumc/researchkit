@@ -18,12 +18,17 @@ import type {
   KnowledgeCard,
   AnalyzerField,
 } from './knowledge'
+import type { RecommendationOutput } from './knowledge'
 
 /**
  * Agent 接口 — 所有 Agent 必须实现
  *
- * v2.0 引入：未来可加 CriticAgent / ExplainerAgent，只需 implements Agent
- * 当前阶段保持与 lib/mcp.ts 的 Agent 兼容（migrate 期）
+ * v2.0 升级：统一 `execute(ctx)` 接口
+ * - v1.0 通过 handleMessage(message: AgentMessage) 调用 — 仍保留以兼容
+ * - v2.0 新增 execute(ctx: AgentContext) — executor 走这条路径
+ * - execute 内部构造 AgentMessage 调 handleMessage（迁移期），v2.1 起 handleMessage 可废弃
+ *
+ * 新增 Critic Agent 只需 `class CriticAgent implements AgentInterface`
  */
 export interface AgentInterface {
   /** Agent 名称（用于调度，如 'Reader' / 'Analyzer'） */
@@ -34,8 +39,16 @@ export interface AgentInterface {
   capabilities: AgentCapability[]
 
   /**
-   * 处理消息 — 兼容现有 mcp.Agent.handleMessage
-   * v2.0 后期会废弃，改为 execute(ctx: AgentContext)
+   * v2.0 统一执行入口 — 接收 AgentContext，返回 AgentResult
+   *
+   * executor 改为 `agents[step.agent].execute(ctx)`，
+   * 未来新增 Agent 不用改 executor，只需注册到 AGENTS 表
+   */
+  execute(ctx: AgentContext): Promise<AgentResult>
+
+  /**
+   * v1.0 兼容接口 — 处理 AgentMessage
+   * @deprecated v2.0 后期废弃，统一走 execute(ctx)
    */
   handleMessage(message: AgentMessage): Promise<AgentMessage>
 
@@ -44,16 +57,16 @@ export interface AgentInterface {
 }
 
 /**
- * 统一 Agent 上下文 — 未来所有 Agent 共享的输入
+ * 统一 Agent 上下文 — 所有 Agent 共享的输入
  *
- * v2.0 当前阶段不强制使用（旧 agent 仍走 handleMessage），
- * 但 types/ 层先定义好，方便后续重构。
+ * v2.0 重构：executor 通过 buildAgentContext 构造此对象，
+ * 所有 Agent 的 execute(ctx) 接收同一份 ctx，按需取用。
  *
  * 设计原则：
  * - document: 输入文档（content + 检测的 locale + 元数据）
- * - workflow: 当前 plan 的上下文（input_type + 需要的 schema 字段）
- * - previous: 前序 Agent 的输出（Reader/Analyzer 等）
- * - options: 用户级选项（locale / detailLevel）
+ * - workflow: 当前 plan 的上下文（input_type + 需要的 schema 字段 + plan）
+ * - previous: 前序 Agent 的输出（Reader/Analyzer/Terminology/KB/Recommendation）
+ * - options: 用户级选项（locale / sourceLocale / languageDirective / detailLevel）
  */
 export interface AgentContext {
   /** 输入文档 */
@@ -77,6 +90,8 @@ export interface AgentContext {
     requiredSchema: AnalyzerField[]
     /** Planner 判定的复杂度 */
     complexity: 'low' | 'medium' | 'high'
+    /** 完整 Plan（Export 用 source / tool_calls 等） */
+    plan?: import('./workflow').Plan
   }
 
   /** 前序 Agent 的输出（按依赖顺序填充） */
@@ -85,6 +100,8 @@ export interface AgentContext {
     analyzer?: AnalyzerOutput
     terminology?: TerminologyOutput
     knowledgeCard?: KnowledgeCard
+    /** Recommendation 输出（Export 用） */
+    recommendation?: RecommendationOutput
   }
 
   /** 用户选项 */
@@ -93,6 +110,8 @@ export interface AgentContext {
     locale: Locale
     /** 源 locale（输入语言，用于避免翻译） */
     sourceLocale: Locale
+    /** 语言指令字符串（coordinator 入口算好，所有 Agent 共享） */
+    languageDirective: string
     /** 详细级别：'standard' | 'detailed' */
     detailLevel?: 'standard' | 'detailed'
   }
@@ -117,8 +136,11 @@ export type { AnalyzerField } from './knowledge'
 
 /**
  * Agent 执行结果（统一返回结构）
+ *
+ * data 类型默认为 any — 每个 Agent 返回不同结构，由调用方按需断言
+ * （Reader 返回 ReaderOutput，Analyzer 返回 AnalyzerOutput，等等）
  */
-export interface AgentResult<T = unknown> {
+export interface AgentResult<T = any> {
   success: boolean
   data: T
   durationMs: number

@@ -12,9 +12,10 @@
  */
 
 import OpenAI from 'openai'
-import { Agent, AgentMessage, createMessage } from '@/lib/mcp'
+import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildTerminologyPrompt } from '@/prompts/terminology'
+import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -35,28 +36,57 @@ export interface TerminologyOutput {
   terms: TerminologyTerm[]
 }
 
-export const TerminologyAgent: Agent = {
-  name: 'Terminology',
-  description: '提取关键术语，输出定义/分类/重要性/前置依赖，支持知识图谱构建',
-  capabilities: [
+/**
+ * Terminology Agent — class 化（v2.0）
+ */
+export class TerminologyAgent implements AgentInterface {
+  name = 'Terminology' as const
+  description = '提取关键术语，输出定义/分类/重要性/前置依赖，支持知识图谱构建'
+  capabilities: AgentCapability[] = [
     {
       name: 'extractTerms',
       description: '提取术语 + importance + prerequisite，构建术语依赖图',
       inputs: ['text', 'analyzerMethodology'],
       outputs: ['terms'],
     },
-  ],
+  ]
+
+  async execute(ctx: AgentContext): Promise<AgentResult> {
+    const start = Date.now()
+    try {
+      const payload = {
+        content: ctx.document.content,
+        source_locale: ctx.options.sourceLocale,
+        target_locale: ctx.options.locale,
+        language_directive: ctx.options.languageDirective,
+        analyzerMethodology: ctx.previous.analyzer?.methodology || '',
+      }
+      const data = await this._run(payload)
+      return { success: true, data, durationMs: Date.now() - start }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Terminology failed'
+      return { success: false, data: { error: msg }, durationMs: Date.now() - start, error: msg }
+    }
+  }
 
   async handleMessage(message: AgentMessage): Promise<AgentMessage> {
     if (message.type !== 'task') {
       return createMessage('error', 'Terminology', message.from, { error: '只处理 task 类型消息' })
     }
+    try {
+      const output = await this._run(message.payload)
+      return createMessage('result', 'Terminology', message.from, output, message.id)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Terminology failed'
+      return createMessage('error', 'Terminology', message.from, { error: msg }, message.id)
+    }
+  }
 
-    const { content, analyzerMethodology, language_directive } = message.payload
+  private async _run(payload: any): Promise<TerminologyOutput> {
+    const { content, analyzerMethodology, language_directive } = payload
 
-    // Locale 检测（升级版：从 coordinator 传入或本地检测）
-    const sourceLocale: Locale = message.payload.source_locale || detectLocale(content)
-    const targetLocale: Locale = message.payload.target_locale || sourceLocale
+    const sourceLocale: Locale = payload.source_locale || detectLocale(content)
+    const targetLocale: Locale = payload.target_locale || sourceLocale
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     const response = await openai.chat.completions.create({
@@ -87,7 +117,6 @@ export const TerminologyAgent: Agent = {
       throw new Error('Terminology LLM 返回非 JSON 格式（可能限流或返回错误文本）')
     }
 
-    // 规范化输出 — 确保 category 合法、importance 在 1-5、prerequisite 是数组
     const validCategories = new Set(['concept', 'method', 'tool', 'metric'])
     const rawTerms: any[] = parsed.terms || []
 
@@ -116,15 +145,13 @@ export const TerminologyAgent: Agent = {
         }
       })
 
-    // 排序：importance 高的在前
     terms.sort((a, b) => b.importance - a.importance)
 
     const output: TerminologyOutput = { terms }
+    return output
+  }
 
-    return createMessage('result', 'Terminology', message.from, output, message.id)
-  },
-
-  getCapabilities() {
+  getCapabilities(): AgentCapability[] {
     return this.capabilities
-  },
+  }
 }

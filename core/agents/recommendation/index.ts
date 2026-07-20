@@ -16,9 +16,10 @@
  */
 
 import OpenAI from 'openai'
-import { Agent, AgentMessage, createMessage } from '@/lib/mcp'
+import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildRecommendationIntentPrompt, buildRecommendationReasonPrompt } from '@/prompts/recommendation'
+import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -65,7 +66,7 @@ async function searchSemanticScholar(query: string, limit = 3): Promise<Recommen
       reason: `Cited ${paper.citationCount || 0} times (${paper.year || 'N/A'})`,
       type: 'paper' as const,
       relevance: Math.min(1, (paper.citationCount || 0) / 1000),
-      intent: 'survey',  // 默认；后续 LLM 会重分类
+      intent: 'survey',
     }))
   } catch {
     return []
@@ -99,7 +100,7 @@ async function searchArxiv(query: string, limit = 3): Promise<RecommendedResourc
           reason: summaryMatch ? summaryMatch[1].trim().substring(0, 100) + '...' : 'arXiv paper',
           type: 'paper',
           relevance: 0.7,
-          intent: 'survey',  // 默认；后续 LLM 会重分类
+          intent: 'survey',
         })
       }
     }
@@ -109,31 +110,60 @@ async function searchArxiv(query: string, limit = 3): Promise<RecommendedResourc
   }
 }
 
-export const RecommendationAgent: Agent = {
-  name: 'Recommendation',
-  description: '按 4 类研究意图（improve/challenge/apply/survey）推荐相关阅读',
-  capabilities: [
+/**
+ * Recommendation Agent — class 化（v2.0）
+ */
+export class RecommendationAgent implements AgentInterface {
+  name = 'Recommendation' as const
+  description = '按 4 类研究意图（improve/challenge/apply/survey）推荐相关阅读'
+  capabilities: AgentCapability[] = [
     {
       name: 'recommend',
       description: '生成 4 类 intent 关键词，循环搜索 arXiv/SemanticScholar，LLM 标注 intent + 中文推荐理由',
       inputs: ['content', 'knowledgeCard'],
       outputs: ['recommendations', 'searchIntents'],
     },
-  ],
+  ]
+
+  async execute(ctx: AgentContext): Promise<AgentResult> {
+    const start = Date.now()
+    try {
+      const payload = {
+        content: ctx.document.content,
+        source_locale: ctx.options.sourceLocale,
+        target_locale: ctx.options.locale,
+        language_directive: ctx.options.languageDirective,
+        knowledgeCard: ctx.previous.knowledgeCard,
+      }
+      const data = await this._run(payload)
+      return { success: true, data, durationMs: Date.now() - start }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Recommendation failed'
+      return { success: false, data: { error: msg }, durationMs: Date.now() - start, error: msg }
+    }
+  }
 
   async handleMessage(message: AgentMessage): Promise<AgentMessage> {
     if (message.type !== 'task') {
       return createMessage('error', 'Recommendation', message.from, { error: '只处理 task 类型消息' })
     }
+    try {
+      const output = await this._run(message.payload)
+      return createMessage('result', 'Recommendation', message.from, output, message.id)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Recommendation failed'
+      return createMessage('error', 'Recommendation', message.from, { error: msg }, message.id)
+    }
+  }
 
-    const { content, knowledgeCard, language_directive } = message.payload
+  private async _run(payload: any): Promise<RecommendationOutput> {
+    const { content, knowledgeCard, language_directive } = payload
 
-    // Locale 检测（升级版：从 coordinator 传入或本地检测）
-    const sourceLocale: Locale = message.payload.source_locale || detectLocale(content)
-    const targetLocale: Locale = message.payload.target_locale || sourceLocale
+    const sourceLocale: Locale = payload.source_locale || detectLocale(content)
+    const targetLocale: Locale = payload.target_locale || sourceLocale
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
-    // ===== Step 1: 让 LLM 生成 4 类 intent 关键词（不再只生成一个 keywords 数组） =====
+    // ===== Step 1: 让 LLM 生成 4 类 intent 关键词 =====
     const intentResponse = await openai.chat.completions.create({
       model: LLM_MODEL,
       messages: [
@@ -174,13 +204,12 @@ ${content.substring(0, 2000)}`,
         keywords: s.keywords.filter((k: any) => typeof k === 'string' && k.trim()).slice(0, 3),
       }))
 
-    // 不适用（非论文）— 直接返回空
     if (!isApplicable || searchIntents.length === 0) {
-      return createMessage('result', 'Recommendation', message.from, {
+      return {
         recommendations: [],
         searchKeywords: [],
         searchIntents: [],
-      } as RecommendationOutput, message.id)
+      }
     }
 
     // ===== Step 2: 循环每个 intent 的每个关键词，并行搜索 arXiv + SemanticScholar =====
@@ -188,7 +217,6 @@ ${content.substring(0, 2000)}`,
     for (const si of searchIntents) {
       for (const kw of si.keywords) {
         if (!kw) continue
-        // 标注 intent 到搜索结果上
         const withIntent = async (intent: RecommendationIntent, keyword: string): Promise<RecommendedResource[]> => {
           const [ss, ax] = await Promise.all([
             searchSemanticScholar(keyword, 2),
@@ -203,16 +231,15 @@ ${content.substring(0, 2000)}`,
     const searchResults = await Promise.all(allSearchPromises)
     const allResults: RecommendedResource[] = searchResults.flat()
 
-    // 去重（按 url）
     const seen = new Set<string>()
     const deduped = allResults.filter(r => {
       const key = r.url.toLowerCase()
       if (seen.has(key)) return false
       seen.add(key)
       return true
-    }).slice(0, 12)  // 上限 12 篇，给 LLM 综合时留选择空间
+    }).slice(0, 12)
 
-    // ===== Step 3: LLM 综合每篇的推荐理由（标注 intent + 用目标语言写 reason） =====
+    // ===== Step 3: LLM 综合每篇的推荐理由 =====
     let finalRecommendations = deduped
     if (deduped.length > 0) {
       const reasonResponse = await openai.chat.completions.create({
@@ -257,7 +284,6 @@ ${JSON.stringify(deduped, null, 2)}`,
       }
     }
 
-    // 收集所有关键词（向后兼容 searchKeywords 字段）
     const allKeywords = Array.from(new Set(searchIntents.flatMap(si => si.keywords)))
 
     const output: RecommendationOutput = {
@@ -266,10 +292,10 @@ ${JSON.stringify(deduped, null, 2)}`,
       searchIntents,
     }
 
-    return createMessage('result', 'Recommendation', message.from, output, message.id)
-  },
+    return output
+  }
 
-  getCapabilities() {
+  getCapabilities(): AgentCapability[] {
     return this.capabilities
-  },
+  }
 }

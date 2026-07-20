@@ -1,14 +1,11 @@
 /**
  * Executor — 按 Plan 执行 Agent + 调用 MCP 工具
  *
- * v2.0 重构 — 从 lib/coordinator.ts 拆分
- *
- * 职责：
- * - 维护 Agent 注册表（name → Agent 实例）
- * - callAgent: 调用单个 Agent
- * - buildTaskMessage: 根据 Agent 类型构造 payload
- * - executePlan: 按 parallel_group 分组并行执行（同组并行，跨组串行）
- * - executeToolCalls: 执行 LLM 规划的工具调用（memory / filesystem）
+ * v2.0 重构 — Day 5 升级：
+ * - Agent 注册表改为 `Record<string, AgentInterface>`（实例而非类）
+ * - callAgent 改为调 `agent.execute(ctx)`，返回 AgentResult
+ * - buildTaskMessage 改为 buildAgentContext（构造 AgentContext）
+ * - executePlan 用新接口
  *
  * 不参与：Planner 调用 / 反思循环 / Locale 检测
  */
@@ -19,7 +16,6 @@ import { TerminologyAgent } from '@/lib/agents/terminology'
 import { KnowledgeBuilderAgent } from '@/lib/agents/knowledge-builder'
 import { RecommendationAgent } from '@/lib/agents/recommendation'
 import { ExportAgent } from '@/lib/agents/export'
-import { createMessage, AgentMessage } from '@/lib/mcp'
 import { callTool } from '@/lib/tools/registry'
 import type { ToolCall } from '@/lib/tools/types'
 import type { Locale } from '@/lib/locale'
@@ -29,66 +25,84 @@ import type {
   PlannedToolCall,
   ExecutedStep,
   KnowledgeCard,
+  AgentInterface,
+  AgentContext,
+  AgentResult,
+  AnalyzerField,
 } from '@/types'
 import type { ExportOutput } from '@/types'
+import type { RecommendationOutput } from '@/types'
 import type { CoordinatorInput } from './coordinator'
+import { localeToLanguage, detectLocale } from '@/lib/locale'
 
 // ============================================================================
-// Agent 注册表 — 名字 → Agent 实例
+// Agent 注册表 — 名字 → Agent 实例（v2.0 class 化）
 // ============================================================================
 
-type AnyAgent = typeof ReaderAgent
+const AGENTS: Record<string, AgentInterface> = {
+  Reader: new ReaderAgent(),
+  Analyzer: new AnalyzerAgent(),
+  Terminology: new TerminologyAgent(),
+  KnowledgeBuilder: new KnowledgeBuilderAgent(),
+  Recommendation: new RecommendationAgent(),
+  Export: new ExportAgent(),
+}
 
-const AGENTS: Record<string, AnyAgent> = {
-  Reader: ReaderAgent,
-  Analyzer: AnalyzerAgent,
-  Terminology: TerminologyAgent,
-  KnowledgeBuilder: KnowledgeBuilderAgent,
-  Recommendation: RecommendationAgent,
-  Export: ExportAgent,
+/**
+ * 获取已注册的 Agent 实例（workflow 反思循环补调用时用）
+ */
+export function getAgent(name: string): AgentInterface | undefined {
+  return AGENTS[name]
 }
 
 // ============================================================================
-// callAgent — 调用单个 Agent
+// callAgent — 调用单个 Agent（v2.0 走 execute(ctx)）
 // ============================================================================
 
 /**
- * 调用单个 Agent 处理消息
+ * 调用单个 Agent 处理 AgentContext
  *
- * @returns { result, durationMs, error? } — 不抛错，错误通过返回值传递
+ * v2.0 升级：直接调 `agent.execute(ctx)`，返回 AgentResult
+ *
+ * @returns AgentResult — 不抛错，错误通过 success/error 字段传递
  */
 export async function callAgent(
-  agent: AnyAgent,
-  message: AgentMessage
-): Promise<{ result: any; durationMs: number; error?: string }> {
-  const start = Date.now()
+  agent: AgentInterface,
+  ctx: AgentContext
+): Promise<AgentResult> {
+  // AgentInterface.execute 内部已 try/catch，不会再 throw
+  // 这里保留 try/catch 作为极端情况兜底
   try {
-    const response = await agent.handleMessage(message)
-    return {
-      result: response.payload,
-      durationMs: Date.now() - start,
-    }
+    return await agent.execute(ctx)
   } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Agent failed'
     return {
-      result: { error: err instanceof Error ? err.message : 'Agent failed' },
-      durationMs: Date.now() - start,
-      error: err instanceof Error ? err.message : 'Agent failed',
+      success: false,
+      data: { error: msg },
+      durationMs: 0,
+      error: msg,
     }
   }
 }
 
 // ============================================================================
-// buildTaskMessage — 构造 Agent 任务消息
+// buildAgentContext — 构造 AgentContext（v2.0 替代 buildTaskMessage）
 // ============================================================================
 
 /**
- * 构建发给某 Agent 的 task 消息（根据 Agent 类型构造 payload）
+ * 构建发给某 Agent 的 AgentContext
  *
- * - Analyzer 接收 required_schema + input_type（Planner 决定的字段动态化）
- * - Terminology 接收 analyzerMethodology（避免与方法学重复）
- * - 所有 Agent 可接收 prompt_patches（Replan 阶段为缺失字段定制 prompt 补丁）
+ * v2.0 升级：原 buildTaskMessage 构造 AgentMessage payload，
+ * 现在构造统一的 AgentContext，由 agent.execute(ctx) 接收。
+ *
+ * - Analyzer 接收 requiredSchema + inputType（Planner 决定的字段动态化）
+ * - Terminology 通过 previous.analyzer.methodology 获取方法学（避免重复）
+ * - KnowledgeBuilder 通过 previous.{reader,analyzer,terminology} 获取输入
+ * - Recommendation 通过 previous.knowledgeCard 获取输入
+ * - Export 通过 previous.{knowledgeCard,recommendation} 获取输入
+ * - 所有 Agent 可接收 promptPatch（Replan 阶段为缺失字段定制 prompt 补丁）
  */
-export function buildTaskMessage(
+export function buildAgentContext(
   step: PlanStep,
   input: CoordinatorInput,
   results: Record<string, any>,
@@ -97,48 +111,55 @@ export function buildTaskMessage(
   sourceLocale?: Locale,
   targetLocale?: Locale,
   languageDirective?: string
-): AgentMessage {
-  const basePayload: any = {
-    content: input.content,
-    source_locale: sourceLocale,
-    target_locale: targetLocale,
-    language_directive: languageDirective,
+): AgentContext {
+  // 检测源 locale（如果没传）
+  const finalSourceLocale: Locale = sourceLocale || detectLocale(input.content)
+  const finalTargetLocale: Locale = targetLocale || finalSourceLocale
+  const finalLanguageDirective: string = languageDirective || ''
+
+  // 提取前序 Agent 输出
+  const reader = results['Reader']
+  const analyzer = results['Analyzer']
+  const terminology = results['Terminology']
+  const knowledgeCard = results['KnowledgeBuilder']
+  const recommendation: RecommendationOutput | undefined = results['Recommendation']
+
+  // 构造 AgentContext
+  const ctx: AgentContext = {
+    document: {
+      content: input.content,
+      language: localeToLanguage(finalSourceLocale),
+      locale: finalSourceLocale,
+      title: input.title,
+      source: input.source,
+    },
+    workflow: {
+      inputType: plan.input_type as AgentContext['workflow']['inputType'],
+      requiredSchema: (plan.required_schema || []) as AnalyzerField[],
+      complexity: plan.complexity as 'low' | 'medium' | 'high',
+      plan,
+    },
+    previous: {
+      reader,
+      analyzer,
+      terminology,
+      knowledgeCard,
+      recommendation,
+    },
+    options: {
+      locale: finalTargetLocale,
+      sourceLocale: finalSourceLocale,
+      languageDirective: finalLanguageDirective,
+    },
   }
 
-  // 如果有 prompt_patches 给当前 agent，注入补丁
+  // 注入 prompt_patch（Replan 阶段补丁）
   const patch = promptPatches?.[step.agent]
   if (patch) {
-    basePayload.prompt_patch = patch
+    ctx.promptPatch = patch
   }
 
-  switch (step.agent) {
-    case 'Analyzer':
-      basePayload.readerOutput = results['Reader'] || null
-      basePayload.required_schema = plan.required_schema
-      basePayload.input_type = plan.input_type
-      break
-    case 'KnowledgeBuilder':
-      basePayload.title = input.title
-      basePayload.readerOutput = results['Reader']
-      basePayload.analyzerOutput = results['Analyzer']
-      basePayload.terminologyOutput = results['Terminology']
-      break
-    case 'Recommendation':
-      basePayload.knowledgeCard = results['KnowledgeBuilder']
-      break
-    case 'Terminology':
-      // 把 Analyzer 的 methodology 传给 Terminology，让其避免重复提取
-      basePayload.analyzerMethodology = results['Analyzer']?.methodology || ''
-      break
-    case 'Export':
-      basePayload.knowledgeCard = results['KnowledgeBuilder']
-      basePayload.recommendations = results['Recommendation'] || { recommendations: [], searchKeywords: [] }
-      basePayload.source = input.source
-      break
-    // Reader 只需要 content（+ 可选 prompt_patch）
-  }
-
-  return createMessage('task', 'Coordinator', step.agent, basePayload)
+  return ctx
 }
 
 // ============================================================================
@@ -150,7 +171,7 @@ export function buildTaskMessage(
  * - 同 group 内的并行（Promise.all）
  * - 跨 group 串行
  *
- * 升级版：支持 prompt_patches（Replan 阶段为缺失字段定制 prompt）
+ * v2.0 升级：走 agent.execute(ctx)
  */
 export async function executePlan(
   plan: Plan,
@@ -184,18 +205,21 @@ export async function executePlan(
             error: `Unknown agent: ${step.agent}`,
           }
         }
-        const message = buildTaskMessage(step, input, results, plan, promptPatches, sourceLocale, targetLocale, languageDirective)
-        const { result, durationMs, error } = await callAgent(agent, message)
-        const success = !error && !result?.error
+        const ctx = buildAgentContext(
+          step, input, results, plan, promptPatches,
+          sourceLocale, targetLocale, languageDirective
+        )
+        const result = await callAgent(agent, ctx)
+        const success = result.success && !result.data?.error
         if (success) {
-          results[step.agent] = result
+          results[step.agent] = result.data
         }
         return {
           step,
           success,
-          durationMs,
-          output: result,
-          error,
+          durationMs: result.durationMs,
+          output: result.data,
+          error: result.error,
         }
       })
     )
@@ -232,7 +256,6 @@ export async function executeToolCalls(
     const inputClone: Record<string, any> = { ...planned.input }
 
     if (planned.tool === 'memory' && inputClone.action === 'save') {
-      // 用实际 KnowledgeCard 字段填充
       inputClone.title = knowledgeCard.title || inputClone.title
       inputClone.authors = knowledgeCard.authors || inputClone.authors || []
       inputClone.field = knowledgeCard.field || inputClone.field || ''
@@ -240,7 +263,6 @@ export async function executeToolCalls(
       inputClone.source = input.source || inputClone.source
       inputClone.tags = knowledgeCard.tags || inputClone.tags || []
     } else if (planned.tool === 'filesystem' && inputClone.action === 'save_markdown') {
-      // 用 Export 的实际 markdown 填充
       inputClone.content = exports.markdown || inputClone.content || ''
       inputClone.filename = knowledgeCard.title || inputClone.filename || `knowledge-card-${Date.now()}`
     } else if (planned.tool === 'filesystem' && inputClone.action === 'save_json') {
@@ -270,20 +292,67 @@ export async function executeToolCalls(
 /**
  * 单独调用某 Agent — workflow 反思循环中触发补调用时使用
  *
- * 例如：Analyzer/Terminology 重跑后需要重建 KB
+ * v2.0 升级：用 AgentContext 调 agent.execute(ctx)
+ * 调用方需要构造完整的 ctx（含 previous 等字段）
+ *
+ * @param agentName Agent 名称
+ * @param payload v1.0 风格的 payload — 内部转换为 AgentContext
  */
 export async function runSingleAgent(
   agentName: string,
   payload: Record<string, any>
-): Promise<{ result: any; durationMs: number; error?: string }> {
+): Promise<AgentResult> {
   const agent = AGENTS[agentName]
   if (!agent) {
     return {
-      result: { error: `Unknown agent: ${agentName}` },
+      success: false,
+      data: { error: `Unknown agent: ${agentName}` },
       durationMs: 0,
       error: `Unknown agent: ${agentName}`,
     }
   }
-  const message = createMessage('task', 'Coordinator', agentName, payload)
-  return callAgent(agent, message)
+
+  // 把 v1.0 payload 转换为 AgentContext
+  // 这是过渡期兼容：未来调用方应直接传 AgentContext
+  const ctx: AgentContext = payloadToContext(payload, agentName)
+
+  return callAgent(agent, ctx)
+}
+
+/**
+ * 把 v1.0 风格 payload 转换为 AgentContext（过渡期兼容）
+ *
+ * 未来 v2.1：调用方直接传 AgentContext，删除此函数
+ */
+function payloadToContext(payload: Record<string, any>, _agentName: string): AgentContext {
+  const sourceLocale: Locale = payload.source_locale || 'en-US'
+  const targetLocale: Locale = payload.target_locale || sourceLocale
+
+  return {
+    document: {
+      content: payload.content || '',
+      language: 'en',
+      locale: sourceLocale,
+      title: payload.title,
+      source: payload.source,
+    },
+    workflow: {
+      inputType: payload.input_type || 'unknown',
+      requiredSchema: payload.required_schema || [],
+      complexity: 'medium',
+    },
+    previous: {
+      reader: payload.readerOutput,
+      analyzer: payload.analyzerOutput,
+      terminology: payload.terminologyOutput,
+      knowledgeCard: payload.knowledgeCard,
+      recommendation: payload.recommendations,
+    },
+    options: {
+      locale: targetLocale,
+      sourceLocale,
+      languageDirective: payload.language_directive || '',
+    },
+    promptPatch: payload.prompt_patch,
+  }
 }
