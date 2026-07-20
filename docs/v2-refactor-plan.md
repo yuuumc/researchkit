@@ -484,28 +484,27 @@ git push --force-with-lease origin main  # ⚠️ 仅紧急情况
 | Day | 日期 | 任务 | 状态 | PR | 冒烟测试 |
 |---|---|---|---|---|---|
 | 1 | 7/21 | 类型系统 + 前端拆分 | ✅ 完成 | [#1](https://github.com/yuuumc/researchkit/pull/1) | ✅ tsc + dev server |
-| 2 | 7/22 | Coordinator 拆分 | ⬜ 待开始 | — | — |
+| 2 | 7/22 | Coordinator 拆分 | ✅ 完成 | [#2](https://github.com/yuuumc/researchkit/pull/2) | ✅ tsc + 真实 SSE 调用 |
 | 3 | 7/23 | Agent 模块化 | ⬜ 待开始 | — | — |
 | 4 | 7/24 | Prompt 独立 | ⬜ 待开始 | — | — |
 | 5 | 7/25 | Agent Interface + v2.0-rc | ⬜ 待开始 | — | — |
 
 状态图例：⬜ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
 
-### Day 1 实际完成情况
-- ✅ types/ 类型层（5 个文件：agent / knowledge / workflow / export / index）
-- ✅ components/ui/Card.tsx
-- ✅ components/ui/Chip.tsx
-- ✅ lib/ui-styles.ts
-- ✅ lib/ui-labels.ts
-- ✅ app/page.tsx 减重 154 行（1980 → 1830）
+### Day 2 实际完成情况
+- ✅ `core/orchestration/planner.ts`（96 行）— runPlanner + fallbackPlan
+- ✅ `core/orchestration/executor.ts`（289 行）— callAgent + buildTaskMessage + executePlan + executeToolCalls + AGENTS 注册表
+- ✅ `core/orchestration/workflow.ts`（265 行）— runReflectionLoop + extractKnowledgeCard
+- ✅ `core/orchestration/coordinator.ts`（210 行）— 薄壳：locale + plan → execute → workflow → export → toolCalls
+- ✅ `lib/coordinator.ts` 减重 609 行（617 → 28 行 re-export）
 - ✅ TypeScript 编译通过
-- ✅ Dev 服务器冒烟测试通过（Hero / 输入框 / mode tabs / capability matrix）
+- ✅ 真实 SSE 冒烟测试通过 — 发送 Transformer 摘要，收到完整 6 stages + 8 作者 KnowledgeCard
 
-### Day 1 偏离原计划的部分
-- 原计划：拆分 page.tsx 为 components/research/{ResearchInput, AgentTimeline, KnowledgeCardView, ExportPanel, QualityScore}.tsx
-- 实际：只拆了 UI 工具组件（Card/Chip/styles/labels），没拆业务组件
-- 原因：1830 行的业务 render 拆分需要传递大量 props，新手风险高
-- 调整：业务组件拆分推到 Day 5（与 Agent Interface 一起做，届时数据流会更清晰）
+### Day 2 亮点
+- **零行为变更**：所有 SSE 调用链、API 路由、Agent 行为完全等价于 v1.0
+- **向后兼容**：`lib/coordinator.ts` 改为 re-export，旧 import 路径无需修改
+- **真实验证**：用 `Invoke-WebRequest` 发送 Transformer 摘要到 `/api/research/multi-agent-stream`，收到完整 knowledge_card（Vaswani 8 作者 / NLP / Advanced / 2017 / 5 项 innovation）— 拆分前后行为一致
+- **架构清晰**：未来新增 CriticAgent 只需在 `executor.ts` 注册 + 在 `workflow.ts` 调用，无需碰 coordinator
 
 ---
 
