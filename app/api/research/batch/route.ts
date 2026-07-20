@@ -31,6 +31,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // arXiv URL 串行处理（API 限流严格，并发必触发 429）
+    // 其他 URL 走原并发逻辑
+    const isArxiv = (u: string) => /arxiv\.org\/abs\//.test(u)
+    const arxivUrls = urls.filter(isArxiv)
+    const otherUrls = urls.filter(u => !isArxiv(u))
+    const arxivConcurrency = arxivUrls.length > 0 ? 1 : concurrency
+
     // 处理单个 URL 的完整流程
     const processOne = async (url: string) => {
       try {
@@ -51,7 +58,7 @@ export async function POST(request: NextRequest) {
         const knowledgeCard = await generateKnowledgeCard({
           content: truncated,
           language: 'zh',
-          detailLevel: 'brief', // 批量模式默认 brief，节省 token
+          detailLevel: 'standard', // brief(1200) 会被截断导致 JSON 不完整，standard(2500) 才够完整 schema
         })
 
         if (parsed.title && parsed.title.length > 0) {
@@ -77,26 +84,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 简单的并发控制器
-    const results: any[] = []
-    const queue = [...urls]
-    const workers: Promise<void>[] = []
+    // 分两组处理：arXiv URL 串行（避免触发 API 限流），其他 URL 走并发
+    // 结果按原始 urls 顺序排列（用 Map 暂存）
+    const resultMap = new Map<string, any>()
 
-    const worker = async () => {
-      while (queue.length > 0) {
-        const url = queue.shift()
+    // 串行处理 arXiv URL
+    for (const url of arxivUrls) {
+      resultMap.set(url, await processOne(url))
+    }
+
+    // 并发处理其他 URL
+    const otherQueue = [...otherUrls]
+    const otherWorkers: Promise<void>[] = []
+    const otherWorker = async () => {
+      while (otherQueue.length > 0) {
+        const url = otherQueue.shift()
         if (!url) break
-        const result = await processOne(url)
-        results.push(result)
+        resultMap.set(url, await processOne(url))
       }
     }
-
     for (let i = 0; i < concurrency; i++) {
-      workers.push(worker())
+      otherWorkers.push(otherWorker())
     }
+    await Promise.all(otherWorkers)
 
-    await Promise.all(workers)
-
+    // 按原始顺序输出
+    const results = urls.map(u => resultMap.get(u)).filter(Boolean)
     const successCount = results.filter(r => r.success).length
     const processingTimeMs = Date.now() - startTime
 
@@ -108,6 +121,8 @@ export async function POST(request: NextRequest) {
       results,
       metadata: {
         concurrency,
+        arxiv_count: arxivUrls.length,
+        other_count: otherUrls.length,
         processing_time_ms: processingTimeMs,
       },
     })
