@@ -483,13 +483,29 @@ git push --force-with-lease origin main  # ⚠️ 仅紧急情况
 
 | Day | 日期 | 任务 | 状态 | PR | 冒烟测试 |
 |---|---|---|---|---|---|
-| 1 | 7/21 | 类型系统 + 前端拆分 | ⬜ 待开始 | — | — |
+| 1 | 7/21 | 类型系统 + 前端拆分 | ✅ 完成 | [#1](https://github.com/yuuumc/researchkit/pull/1) | ✅ tsc + dev server |
 | 2 | 7/22 | Coordinator 拆分 | ⬜ 待开始 | — | — |
 | 3 | 7/23 | Agent 模块化 | ⬜ 待开始 | — | — |
 | 4 | 7/24 | Prompt 独立 | ⬜ 待开始 | — | — |
 | 5 | 7/25 | Agent Interface + v2.0-rc | ⬜ 待开始 | — | — |
 
 状态图例：⬜ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
+
+### Day 1 实际完成情况
+- ✅ types/ 类型层（5 个文件：agent / knowledge / workflow / export / index）
+- ✅ components/ui/Card.tsx
+- ✅ components/ui/Chip.tsx
+- ✅ lib/ui-styles.ts
+- ✅ lib/ui-labels.ts
+- ✅ app/page.tsx 减重 154 行（1980 → 1830）
+- ✅ TypeScript 编译通过
+- ✅ Dev 服务器冒烟测试通过（Hero / 输入框 / mode tabs / capability matrix）
+
+### Day 1 偏离原计划的部分
+- 原计划：拆分 page.tsx 为 components/research/{ResearchInput, AgentTimeline, KnowledgeCardView, ExportPanel, QualityScore}.tsx
+- 实际：只拆了 UI 工具组件（Card/Chip/styles/labels），没拆业务组件
+- 原因：1830 行的业务 render 拆分需要传递大量 props，新手风险高
+- 调整：业务组件拆分推到 Day 5（与 Agent Interface 一起做，届时数据流会更清晰）
 
 ---
 
