@@ -486,8 +486,32 @@ git push --force-with-lease origin main  # ⚠️ 仅紧急情况
 | 1 | 7/21 | 类型系统 + 前端拆分 | ✅ 完成 | [#1](https://github.com/yuuumc/researchkit/pull/1) | ✅ tsc + dev server |
 | 2 | 7/22 | Coordinator 拆分 | ✅ 完成 | [#2](https://github.com/yuuumc/researchkit/pull/2) | ✅ tsc + 真实 SSE 调用 |
 | 3 | 7/23 | Agent 模块化 | ✅ 完成 | [#3](https://github.com/yuuumc/researchkit/pull/3) | ✅ tsc + 真实 SSE 调用 |
-| 4 | 7/24 | Prompt 独立 | ⬜ 待开始 | — | — |
+| 4 | 7/24 | Prompt 独立 | ✅ 完成 | [#4](https://github.com/yuuumc/researchkit/pull/4) | ✅ tsc + 真实 SSE 调用 |
 | 5 | 7/25 | Agent Interface + v2.0-rc | ⬜ 待开始 | — | — |
+
+状态图例：⬜ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
+
+### Day 4 实际完成情况
+- ✅ `prompts/reader.ts`（73 行）— `buildReaderPrompt(ctx)`
+- ✅ `prompts/analyzer.ts`（122 行）— `buildAnalyzerPrompt(ctx)`（含 schemaDocs / jsonTemplate / FIELD_DESCRIPTIONS 动态计算逻辑）
+- ✅ `prompts/terminology.ts`（89 行）— `buildTerminologyPrompt(ctx)`（含 analyzerMethodology 分支判断）
+- ✅ `prompts/recommendation.ts`（101 行）— `buildRecommendationIntentPrompt` + `buildRecommendationReasonPrompt`
+- ✅ `prompts/planner.ts`（224 行）— `buildPlannerPrompt` + `buildReflectionPrompt` + `buildReplanPrompt`
+- ✅ 5 个源文件改为 import 新 prompt 模块：`core/agents/{reader,analyzer,terminology,recommendation}/index.ts` + `lib/planner.ts`
+- ✅ KnowledgeBuilder / Export 跳过（无 LLM prompt，纯同步逻辑）
+- ✅ TypeScript 编译通过
+- ✅ 真实 SSE 冒烟测试通过 — Transformer 摘要 → 8 作者 / 5 research_goals / NLP / Intermediate / 2017 / en-US（与 Day 3 输出完全一致）
+
+### Day 4 亮点
+- **Prompt 零改动**：所有 LLM prompt 文本一字不改，仅做位置抽取 + 函数封装，确保输出行为完全一致
+- **代码减负 480 行**：5 个 agent/planner 文件总计减少 480 行，迁移到 5 个独立 prompt 模块（共 609 行独立可优化的 prompt 代码）
+- **可独立优化**：未来调优 prompt（如更换语言模型、调整输出格式）不再碰 agent 业务代码，降低风险
+- **可复用**：Planner / Reflection / Replan 三个 prompt 共用一个文件，便于统一调整反思循环行为
+
+### Day 4 偏离原计划的部分
+- 原计划：每个 prompt 文件包含 `buildXxxPrompt(ctx): string` 简单函数
+- 实际：analyzer.ts 和 terminology.ts 包含分支逻辑（schemaDocs 计算、analyzerMethodology 分支），更贴近真实使用场景
+- 原因：抽取过程中发现 prompt 内部依赖运行时计算的变量，把这些逻辑一起搬到 prompt 文件比保留在 agent 文件更内聚
 
 状态图例：⬜ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
 
