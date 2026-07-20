@@ -487,7 +487,44 @@ git push --force-with-lease origin main  # ⚠️ 仅紧急情况
 | 2 | 7/22 | Coordinator 拆分 | ✅ 完成 | [#2](https://github.com/yuuumc/researchkit/pull/2) | ✅ tsc + 真实 SSE 调用 |
 | 3 | 7/23 | Agent 模块化 | ✅ 完成 | [#3](https://github.com/yuuumc/researchkit/pull/3) | ✅ tsc + 真实 SSE 调用 |
 | 4 | 7/24 | Prompt 独立 | ✅ 完成 | [#4](https://github.com/yuuumc/researchkit/pull/4) | ✅ tsc + 真实 SSE 调用 |
-| 5 | 7/25 | Agent Interface + v2.0-rc | ⬜ 待开始 | — | — |
+| 5 | 7/25 | Agent Interface + v2.0-rc | ✅ 完成 | [#5](https://github.com/yuuumc/researchkit/pull/5) | ✅ tsc + 真实 SSE 调用 |
+
+状态图例：⬜ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
+
+### Day 5 实际完成情况
+- ✅ `types/agent.ts` — `AgentInterface` 新增 `execute(ctx: AgentContext): Promise<AgentResult>`，`handleMessage` 标记 `@deprecated`；`AgentContext` 新增 `languageDirective` / `workflow.plan?` / `previous.recommendation?`；`AgentResult<T = unknown>` → `<T = any>`
+- ✅ 6 agents 全部从 `export const XxxAgent: Agent = {...}` 改为 `export class XxxAgent implements AgentInterface`
+  - 共享三方法：`execute(ctx)` 构造 payload → `private _run(payload)` → 返回 `AgentResult`
+  - `handleMessage` 保留 v1.0 兼容路径（调 `_run`）
+- ✅ `core/orchestration/executor.ts` — `AGENTS` 注册表改为实例（`new ReaderAgent()` 等）；`callAgent` 改为 `agent.execute(ctx)`；`buildTaskMessage` → `buildAgentContext`；`runSingleAgent` 返回 `AgentResult`；新增 `payloadToContext` 过渡转换
+- ✅ `core/orchestration/coordinator.ts` — 最终 Export 改用 `AgentContext` + `new ExportAgent()`
+- ✅ `core/orchestration/workflow.ts` — 反思循环 KB 重建跟随新返回结构（`result` → `data`，`error` → `success`）
+- ✅ TypeScript 编译通过（修复了 4 个类型错误：`typeof ExportAgent` → `new ExportAgent()`、`ExportOutput` 类型断言、`AgentResult.data` 上访问 `.error`）
+- ✅ 真实 SSE 冒烟测试通过 — POST Transformer 摘要 → 7 stages 全部触发，pipeline 7 agents 全部 `success=true`，反思 1 轮 satisfied，53.8 秒完成
+- ✅ 验证点全部命中：8 作者（Vaswani et al.）/ field=NLP / difficulty=Intermediate / year=2017 / language=en / locale=en-US（与 Day 4 输出完全一致）
+
+### Day 5 亮点
+- **架构升级收官**：从「函数集合」升级为「Agent 注册表 + 统一 AgentInterface」
+- **真正的开放-封闭原则**：新增 Agent（如 `CriticAgent`）只需 `class CriticAgent implements AgentInterface` + 注册到 `AGENTS` 表，`executor` 和 `coordinator` 完全不用改
+- **双接口并存**：`execute(ctx)`（v2.0）+ `handleMessage(message)`（v1.0）通过 `private _run(payload)` 共享逻辑，迁移期零风险
+- **统一 AgentContext**：document / workflow / previous / options / promptPatch 五字段，未来加 Memory / UserPref 不用改接口
+- **冒烟测试等价性**：Day 5 输出与 Day 4 完全一致（8 作者 / NLP / Intermediate / 2017 / en-US），证明重构无行为变更
+
+### Day 5 偏离原计划的部分
+- 原计划：纯抽象 `Agent` 接口
+- 实际：双接口并存（`execute(ctx)` + `handleMessage` 共存）
+- 原因：`handleMessage` 走 `lib/mcp.ts` 的 AgentMessage 风格，被多个外部模块引用；直接废弃会破坏兼容。改为通过 `_run(payload)` 共享逻辑，迁移期 v1.0 调用方零感知
+- 调整：v2.1 起 `handleMessage` 可标记 `@deprecated` 并逐步废弃
+
+### Day 5 文件改动统计
+- 10 个文件改动，+509 / -260 行
+- PR #5: https://github.com/yuuumc/researchkit/pull/5
+
+---
+
+## v2.0-rc1 冻结点
+
+7/28 07:59（OKX 截止）前 develop 分支冻结，冒烟测试通过后合并到 main 并打 `v2.0` 正式 tag。
 
 状态图例：⬜ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
 
