@@ -1,0 +1,10 @@
+{
+  "id": "zh-002",
+  "locale": "zh-CN",
+  "field": "知识图谱 / 嵌入",
+  "title": "TransE：知识图谱的翻译嵌入表示",
+  "authors": ["Antoine Bordes", "Nicolas Usunier", "Alberto García-Durán", "Jason Weston", "Oksana Yakhnenko"],
+  "year": 2013,
+  "url": "https://papers.nips.cc/paper/2013/hash/1cecc7a77928ca8133fa24680a88d2f9-Abstract.html",
+  "abstract": "本文提出 TransE，一种基于翻译的知识图谱嵌入方法，将实体和关系映射到低维向量空间。TransE 的核心思想是：如果存在三元组（头实体，关系，尾实体），则头实体向量加上关系向量应接近尾实体向量，即 h + r ≈ t。TransE 模型简单、参数少、训练效率高，在 WordNet 和 Freebase 等大型知识图谱上的链接预测任务上取得了当时最优的结果。尽管 TransE 只能处理一对一关系，难以处理复杂关系（一对多、多对一、多对多），但它的提出为后续 TransH、TransR、TransD 等模型奠定了基础，是知识图谱嵌入领域的开创性工作，至今仍被广泛引用。"
+}

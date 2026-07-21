@@ -1,0 +1,10 @@
+{
+  "id": "zh-001",
+  "locale": "zh-CN",
+  "field": "NLP / 中文预训练",
+  "title": "ERNIE：增强语义表示的知识融合预训练模型",
+  "authors": [" Yu Sun", "Shuohuan Wang", "Yukun Li", "Shikun Feng", "Xuyi Tian", "Hua Wu", "Haifeng Wang"],
+  "year": 2019,
+  "url": "https://arxiv.org/abs/1905.07129",
+  "abstract": "BERT 等预训练语言模型通过预测 token 显著提升了各种自然语言处理任务的性能。然而，BERT 采用的 mask 策略忽略了词与词之间的语义依赖和知识关联。本文提出 ERNIE（Enhanced Representation through kNowledge IntEgration），通过引入知识融合策略增强预训练语言模型的语义表示能力。ERNIE 通过 mask 整个实体而非随机 token，使模型能够学习到实体之间的语义关系。在中文自然语言处理任务上的实验表明，ERNIE 在多个 NLP 基准测试上取得了显著的性能提升，包括命名实体识别、情感分析、问答系统等。此外，ERNIE 还在英文数据集上验证了其通用性，证明了知识融合策略对预训练语言模型的有效性。"
+}
