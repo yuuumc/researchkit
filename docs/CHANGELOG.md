@@ -5,6 +5,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## [v2.2.6] — 2026-07-21 — Stability Hotfix
+
+> **类型**:Stability Hotfix — 修复 v2.2.5 发布后发现的 2 个真实小问题,无新功能
+
+### Fixed
+
+#### Hotfix 1: zh-002 Summary 长度警告误报
+
+**问题**:v2.2.5 regression 报告中 zh-002 (TransE) 触发 `Summary too short: 45 chars` 警告。
+
+**根因**:Reader prompt 明确要求 `"One-sentence factual summary (subject + verb + object, no fluff)"`,45 chars 是合法的一句话事实摘要(TransE 概念本身就简洁),测试阈值 50 过严导致误报。
+
+**修复**:`scripts/regression-test.ts` line 314 — summary 长度阈值 50 → 30。真正异常短(< 30 chars)的 summary 仍触发警告。
+
+**硬约束遵守**:Reader prompt 文本未修改(受"prompt 文本完全照搬"硬约束),仅调整测试阈值。
+
+#### Hotfix 2: SmartSuggestionBanner 移动端溢出
+
+**问题**:SmartSuggestionBanner 原始 minWidth 220(content)+ 140(buttons)+ 32(padding)= 392px,在 320px viewport(老 iPhone SE / 小屏 Android)溢出。
+
+**修复**:`app/page.tsx` 添加 `.smart-suggestion-wrapper` class + `@media (max-width: 640px)` 规则:
+- Banner 切换到 `flex-direction: column`(垂直堆叠)
+- 内容区 `min-width: 0`(原 220px)
+- 按钮组 `width: 100%` + `justify-content: stretch`
+- 按钮 `flex: 1` + `min-height: 44px`(触摸友好)
+
+桌面端布局(>= 641px)保持不变 — banner 仍是水平布局 + 内联按钮。
+
+### Verification
+
+- `tsc --noEmit`:0 错误
+- Browser smoke test 1280x800:PASS(桌面布局保持)
+- Browser smoke test 320x568:PASS(banner 垂直堆叠,无溢出)
+- `document.documentElement.scrollWidth == 320`(无水平溢出)
+- 无新 console 错误引入
+
+### Files Changed (2)
+
+| File | Change | LOC |
+|---|---|---|
+| `scripts/regression-test.ts` | summary 阈值 50 → 30 + 注释 | +5/-1 |
+| `app/page.tsx` | `.smart-suggestion-wrapper` + `@media` 规则 | +31/-2 |
+
+---
+
 ## [v2.2.5] — 2026-07-21 — Quality Release
 
 > **类型**:Quality Release — 不加功能,专注让 v2.2 在 hackathon 评审现场零翻车
