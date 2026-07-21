@@ -15,18 +15,11 @@
  * 5. tool_calls（LLM 自主决定调哪些 MCP 工具）
  */
 
-import OpenAI from 'openai'
 import { Agent, AgentMessage, createMessage, AgentCapability } from './mcp'
 import { formatToolsForPrompt } from './tools/registry'
 import { detectLocale, Locale, buildLanguageDirective } from './locale'
 import { buildPlannerPrompt, buildReflectionPrompt, buildReplanPrompt } from '@/prompts/planner'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: (process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').trim(),
-})
-
-const LLM_MODEL = process.env.LLM_MODEL?.trim() || 'deepseek-v4-flash'
+import { ProviderFactory } from '@/core/llm/provider'
 
 export interface PlanStep {
   id: string               // 'step-1' | 'step-2' ...
@@ -104,9 +97,9 @@ export const PlannerAgent: Agent = {
     const agentListText = AGENT_REGISTRY.map(a => `- ${a.name}: ${a.description}`).join('\n')
     const toolsText = formatToolsForPrompt()
 
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
+    const provider = ProviderFactory.fromEnv()
+    const response = await provider.chat(
+      [
         {
           role: 'system',
           content: buildPlannerPrompt({
@@ -120,11 +113,13 @@ export const PlannerAgent: Agent = {
           content: `Input preview (first 1500 chars):\n${content.substring(0, 1500)}\n\nTotal length: ${content.length} chars\n\nProduce the plan with steps, tool_calls, and required_schema.`,
         },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.4,
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.4,
+      }
+    )
 
-    const raw = response.choices[0]?.message?.content || '{}'
+    const raw = response.content || '{}'
     let parsed: any
     try {
       parsed = JSON.parse(raw)
@@ -248,9 +243,9 @@ export async function reflect(
   languageDirective?: string
 ): Promise<ReflectionResult> {
   try {
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
+    const provider = ProviderFactory.fromEnv()
+    const response = await provider.chat(
+      [
         {
           role: 'system',
           content: buildReflectionPrompt({ languageDirective }),
@@ -271,11 +266,13 @@ export async function reflect(
           }, null, 2)}`,
         },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.3,
+      }
+    )
 
-    const raw = response.choices[0]?.message?.content || '{}'
+    const raw = response.content || '{}'
     const parsed = JSON.parse(raw)
 
     const review = parsed.review || {}
@@ -361,9 +358,9 @@ export async function replan(
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
+    const provider = ProviderFactory.fromEnv()
+    const response = await provider.chat(
+      [
         {
           role: 'system',
           content: buildReplanPrompt({ languageDirective }),
@@ -384,11 +381,13 @@ export async function replan(
           }, null, 2)}`,
         },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,  // 升级：从默认 1.0 降到 0.2，避免发散
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.2,  // 升级：从默认 1.0 降到 0.2，避免发散
+      }
+    )
 
-    const raw = response.choices[0]?.message?.content || '{}'
+    const raw = response.content || '{}'
     const parsed = JSON.parse(raw)
 
     const supplementarySteps: PlanStep[] = (parsed.supplementary_steps || []).map((s: any, i: number) => ({

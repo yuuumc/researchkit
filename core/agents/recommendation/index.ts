@@ -15,18 +15,11 @@
  * 3. LLM 综合每篇的推荐理由（标注 intent 类型）
  */
 
-import OpenAI from 'openai'
 import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildRecommendationIntentPrompt, buildRecommendationReasonPrompt } from '@/prompts/recommendation'
+import { ProviderFactory } from '@/core/llm/provider'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: (process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').trim(),
-})
-
-const LLM_MODEL = process.env.LLM_MODEL?.trim() || 'deepseek-v4-flash'
 
 export type RecommendationIntent = 'improve' | 'challenge' | 'apply' | 'survey'
 
@@ -164,9 +157,9 @@ export class RecommendationAgent implements AgentInterface {
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     // ===== Step 1: 让 LLM 生成 4 类 intent 关键词 =====
-    const intentResponse = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
+    const provider = ProviderFactory.fromEnv()
+    const intentResponse = await provider.chat(
+      [
         {
           role: 'system',
           content: buildRecommendationIntentPrompt({ finalLanguageDirective }),
@@ -183,11 +176,13 @@ Abstract (first 2000 chars):
 ${content.substring(0, 2000)}`,
         },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.4,
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.4,
+      }
+    )
 
-    const intentRaw = intentResponse.choices[0]?.message?.content || '{}'
+    const intentRaw = intentResponse.content || '{}'
     let intentParsed: any
     try {
       intentParsed = JSON.parse(intentRaw)
@@ -242,9 +237,8 @@ ${content.substring(0, 2000)}`,
     // ===== Step 3: LLM 综合每篇的推荐理由 =====
     let finalRecommendations = deduped
     if (deduped.length > 0) {
-      const reasonResponse = await openai.chat.completions.create({
-        model: LLM_MODEL,
-        messages: [
+      const reasonResponse = await provider.chat(
+        [
           {
             role: 'system',
             content: buildRecommendationReasonPrompt({ finalLanguageDirective }),
@@ -260,11 +254,13 @@ Candidate papers (JSON):
 ${JSON.stringify(deduped, null, 2)}`,
           },
         ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-      })
+        {
+          responseFormat: 'json_object',
+          temperature: 0.3,
+        }
+      )
 
-      const reasonRaw = reasonResponse.choices[0]?.message?.content || '{}'
+      const reasonRaw = reasonResponse.content || '{}'
       try {
         const reasonParsed = JSON.parse(reasonRaw)
         if (Array.isArray(reasonParsed.recommendations)) {

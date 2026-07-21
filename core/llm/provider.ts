@@ -232,6 +232,8 @@ export interface ProviderConfig {
 // Provider Factory — 创建 Provider 实例的统一入口
 // ============================================================================
 
+import { OpenAICompatProvider } from './providers/openai-compat'
+
 /**
  * Provider 工厂 — 所有 Provider 创建都走此入口
  *
@@ -240,15 +242,14 @@ export interface ProviderConfig {
  * 2. fromEnv() — 从环境变量读取（向后兼容 v1.0）
  * 3. fromUserConfig(userConfig) — 从用户 localStorage 读取（D3 Settings UI）
  *
- * D1：仅定义骨架（throw NotImplementedError）
- * D2：实现 OpenAICompatProvider + 三个工厂方法
- * D3：Settings UI 保存时调 fromUserConfig
+ * D2 实现：所有 type 都映射到 OpenAICompatProvider
+ * 因为 OpenAI / DeepSeek / OpenRouter / Groq / 火山 / 百炼 都是 OpenAI Compatible API
  */
 export class ProviderFactory {
   /**
    * 根据 config 创建 Provider 实例
    *
-   * D2 实现：所有 type 都映射到 OpenAICompatProvider
+   * 所有 type 都映射到 OpenAICompatProvider
    * 因为 OpenAI / DeepSeek / OpenRouter / Groq / 火山 / 百炼 都是 OpenAI Compatible API
    *
    * @example
@@ -263,8 +264,8 @@ export class ProviderFactory {
    * ```
    */
   static create(config: ProviderConfig): LLMProvider {
-    // D2 实现
-    throw new Error('ProviderFactory.create() — D2 实现')
+    validateConfig(config)
+    return new OpenAICompatProvider(config)
   }
 
   /**
@@ -275,15 +276,29 @@ export class ProviderFactory {
    * - OPENAI_BASE_URL — Base URL（默认 'https://api.deepseek.com/v1'）
    * - LLM_MODEL — 模型名（默认 'deepseek-v4-flash'）
    *
-   * D2 实现后，lib/llm.ts 和所有 Agent 内部会改用：
+   * lib/llm.ts 和所有 Agent 内部使用：
    * ```typescript
    * const provider = ProviderFactory.fromEnv()
    * const response = await provider.chat(messages, options)
    * ```
    */
   static fromEnv(): LLMProvider {
-    // D2 实现
-    throw new Error('ProviderFactory.fromEnv() — D2 实现')
+    const apiKey = process.env.OPENAI_API_KEY?.trim()
+    if (!apiKey) {
+      throw new Error(
+        'OPENAI_API_KEY 未设置 — 请在 .env.local 中配置（或 D3 起在 Settings UI 配置）'
+      )
+    }
+
+    const baseURL = (process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').trim()
+    const model = (process.env.LLM_MODEL || 'deepseek-v4-flash').trim()
+
+    return ProviderFactory.create({
+      type: detectProviderTypeFromBaseURL(baseURL),
+      baseURL,
+      apiKey,
+      model,
+    })
   }
 
   /**
@@ -297,9 +312,50 @@ export class ProviderFactory {
    * @param userConfig 用户保存的配置（从 localStorage 读取的 JSON）
    */
   static fromUserConfig(userConfig: unknown): LLMProvider {
-    // D3 实现
-    throw new Error('ProviderFactory.fromUserConfig() — D3 实现')
+    if (!isValidUserConfig(userConfig)) {
+      // 配置无效 → fallback 到环境变量
+      return ProviderFactory.fromEnv()
+    }
+
+    const config = userConfig as ProviderConfig
+    return ProviderFactory.create(config)
   }
+}
+
+// ============================================================================
+// 内部辅助函数
+// ============================================================================
+
+function validateConfig(config: ProviderConfig): void {
+  if (!config.apiKey || config.apiKey.trim() === '') {
+    throw new Error('ProviderConfig.apiKey 不能为空')
+  }
+  if (!config.baseURL || config.baseURL.trim() === '') {
+    throw new Error('ProviderConfig.baseURL 不能为空')
+  }
+  if (!config.model || config.model.trim() === '') {
+    throw new Error('ProviderConfig.model 不能为空')
+  }
+}
+
+function detectProviderTypeFromBaseURL(baseURL: string): ProviderType {
+  const url = baseURL.toLowerCase()
+  if (url.includes('deepseek.com')) return 'deepseek'
+  if (url.includes('openrouter.ai')) return 'openrouter'
+  if (url.includes('groq.com')) return 'groq'
+  if (url.includes('openai.com')) return 'openai'
+  return 'custom'
+}
+
+function isValidUserConfig(config: unknown): config is ProviderConfig {
+  if (!config || typeof config !== 'object') return false
+  const c = config as Record<string, unknown>
+  return (
+    typeof c.type === 'string' &&
+    typeof c.baseURL === 'string' &&
+    typeof c.apiKey === 'string' &&
+    typeof c.model === 'string'
+  )
 }
 
 // ============================================================================
@@ -433,30 +489,29 @@ export function estimateTokenCost(model: string, usage: ChatUsage): number {
 }
 
 // ============================================================================
-// v2.1 D1 完成 — D2 任务清单
+// v2.1 D2 完成 — D3 任务清单
 // ============================================================================
 
 /**
- * D2 待实现：
+ * D3 待实现：
  *
- * 1. 新建 core/llm/providers/openai-compat.ts
- *    - `class OpenAICompatProvider implements LLMProvider`
- *    - 内部用 openai SDK（已有依赖）
- *    - chat() 实现完整逻辑：temperature / maxTokens / responseFormat / timeout
- *    - 返回 ChatResponse（含 usage + durationMs）
+ * 1. 新建 components/settings/ 目录
+ *    - SettingsContainer.tsx — 6 Tab 容器
+ *    - tabs/ProviderTab.tsx — Provider 配置表单
+ *    - tabs/GeneralTab.tsx — Output Language / Default Preset
  *
- * 2. 实现 ProviderFactory.create(config)
- *    - 所有 type 都映射到 OpenAICompatProvider
- *    - 根据 type 设置 headers（OpenRouter 加 HTTP-Referer / X-Title）
+ * 2. Settings UI 保存到 localStorage
+ *    - key: 'researchkit:provider'
+ *    - value: ProviderConfig JSON
  *
- * 3. 实现 ProviderFactory.fromEnv()
- *    - 读取 OPENAI_API_KEY / OPENAI_BASE_URL / LLM_MODEL
- *    - 调用 create() 构造
+ * 3. lib/llm.ts 和 Agent 改用 ProviderFactory.fromUserConfig()
+ *    - 先尝试从 localStorage 读取
+ *    - 失败则 fallback 到 fromEnv()
  *
- * 4. 在 lib/llm.ts 内部改用 ProviderFactory.fromEnv()
- *    - 不动 generateKnowledgeCard 签名
- *    - 只把内部 openai.chat.completions.create 换成 provider.chat
- *
- * 5. 在所有 Agent 内部改用 ProviderFactory.fromEnv()
- *    - 同上，只换内部调用，不动 execute / handleMessage 签名
+ * 4. ProviderTab 设计：
+ *    - Provider 下拉（5 个预设 + Custom）
+ *    - 选预设后自动填 baseURL + 默认 model
+ *    - API Key 输入框（password 模式）
+ *    - "测试连接" 按钮（调 healthCheck）
+ *    - "保存" 按钮
  */
