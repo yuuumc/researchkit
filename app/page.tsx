@@ -7,6 +7,7 @@ import { CompareTab } from '@/components/CompareTab'
 import { SmartSuggestionBanner } from '@/components/SmartSuggestionBanner'
 import { ChatWithKC } from '@/components/ChatWithKC'
 import { ExplainKC } from '@/components/ExplainKC'
+import { PluginPanel } from '@/components/PluginPanel'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
@@ -1574,6 +1575,17 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                 <Card title="🎯 Explain for Audience" color="#f59e0b" defaultOpen={false} index={14}>
                   <div style={{ marginTop: '4px' }}>
                     <ExplainKC knowledgeCard={result} />
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* D12 Plugin System — 一键导出 KC 到第三方工具 */}
+            {result && (
+              <div style={{ marginBottom: '16px' }}>
+                <Card title="🧩 Plugins" color="#8b5cf6" defaultOpen={false} index={15}>
+                  <div style={{ marginTop: '4px' }}>
+                    <PluginPanel knowledgeCard={result} />
                   </div>
                 </Card>
               </div>
