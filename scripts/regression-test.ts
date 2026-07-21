@@ -126,7 +126,7 @@ interface SSEEvent {
   data: any
 }
 
-async function callResearchPipeline(abstract: string, locale: string): Promise<{
+async function callResearchPipeline(abstract: string, locale: string, fixtureId: string): Promise<{
   success: boolean
   durationMs: number
   totalTokens?: number
@@ -138,20 +138,22 @@ async function callResearchPipeline(abstract: string, locale: string): Promise<{
   const url = `${BASE_URL}/api/research/multi-agent-stream`
 
   // 通过 cookie 注入 provider 配置（与 Settings UI localStorage → cookie 双写一致）
-  const userConfigCookie = encodeURIComponent(JSON.stringify({
-    provider: PROVIDER,
+  // cookie key: researchkit-provider，值是 base64(encodeURIComponent(JSON))
+  // 字段：type / baseURL / apiKey / model（isValidProviderConfig 校验）
+  const providerType = PROVIDER === 'deepseek' ? 'deepseek' : 'openai-compat'
+  const baseURL = PROVIDER === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1'
+  const configJson = JSON.stringify({
+    type: providerType,
+    baseURL,
     apiKey: API_KEY,
     model: MODEL,
-    baseUrl: PROVIDER === 'deepseek' ? 'https://api.deepseek.com/v1' : undefined,
-  }))
-  const userPrefsCookie = encodeURIComponent(JSON.stringify({
-    preset: 'academic',
-    outputLocale: locale === 'zh-CN' ? 'zh-CN' : 'en-US',
-  }))
-
+  })
+  // Node.js 没有 btoa/escape，用 Buffer 实现 btoa(unescape(encodeURIComponent(json)))
+  const base64 = Buffer.from(configJson, 'utf-8').toString('base64')
+  const userConfigCookie = `researchkit-provider=${base64}`
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Cookie': `researchkit_user_config=${userConfigCookie}; researchkit_user_preferences=${userPrefsCookie}`,
+    'Cookie': userConfigCookie,
   }
 
   try {
@@ -159,8 +161,8 @@ async function callResearchPipeline(abstract: string, locale: string): Promise<{
       method: 'POST',
       headers,
       body: JSON.stringify({
-        inputType: 'text',
-        text: abstract,
+        content: abstract,
+        source: `fixture-${fixtureId}`,
       }),
     })
 
@@ -210,8 +212,8 @@ async function callResearchPipeline(abstract: string, locale: string): Promise<{
 
         try {
           const data = JSON.parse(dataStr)
-          if (eventType === 'result' && data.knowledgeCard) {
-            finalKc = data.knowledgeCard
+          if (eventType === 'result' && data.knowledge_card) {
+            finalKc = data.knowledge_card
             totalTokens = data.total_tokens ?? data.totalTokens
             totalCostUsd = data.total_cost_usd ?? data.totalCostUsd
           } else if (eventType === 'error') {
@@ -307,7 +309,7 @@ function validateKc(kc: any, fixture: PaperFixture): QualityCheck {
 async function runSingleCase(fixture: PaperFixture): Promise<TestCaseResult> {
   log(`▶ ${fixture.id} [${fixture.locale}] ${fixture.title.substring(0, 40)}...`)
 
-  const result = await callResearchPipeline(fixture.abstract, fixture.locale)
+  const result = await callResearchPipeline(fixture.abstract, fixture.locale, fixture.id)
 
   const caseResult: TestCaseResult = {
     fixtureId: fixture.id,
