@@ -179,6 +179,12 @@ export async function POST(request: NextRequest) {
               input_type: result.plan.input_type,
               complexity: result.plan.complexity,
               source,
+              // ===== D6 Cost & Token Dashboard =====
+              total_tokens: result.totalUsage?.totalTokens ?? 0,
+              total_prompt_tokens: result.totalUsage?.promptTokens ?? 0,
+              total_completion_tokens: result.totalUsage?.completionTokens ?? 0,
+              total_cost_usd: result.totalCostUsd ?? 0,
+              per_agent_usage: result.perAgentUsage ?? [],
             },
           })
 

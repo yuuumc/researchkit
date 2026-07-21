@@ -50,3 +50,8 @@ Thumbs.db
 releases/demo-video/*.mp4
 !releases/demo-video/.gitkeep
 !releases/demo-video/README.md
+
+# 个人建议 / 计划草稿（本地笔记，不上传）
+自定义*.txt
+v2.1方案优化建议.txt
+其他功能.txt

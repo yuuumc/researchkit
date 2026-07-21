@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react'
 import KnowledgeGraph, { buildKnowledgeGraph } from '@/components/KnowledgeGraph'
+import AgentTimeline from '@/components/AgentTimeline'
 import { Card } from '@/components/ui/Card'
-import { Chip, PipelineChip } from '@/components/ui/Chip'
+import { Chip } from '@/components/ui/Chip'
 import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
 import { getLabels } from '@/lib/ui-labels'
+import { appendCostRun } from '@/lib/cost-history'
 
 type InputMode = 'text' | 'url' | 'pdf' | 'batch'
 
@@ -290,6 +292,35 @@ export default function Home() {
       setToolCalls(finalData.tool_calls || [])
       setIterations(finalData.iterations || [])
       setTotalIterations(finalData.total_iterations || 0)
+
+      // D6 Cost Dashboard — 持久化到 localStorage（供 CostTab 读取）
+      // 只在确实生成了知识卡 + 有 token 统计时记录（避免失败请求污染历史）
+      const md = finalData.metadata || {}
+      const perAgent = Array.isArray(md.per_agent_usage) ? md.per_agent_usage : []
+      if (md.total_tokens > 0 && perAgent.length > 0 && finalData.knowledge_card) {
+        try {
+          appendCostRun({
+            timestamp: Date.now(),
+            title: String(finalData.knowledge_card.title || '').substring(0, 60),
+            source: String(finalData.metadata?.source || actualSource || '用户输入'),
+            inputType: String(finalData.plan?.input_type || ''),
+            complexity: String(finalData.plan?.complexity || ''),
+            totalDurationMs: Number(md.total_duration_ms || 0),
+            totalUsage: {
+              promptTokens: Number(md.total_prompt_tokens || 0),
+              completionTokens: Number(md.total_completion_tokens || 0),
+              totalTokens: Number(md.total_tokens || 0),
+            },
+            totalCostUsd: Number(md.total_cost_usd || 0),
+            perAgent,
+            model: perAgent[0]?.model || undefined,
+          })
+        } catch (err) {
+          // localStorage 写失败不影响主流程
+          console.warn('[cost-history] append failed:', err)
+        }
+      }
+
       finalizeProgress()
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败')
@@ -776,6 +807,40 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
       `}} />
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 20px' }}>
+        {/* === Settings 浮动入口（右上角） === */}
+        <a
+          href="/settings"
+          aria-label="Settings"
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            width: '44px',
+            height: '44px',
+            borderRadius: '12px',
+            background: 'white',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '20px',
+            textDecoration: 'none',
+            zIndex: 1000,
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+            border: '1px solid #e2e8f2',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'scale(1.05)'
+            e.currentTarget.style.boxShadow = '0 6px 16px rgba(99, 102, 241, 0.2)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
+          }}
+          title="Settings"
+        >
+          ⚙️
+        </a>
         {/* === HERO === */}
         <div style={{ textAlign: 'center', marginBottom: '48px', position: 'relative' }}>
           {/* Floating background blobs */}
@@ -1244,239 +1309,27 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               </div>
             </div>
 
-            {/* Agent Pipeline — 仅 Advanced 模式显示，压缩为单行 + 点击展开 */}
+            {/* Agent Pipeline — 仅 Advanced 模式显示（D6 抽到 AgentTimeline 组件） */}
             {uiMode === 'advanced' && plan && (
-              <div style={{ background: 'white', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)', marginBottom: '16px', border: '2px solid #e0e7ff', overflow: 'hidden' }}>
-                <button
-                  onClick={() => setPipelineExpanded(!pipelineExpanded)}
-                  style={{
-                    width: '100%',
-                    padding: '16px 20px',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  {/* 压缩单行：✓ Read ✓ Analyze ✓ Structure ✓ Reflect ✓ Export */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '16px' }}>🧠</span>
-                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.08em', marginRight: '4px' }}>Pipeline</span>
-                    {[
-                      { label: 'Read', icon: '📖' },
-                      { label: 'Analyze', icon: '🔬' },
-                      { label: 'Structure', icon: '🏗️' },
-                      { label: 'Reflect', icon: '🔁' },
-                      { label: 'Export', icon: '📤' },
-                    ].map((step, i) => {
-                      const stepExec = execution.find((e: any) => e.agent?.toLowerCase().includes(step.label.toLowerCase().slice(0, 4)) || e.agent === step.label)
-                      const success = stepExec ? stepExec.success : true
-                      return (
-                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 8px', background: success ? '#f0fdf4' : '#fef2f2', color: success ? '#065f46' : '#991b1b', borderRadius: '999px', fontSize: '11px', fontWeight: 700 }}>
-                          <span style={{ fontSize: '10px' }}>{success ? '✓' : '✗'}</span>
-                          {step.label}
-                        </span>
-                      )
-                    })}
-                    {iterations.length > 0 && (
-                      <span style={{ padding: '3px 8px', background: '#fef3c7', color: '#92400e', borderRadius: '999px', fontSize: '11px', fontWeight: 700 }}>
-                        🔁 {totalIterations} iter
-                      </span>
-                    )}
-                    {toolCalls.length > 0 && (
-                      <span style={{ padding: '3px 8px', background: '#fefce8', color: '#854d0e', borderRadius: '999px', fontSize: '11px', fontWeight: 700 }}>
-                        🔧 {toolCalls.length} tools
-                      </span>
-                    )}
-                    {agentMeta?.total_duration_ms && (
-                      <span style={{ padding: '3px 8px', background: '#f1f5f9', color: '#5a6478', borderRadius: '999px', fontSize: '11px', fontWeight: 700 }}>
-                        ⚡ {agentMeta.total_duration_ms}ms
-                      </span>
-                    )}
-                  </div>
-                  <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 700, flexShrink: 0 }}>{pipelineExpanded ? '▾' : '▸'}</span>
-                </button>
-
-                {/* 展开内容：完整 Agent Pipeline */}
-                {pipelineExpanded && (
-                  <div style={{ padding: '0 20px 20px', borderTop: '1px solid #e2e8f0' }}>
-                    {/* Planner rationale */}
-                    <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '12px', padding: '14px 16px', marginTop: '14px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#6d28d9', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>🪧 Planner Reasoning</div>
-                      <div style={{ fontSize: '14px', color: '#1e1b4b', lineHeight: 1.6 }}>{plan.rationale}</div>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-                        {plan.input_type && <PipelineChip>类型: {plan.input_type}</PipelineChip>}
-                        {plan.complexity && <PipelineChip>复杂度: {plan.complexity}</PipelineChip>}
-                        {agentMeta?.planner_duration_ms && <PipelineChip>规划耗时: {agentMeta.planner_duration_ms}ms</PipelineChip>}
-                        {agentMeta?.reflection_duration_ms && <PipelineChip>反思耗时: {agentMeta.reflection_duration_ms}ms</PipelineChip>}
-                        {agentMeta?.total_duration_ms && <PipelineChip>总耗时: {agentMeta.total_duration_ms}ms</PipelineChip>}
-                      </div>
-                    </div>
-
-                    {/* Reflection Loop */}
-                    {iterations && iterations.length > 0 && (
-                      <div style={{ marginTop: '14px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                          🔁 Reflection Loop ({totalIterations} {totalIterations === 1 ? 'iteration' : 'iterations'})
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {iterations.map((iter: any, i: number) => (
-                            <div key={i} style={{ padding: '12px 14px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '10px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                                <span style={{ fontSize: '11px', padding: '2px 8px', background: '#7c3aed', color: 'white', borderRadius: '4px', fontWeight: 700 }}>ITER {iter.iteration}</span>
-                                <span style={{ fontSize: '14px' }}>{iter.reflection?.satisfied ? '✅' : '⚠️'}</span>
-                                <strong style={{ fontSize: '12px', color: iter.reflection?.satisfied ? '#065f46' : '#92400e' }}>
-                                  {iter.reflection?.satisfied ? 'Satisfied' : 'Needs Work'}
-                                </strong>
-                                <span style={{ fontSize: '11px', color: '#94a3b8' }}>reflect: {iter.reflection_duration_ms}ms</span>
-                                {iter.replan_duration_ms && (
-                                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>+ replan: {iter.replan_duration_ms}ms</span>
-                                )}
-                                {iter.supplementary_duration_ms && (
-                                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>+ exec: {iter.supplementary_duration_ms}ms</span>
-                                )}
-                              </div>
-                              {iter.reflection?.reasoning && (
-                                <div style={{ fontSize: '12px', color: '#5a6478', marginBottom: '6px', fontStyle: 'italic' }}>
-                                  💭 {iter.reflection.reasoning}
-                                </div>
-                              )}
-                              {iter.reflection?.missing && iter.reflection.missing.length > 0 && (
-                                <div style={{ fontSize: '11px', color: '#92400e', marginBottom: '6px' }}>
-                                  Missing: {iter.reflection.missing.join(', ')}
-                                </div>
-                              )}
-                              {iter.replan && (
-                                <div style={{ marginTop: '6px', padding: '8px 10px', background: 'white', border: '1px dashed #c4b5fd', borderRadius: '6px' }}>
-                                  <div style={{ fontSize: '11px', color: '#6d28d9', fontWeight: 600 }}>
-                                    {iter.replan.should_continue ? '🔄 Replan: continuing with supplementary steps' : '🛑 Replan: stopping'}
-                                  </div>
-                                  <div style={{ fontSize: '11px', color: '#5a6478', marginTop: '2px' }}>{iter.replan.reasoning}</div>
-                                  {iter.replan.supplementary_steps && iter.replan.supplementary_steps.length > 0 && (
-                                    <div style={{ marginTop: '4px', fontSize: '11px' }}>
-                                      <strong style={{ color: '#7c3aed' }}>补充步骤：</strong>
-                                      {iter.replan.supplementary_steps.map((s: any, j: number) => (
-                                        <span key={j} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', background: '#ede9fe', color: '#5b21b6', borderRadius: '4px', fontSize: '10px' }}>
-                                          {s.agent}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                              {iter.supplementary_execution && iter.supplementary_execution.length > 0 && (
-                                <div style={{ marginTop: '6px' }}>
-                                  {iter.supplementary_execution.map((s: any, j: number) => (
-                                    <div key={j} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: s.success ? '#f0fdf4' : '#fef2f2', border: `1px solid ${s.success ? '#bbf7d0' : '#fecaca'}`, borderRadius: '4px', marginBottom: '3px', fontSize: '11px' }}>
-                                      <span>{s.success ? '✓' : '✗'}</span>
-                                      <strong>{s.step.agent}</strong>
-                                      <span style={{ color: '#94a3b8' }}>{s.duration_ms}ms</span>
-                                      <span style={{ color: '#5a6478', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.step.reason}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Execution Trace */}
-                    <div style={{ marginTop: '14px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>⚡ Execution Trace</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {execution.map((step: any, i: number) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: step.success ? '#f0fdf4' : '#fef2f2', border: `1px solid ${step.success ? '#bbf7d0' : '#fecaca'}`, borderRadius: '10px' }}>
-                            <span style={{ fontSize: '16px' }}>{step.success ? '✓' : '✗'}</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <strong style={{ color: '#0f1729', fontSize: '14px' }}>{step.agent}</strong>
-                                <span style={{ fontSize: '11px', padding: '2px 6px', background: '#e0e7ff', color: '#4f46e5', borderRadius: '4px' }}>Group {step.parallel_group}</span>
-                                {!step.required && <span style={{ fontSize: '11px', padding: '2px 6px', background: '#fef3c7', color: '#92400e', borderRadius: '4px' }}>optional</span>}
-                              </div>
-                              {step.reason && <div style={{ fontSize: '12px', color: '#5a6478', marginTop: '2px' }}>{step.reason}</div>}
-                            </div>
-                            <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>{step.duration_ms}ms</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Reflection result */}
-                    {reflection && (
-                      <div style={{ marginTop: '12px', background: reflection.satisfied ? '#ecfdf5' : '#fffbeb', border: `1px solid ${reflection.satisfied ? '#a7f3d0' : '#fde68a'}`, borderRadius: '12px', padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '16px' }}>{reflection.satisfied ? '🎯' : '⚠️'}</span>
-                          <strong style={{ fontSize: '13px', color: reflection.satisfied ? '#065f46' : '#92400e' }}>Reflection: {reflection.satisfied ? 'Satisfied' : 'Needs More Work'}</strong>
-                        </div>
-                        {reflection.reasoning && <div style={{ fontSize: '12px', color: '#5a6478', marginTop: '4px' }}>{reflection.reasoning}</div>}
-                        {reflection.missing && reflection.missing.length > 0 && (
-                          <div style={{ fontSize: '12px', color: '#92400e', marginTop: '4px' }}>Missing: {reflection.missing.join(', ')}</div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* MCP Tool Calls */}
-                    {toolCalls && toolCalls.length > 0 && (
-                      <div style={{ marginTop: '12px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>🔧 MCP Tool Calls (Autonomous)</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {toolCalls.map((tc: any, i: number) => (
-                            <div key={i} style={{ padding: '12px 14px', background: tc.success ? '#fefce8' : '#fef2f2', border: `1px solid ${tc.success ? '#fde68a' : '#fecaca'}`, borderRadius: '10px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '14px' }}>{tc.success ? '✓' : '✗'}</span>
-                                <code style={{ padding: '2px 8px', background: '#1e293b', color: '#fbbf24', borderRadius: '4px', fontSize: '12px', fontWeight: 700 }}>{tc.tool}</code>
-                                <span style={{ fontSize: '11px', padding: '2px 6px', background: '#e0e7ff', color: '#4f46e5', borderRadius: '4px' }}>by {tc.called_by}</span>
-                                <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>{tc.duration_ms}ms</span>
-                              </div>
-                              {tc.input && Object.keys(tc.input).length > 0 && (
-                                <div style={{ fontSize: '11px', color: '#5a6478', marginTop: '6px', fontFamily: 'ui-monospace, monospace', background: '#f8fafc', padding: '6px 8px', borderRadius: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                  {(() => {
-                                    const preview: any = {}
-                                    Object.entries(tc.input).slice(0, 4).forEach(([k, v]: [string, any]) => {
-                                      preview[k] = typeof v === 'string' && v.length > 60 ? v.substring(0, 60) + '...' : v
-                                    })
-                                    return JSON.stringify(preview)
-                                  })()}
-                                </div>
-                              )}
-                              {tc.output && (
-                                <div style={{ fontSize: '11px', color: tc.success ? '#065f46' : '#991b1b', marginTop: '4px' }}>
-                                  → {typeof tc.output === 'object' ? JSON.stringify(tc.output).substring(0, 120) : String(tc.output).substring(0, 120)}
-                                  {JSON.stringify(tc.output).length > 120 ? '...' : ''}
-                                </div>
-                              )}
-                              {tc.error && (
-                                <div style={{ fontSize: '11px', color: '#991b1b', marginTop: '4px' }}>→ Error: {tc.error}</div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Meta footer */}
-                    {agentMeta && (
-                      <div style={{ marginTop: '12px', fontSize: '11px', color: '#94a3b8', display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        <span>🧠 Planner: {agentMeta.planner_duration_ms}ms</span>
-                        <span>🔁 Reflect: {agentMeta.reflection_iterations} iter ({agentMeta.reflection_duration_ms}ms)</span>
-                        {agentMeta.supplementary_steps_executed > 0 && (
-                          <span>🔄 Supp: {agentMeta.supplementary_steps_executed} steps</span>
-                        )}
-                        {agentMeta.tool_calls_count > 0 && (
-                          <span>🔧 Tools: {agentMeta.tool_calls_succeeded}/{agentMeta.tool_calls_count} ok ({agentMeta.tool_call_duration_ms}ms)</span>
-                        )}
-                        <span>⚡ Total: {agentMeta.total_duration_ms}ms</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <AgentTimeline
+                plan={plan}
+                execution={execution}
+                iterations={iterations}
+                totalIterations={totalIterations}
+                reflection={reflection}
+                toolCalls={toolCalls}
+                agentMeta={agentMeta}
+                expanded={pipelineExpanded}
+                onToggleExpand={() => setPipelineExpanded(!pipelineExpanded)}
+                // D6 — 从 SSE metadata 透传 token/cost 字段
+                perAgentUsage={agentMeta?.per_agent_usage || []}
+                totalUsage={agentMeta?.total_tokens ? {
+                  promptTokens: agentMeta.total_prompt_tokens || 0,
+                  completionTokens: agentMeta.total_completion_tokens || 0,
+                  totalTokens: agentMeta.total_tokens || 0,
+                } : null}
+                totalCostUsd={typeof agentMeta?.total_cost_usd === 'number' ? agentMeta.total_cost_usd : null}
+              />
             )}
 
             {/* Title card with metadata */}

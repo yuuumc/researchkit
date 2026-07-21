@@ -13,6 +13,7 @@ import { createMessage } from '@/lib/mcp'
 import { PlannerAgent } from '@/lib/planner'
 import type { Plan } from '@/types'
 import type { Locale } from '@/lib/locale'
+import { setCurrentAgent } from '@/lib/usage-collector'
 import type { CoordinatorInput } from './coordinator'
 
 /**
@@ -37,6 +38,8 @@ export async function runPlanner(
   let plan: Plan | null = null
 
   try {
+    // D6 Cost Dashboard — 标记当前 Agent name 为 'Planner'
+    setCurrentAgent('Planner')
     const response = await PlannerAgent.handleMessage(plannerTask)
     if (response.payload?.plan) {
       plan = response.payload.plan as Plan

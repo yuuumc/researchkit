@@ -15,18 +15,15 @@
  * 5. tool_calls（LLM 自主决定调哪些 MCP 工具）
  */
 
-import OpenAI from 'openai'
 import { Agent, AgentMessage, createMessage, AgentCapability } from './mcp'
 import { formatToolsForPrompt } from './tools/registry'
 import { detectLocale, Locale, buildLanguageDirective } from './locale'
 import { buildPlannerPrompt, buildReflectionPrompt, buildReplanPrompt } from '@/prompts/planner'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: (process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').trim(),
-})
-
-const LLM_MODEL = process.env.LLM_MODEL?.trim() || 'deepseek-v4-flash'
+import { getServerProvider } from './server-provider'
+import { PromptBuilder } from '@/core/prompt'
+import { getServerProjectExtension } from './server-prompt-extensions'
+import { getServerUserPreferences, getEffectiveOutputLocale } from './server-user-preferences'
+import { setCurrentAgent } from './usage-collector'
 
 export interface PlanStep {
   id: string               // 'step-1' | 'step-2' ...
@@ -98,33 +95,46 @@ export const PlannerAgent: Agent = {
 
     // Locale 检测（升级版：从 coordinator 传入或本地检测）
     const sourceLocale: Locale = message.payload.source_locale || detectLocale(content)
-    const targetLocale: Locale = message.payload.target_locale || sourceLocale
+    const targetLocale: Locale = message.payload.target_locale || getEffectiveOutputLocale(sourceLocale)
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     const agentListText = AGENT_REGISTRY.map(a => `- ${a.name}: ${a.description}`).join('\n')
     const toolsText = formatToolsForPrompt()
 
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
+    const provider = getServerProvider()
+    const plannerSystem = buildPlannerPrompt({
+      finalLanguageDirective,
+      agentListText,
+      toolsText,
+    })
+    const prefs = getServerUserPreferences()
+    const plannerBuilt = PromptBuilder.build({
+      agent: 'Planner',
+      system: plannerSystem,
+      project: getServerProjectExtension('Planner'),
+      preset: prefs.preset,
+    })
+    // D6 Cost Dashboard — 标记当前 Agent name（PlannerAgent.handleMessage 内部走的是 v1.0 接口，
+    // 但 LLM 调用都在这里发生，所以入口标记一次即可）
+    setCurrentAgent('Planner')
+    const response = await provider.chat(
+      [
         {
           role: 'system',
-          content: buildPlannerPrompt({
-            finalLanguageDirective,
-            agentListText,
-            toolsText,
-          }),
+          content: plannerBuilt.content,
         },
         {
           role: 'user',
           content: `Input preview (first 1500 chars):\n${content.substring(0, 1500)}\n\nTotal length: ${content.length} chars\n\nProduce the plan with steps, tool_calls, and required_schema.`,
         },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.4,
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.4,
+      }
+    )
 
-    const raw = response.choices[0]?.message?.content || '{}'
+    const raw = response.content || '{}'
     let parsed: any
     try {
       parsed = JSON.parse(raw)
@@ -248,12 +258,22 @@ export async function reflect(
   languageDirective?: string
 ): Promise<ReflectionResult> {
   try {
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
+    const provider = getServerProvider()
+    const reflectionSystem = buildReflectionPrompt({ languageDirective })
+    const prefs = getServerUserPreferences()
+    const reflectionBuilt = PromptBuilder.build({
+      agent: 'Reflection',
+      system: reflectionSystem,
+      project: getServerProjectExtension('Reflection'),
+      preset: prefs.preset,
+    })
+    // D6 Cost Dashboard
+    setCurrentAgent('Reflection')
+    const response = await provider.chat(
+      [
         {
           role: 'system',
-          content: buildReflectionPrompt({ languageDirective }),
+          content: reflectionBuilt.content,
         },
         {
           role: 'user',
@@ -271,11 +291,13 @@ export async function reflect(
           }, null, 2)}`,
         },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.3,
+      }
+    )
 
-    const raw = response.choices[0]?.message?.content || '{}'
+    const raw = response.content || '{}'
     const parsed = JSON.parse(raw)
 
     const review = parsed.review || {}
@@ -361,12 +383,22 @@ export async function replan(
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
+    const provider = getServerProvider()
+    const replanSystem = buildReplanPrompt({ languageDirective })
+    const prefs = getServerUserPreferences()
+    const replanBuilt = PromptBuilder.build({
+      agent: 'Replan',
+      system: replanSystem,
+      project: getServerProjectExtension('Replan'),
+      preset: prefs.preset,
+    })
+    // D6 Cost Dashboard
+    setCurrentAgent('Replan')
+    const response = await provider.chat(
+      [
         {
           role: 'system',
-          content: buildReplanPrompt({ languageDirective }),
+          content: replanBuilt.content,
         },
         {
           role: 'user',
@@ -384,11 +416,13 @@ export async function replan(
           }, null, 2)}`,
         },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,  // 升级：从默认 1.0 降到 0.2，避免发散
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.2,  // 升级：从默认 1.0 降到 0.2，避免发散
+      }
+    )
 
-    const raw = response.choices[0]?.message?.content || '{}'
+    const raw = response.content || '{}'
     const parsed = JSON.parse(raw)
 
     const supplementarySteps: PlanStep[] = (parsed.supplementary_steps || []).map((s: any, i: number) => ({

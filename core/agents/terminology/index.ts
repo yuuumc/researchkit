@@ -11,18 +11,14 @@
  * - prerequisite 决定连线（term → 依赖的 term）
  */
 
-import OpenAI from 'openai'
 import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildTerminologyPrompt } from '@/prompts/terminology'
+import { getServerProvider } from '@/lib/server-provider'
+import { PromptBuilder } from '@/core/prompt'
+import { getServerProjectExtension } from '@/lib/server-prompt-extensions'
+import { getServerUserPreferences, getEffectiveOutputLocale } from '@/lib/server-user-preferences'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: (process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').trim(),
-})
-
-const LLM_MODEL = process.env.LLM_MODEL?.trim() || 'deepseek-v4-flash'
 
 export interface TerminologyTerm {
   term: string
@@ -86,29 +82,39 @@ export class TerminologyAgent implements AgentInterface {
     const { content, analyzerMethodology, language_directive } = payload
 
     const sourceLocale: Locale = payload.source_locale || detectLocale(content)
-    const targetLocale: Locale = payload.target_locale || sourceLocale
+    const targetLocale: Locale = payload.target_locale || getEffectiveOutputLocale(sourceLocale)
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
+    const provider = getServerProvider()
+    const systemPrompt = buildTerminologyPrompt({
+      finalLanguageDirective,
+      analyzerMethodology,
+    })
+    const prefs = getServerUserPreferences()
+    const built = PromptBuilder.build({
+      agent: 'Terminology',
+      system: systemPrompt,
+      project: getServerProjectExtension('Terminology'),
+      preset: prefs.preset,
+    })
+    const response = await provider.chat(
+      [
         {
           role: 'system',
-          content: buildTerminologyPrompt({
-            finalLanguageDirective,
-            analyzerMethodology,
-          }),
+          content: built.content,
         },
         {
           role: 'user',
           content: content.substring(0, 20000),
         },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.3,
+      }
+    )
 
-    const raw = response.choices[0]?.message?.content || '{}'
+    const raw = response.content || '{}'
     let parsed: any
     try {
       parsed = JSON.parse(raw)

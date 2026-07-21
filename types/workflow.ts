@@ -7,6 +7,7 @@
 
 import type { AnalyzerField } from './agent'
 import type { KnowledgeCard } from './knowledge'
+import type { ChatUsage, AgentUsageSummary } from '@/lib/usage-collector'
 
 // ============================================================================
 // Plan
@@ -143,4 +144,11 @@ export interface CoordinatorOutput {
     success: boolean
   }>
   totalDurationMs: number
+  // ===== D6 Cost & Token Dashboard =====
+  /** 本次 Pipeline 的总 token 用量 */
+  totalUsage?: ChatUsage
+  /** 本次 Pipeline 的总成本（USD） */
+  totalCostUsd?: number
+  /** 按 Agent 聚合的 token/cost 详情 */
+  perAgentUsage?: AgentUsageSummary[]
 }
