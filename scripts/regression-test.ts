@@ -308,7 +308,10 @@ function validateKc(kc: any, fixture: PaperFixture): QualityCheck {
   }
 
   // summary 长度
-  if (kc.summary && String(kc.summary).length < 50) {
+  // D19 Reader prompt 要求 "One-sentence factual summary (subject + verb + object, no fluff)"
+  // 一句话事实摘要通常 30-80 chars 都正常，原阈值 50 过严会误报 zh-002 等概念简洁的论文
+  // v2.2.6 hotfix: 阈值降到 30 — 真正异常短的 summary 才警告
+  if (kc.summary && String(kc.summary).length < 30) {
     warnings.push(`Summary too short: ${String(kc.summary).length} chars`)
   }
 

@@ -915,6 +915,31 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         @media (max-width: 768px) and (min-width: 641px) {
           .cap-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
+
+        /* === v2.2.6 hotfix: Smart Suggestion Banner 移动端响应式 === */
+        /* 原始 banner minWidth 220 + 按钮 140 + padding 32 = 392px，在 320px viewport 溢出 */
+        @media (max-width: 640px) {
+          .smart-suggestion-wrapper > div {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 8px !important;
+            padding: 12px !important;
+          }
+          .smart-suggestion-wrapper > div > div:nth-child(2) {
+            /* 内容区 */
+            min-width: 0 !important;
+          }
+          .smart-suggestion-wrapper > div > div:last-child {
+            /* 按钮区 */
+            width: 100% !important;
+            justify-content: stretch !important;
+          }
+          .smart-suggestion-wrapper > div > div:last-child > button {
+            flex: 1;
+            min-height: 44px;
+            padding: 10px 12px !important;
+          }
+        }
       `}} />
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 20px' }}>
@@ -1382,7 +1407,8 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
 
         {/* D9 Memory v1 — Smart Suggestion Banner（result 顶部） */}
         {result && smartSuggestion && smartSuggestion.bestMatch && !suggestionDismissed && (
-          <SmartSuggestionBanner
+          <div className="smart-suggestion-wrapper">
+            <SmartSuggestionBanner
             suggestion={smartSuggestion}
             onCompareNow={() => {
               if (!smartSuggestion.bestMatch) return
@@ -1396,7 +1422,8 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               }, 100)
             }}
             onDismiss={() => setSuggestionDismissed(true)}
-          />
+            />
+          </div>
         )}
 
         {/* Result */}
