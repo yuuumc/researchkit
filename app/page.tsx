@@ -14,7 +14,7 @@ import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
 import { getLabels } from '@/lib/ui-labels'
 import { appendCostRun } from '@/lib/cost-history'
 import { appendKCToHistory, loadKCHistory } from '@/lib/kc-history'
-import { computeSmartSuggestion, type SmartSuggestion } from '@/lib/smart-suggestion'
+import { computeSmartSuggestion as computeSmartSuggestionHeuristic, type SmartSuggestion } from '@/lib/smart-suggestion'
 
 type InputMode = 'text' | 'url' | 'pdf' | 'batch'
 
@@ -350,7 +350,7 @@ export default function Home() {
           console.warn('[kc-history] append failed:', err)
         }
 
-        // D9 Memory v1 — 计算与历史 KC 的相似度，弹出 Smart Suggestion banner
+        // D9/D30 Smart Suggestion — 改用 LLM v2 判断（server-side API），失败 fallback 到 v1 启发式
         try {
           const history = loadKCHistory()
           // 排除刚加入的当前 KC（按 title+year 比较）
@@ -359,7 +359,30 @@ export default function Home() {
             const sameYear = e.year === finalData.knowledge_card.year
             return !(sameTitle && sameYear)
           })
-          const suggestion = computeSmartSuggestion(finalData.knowledge_card, filteredHistory)
+
+          let suggestion: SmartSuggestion | null = null
+          try {
+            // D30 — 优先调 LLM v2 API
+            const res = await fetch('/api/research/smart-suggestion', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                currentKC: finalData.knowledge_card,
+                history: filteredHistory,
+              }),
+            })
+            if (res.ok) {
+              suggestion = (await res.json()) as SmartSuggestion
+            }
+          } catch (llmErr) {
+            console.warn('[smart-suggestion] LLM API failed:', llmErr)
+          }
+
+          // Fallback：LLM 调用失败时用 v1 启发式
+          if (!suggestion) {
+            suggestion = computeSmartSuggestionHeuristic(finalData.knowledge_card, filteredHistory)
+          }
+
           if (suggestion.bestMatch) {
             setSmartSuggestion(suggestion)
             setSuggestionDismissed(false)
