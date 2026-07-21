@@ -5,6 +5,7 @@ import KnowledgeGraph, { buildKnowledgeGraph } from '@/components/KnowledgeGraph
 import AgentTimeline from '@/components/AgentTimeline'
 import { CompareTab } from '@/components/CompareTab'
 import { SmartSuggestionBanner } from '@/components/SmartSuggestionBanner'
+import { ChatWithKC } from '@/components/ChatWithKC'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
@@ -1552,6 +1553,17 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                     <span key={i} style={{ padding: '4px 10px', background: '#f1f5f9', color: '#5a6478', borderRadius: '6px', fontSize: '12px' }}>#{tag}</span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* D10 Chat with Knowledge Card — 可折叠，默认展开 */}
+            {result && (
+              <div style={{ marginBottom: '16px' }}>
+                <Card title="💬 Ask Anything" color="#06b6d4" defaultOpen={false} index={13}>
+                  <div style={{ marginTop: '4px' }}>
+                    <ChatWithKC knowledgeCard={result} />
+                  </div>
+                </Card>
               </div>
             )}
 
