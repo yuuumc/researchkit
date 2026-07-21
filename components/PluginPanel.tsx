@@ -31,12 +31,15 @@ import { useState, useEffect, useCallback } from 'react'
 import type { KnowledgeCard } from '@/types/knowledge'
 import type { ExportPlugin, ExportResult, PluginState, PluginConfig } from '@/types/plugin'
 import { jsonDownloadPlugin, markdownDownloadPlugin } from '@/core/plugins/sample-plugins'
+import { onchainExportPlugin, RESEARCHKIT_REGISTRY_CONTRACT } from '@/core/plugins/onchain-export'
 import {
   loadPluginStates,
   setPluginEnabled,
   updatePluginConfig,
   recordPluginExecution,
 } from '@/lib/plugin-states'
+import { loadLedger, type OnchainRecord } from '@/lib/onchain-ledger'
+import { shortAddress } from '@/lib/onchain-utils'
 import { btnPrimary, btnSecondary } from '@/lib/ui-styles'
 
 // ============================================================================
@@ -55,7 +58,7 @@ export interface PluginPanelProps {
 // 在客户端直接 import 插件实例最稳，避免 SSR/CSR mismatch。
 // ============================================================================
 
-const BUILTIN_PLUGINS: ExportPlugin[] = [jsonDownloadPlugin, markdownDownloadPlugin]
+const BUILTIN_PLUGINS: ExportPlugin[] = [jsonDownloadPlugin, markdownDownloadPlugin, onchainExportPlugin]
 
 // ============================================================================
 // 主组件
@@ -226,9 +229,229 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
             />
           ))}
         </div>
+
+        {/* D13 Onchain History — 历史发布记录 */}
+        {knowledgeCard && (
+          <OnchainHistory knowledgeCard={knowledgeCard} refreshTrigger={executing} />
+        )}
+
+        {/* Demo Mode 声明 */}
+        <div
+          style={{
+            marginTop: '12px',
+            padding: '8px 10px',
+            background: '#fff7ed',
+            border: '1px solid #fed7aa',
+            borderRadius: '6px',
+            fontSize: '10px',
+            color: '#9a3412',
+            lineHeight: 1.5,
+          }}
+        >
+          ⚠️ <strong>Demo Mode</strong>：onchain-export 插件用 Web Crypto API 真实计算 SHA-256，
+          并生成 EVM 兼容格式的 mock tx hash，但未实际广播到 X Layer mainnet。
+          v2.3 将接入 OKX Agentic Wallet 完成真实签名与广播。
+        </div>
       </div>
     </div>
   )
+}
+
+// ============================================================================
+// D13 Onchain History — 历史发布记录
+// ============================================================================
+
+function OnchainHistory({
+  knowledgeCard,
+  refreshTrigger,
+}: {
+  knowledgeCard: KnowledgeCard
+  refreshTrigger: string | null
+}) {
+  const [records, setRecords] = useState<OnchainRecord[]>([])
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    // refreshTrigger 变化时重新加载（执行完成后刷新）
+    const ledger = loadLedger()
+    const mine = ledger.filter(r => r.title === knowledgeCard.title)
+    setRecords(mine.reverse()) // 最新在前
+  }, [knowledgeCard.title, refreshTrigger])
+
+  if (records.length === 0) return null
+
+  return (
+    <div
+      style={{
+        marginTop: '12px',
+        padding: '10px 12px',
+        background: '#fffbeb',
+        border: '1px solid #fde68a',
+        borderRadius: '8px',
+      }}
+    >
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+          padding: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: '#92400e',
+          fontSize: '12px',
+          fontWeight: 700,
+        }}
+      >
+        <span>{expanded ? '▾' : '▸'}</span>
+        <span>📜 Onchain History</span>
+        <span
+          style={{
+            marginLeft: 'auto',
+            background: '#fef3c7',
+            padding: '1px 6px',
+            borderRadius: '999px',
+            fontSize: '10px',
+            fontWeight: 600,
+          }}
+        >
+          {records.length} 次
+        </span>
+      </button>
+
+      {expanded && (
+        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {records.map((r) => (
+            <OnchainRecordItem key={r.id + r.publishedAt} record={r} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OnchainRecordItem({ record }: { record: OnchainRecord }) {
+  const [showDetails, setShowDetails] = useState(false)
+
+  return (
+    <div
+      style={{
+        padding: '8px 10px',
+        background: 'white',
+        border: '1px solid #fde68a',
+        borderRadius: '6px',
+        fontSize: '11px',
+        animation: 'fadeIn 0.3s ease-out',
+      }}
+    >
+      {/* Top row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+        <span style={{ fontSize: '12px' }}>⛓️</span>
+        <span style={{ fontWeight: 700, color: '#92400e' }}>
+          #{record.tokenId.toLocaleString()}
+        </span>
+        <span style={{ color: '#a16207' }}>
+          · {record.chainName}
+        </span>
+        <span style={{ color: '#a16207', fontSize: '10px' }}>
+          · {formatRelativeTime(record.publishedAt)}
+        </span>
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          style={{
+            marginLeft: 'auto',
+            padding: '2px 6px',
+            background: '#fef3c7',
+            border: '1px solid #fde68a',
+            borderRadius: '4px',
+            color: '#92400e',
+            fontSize: '10px',
+            cursor: 'pointer',
+          }}
+        >
+          {showDetails ? '隐藏' : '详情'}
+        </button>
+      </div>
+
+      {/* Tx hash */}
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
+        <span style={{ color: '#64748b', fontSize: '10px', width: '60px' }}>Tx</span>
+        <code style={{ fontSize: '10px', color: '#0f1729', fontFamily: 'monospace', flex: 1 }}>
+          0x{record.txHash.substring(0, 16)}...{record.txHash.substring(56)}
+        </code>
+        <a
+          href={record.explorerTxUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: '#2563eb', fontSize: '10px', textDecoration: 'none' }}
+        >
+          ↗
+        </a>
+      </div>
+
+      {/* Block + Gas */}
+      <div style={{ display: 'flex', gap: '12px', fontSize: '10px', color: '#64748b' }}>
+        <span>📦 Block #{record.blockNumber.toLocaleString()}</span>
+        <span>⛽ {record.gasUsed} OKB</span>
+        <span>👤 {shortAddress(record.walletAddress)}</span>
+      </div>
+
+      {/* Details */}
+      {showDetails && (
+        <div
+          style={{
+            marginTop: '8px',
+            padding: '8px',
+            background: '#fafaf9',
+            borderRadius: '4px',
+            fontSize: '10px',
+            color: '#475569',
+            lineHeight: 1.5,
+          }}
+        >
+          <div style={{ marginBottom: '4px' }}>
+            <strong>SHA-256:</strong>{' '}
+            <code style={{ fontSize: '9px', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+              {record.kcSha256}
+            </code>
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            <strong>IPFS:</strong>{' '}
+            <a
+              href={record.ipfsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#2563eb', fontSize: '10px', wordBreak: 'break-all' }}
+            >
+              {record.ipfsUrl}
+            </a>
+          </div>
+          <div>
+            <strong>Contract:</strong>{' '}
+            <code style={{ fontSize: '9px', fontFamily: 'monospace' }}>
+              {shortAddress(RESEARCHKIT_REGISTRY_CONTRACT)}
+            </code>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// 辅助
+// ============================================================================
+
+function formatRelativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
+  return new Date(timestamp).toLocaleDateString()
 }
 
 // ============================================================================
@@ -551,12 +774,4 @@ function triggerDownload(data: string | Uint8Array, filename: string, mimeType: 
   document.body.removeChild(a)
   // 延迟释放 URL（避免下载未启动）
   setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
-function formatRelativeTime(timestamp: number): string {
-  const diff = Date.now() - timestamp
-  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
-  return new Date(timestamp).toLocaleDateString()
 }
