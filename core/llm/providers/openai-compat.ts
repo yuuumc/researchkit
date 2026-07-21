@@ -141,15 +141,21 @@ export class OpenAICompatProvider implements LLMProvider {
             { role: 'system', content: 'Reply with "ok".' },
             { role: 'user', content: 'ping' },
           ],
-          max_tokens: 5,
+          max_tokens: 10,
           temperature: 0,
         },
         {
-          timeout: 10_000,
+          timeout: 15_000,
         }
       )
-      return Boolean(response.choices[0]?.message?.content)
-    } catch {
+      // 只要请求成功返回（有 choices）就算连接有效
+      // 某些 Provider 在 max_tokens=10 时返回空 content，但仍说明 API Key + Base URL 有效
+      const hasChoices = response.choices && response.choices.length > 0
+      const content = response.choices[0]?.message?.content
+      console.log(`[healthCheck] ${this.displayName}/${this.model} → choices=${response.choices?.length}, content="${content?.substring(0, 50)}"`)
+      return Boolean(hasChoices)
+    } catch (err) {
+      console.error(`[healthCheck] ${this.displayName}/${this.model} failed:`, err instanceof Error ? err.message : err)
       return false
     }
   }

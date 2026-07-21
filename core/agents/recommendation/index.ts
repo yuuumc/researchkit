@@ -18,7 +18,7 @@
 import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildRecommendationIntentPrompt, buildRecommendationReasonPrompt } from '@/prompts/recommendation'
-import { ProviderFactory } from '@/core/llm/provider'
+import { getServerProvider } from '@/lib/server-provider'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 export type RecommendationIntent = 'improve' | 'challenge' | 'apply' | 'survey'
@@ -157,7 +157,7 @@ export class RecommendationAgent implements AgentInterface {
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     // ===== Step 1: 让 LLM 生成 4 类 intent 关键词 =====
-    const provider = ProviderFactory.fromEnv()
+    const provider = getServerProvider()
     const intentResponse = await provider.chat(
       [
         {

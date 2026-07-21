@@ -15,7 +15,7 @@
 import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, localeToLanguage, localeDisplayName, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildReaderPrompt } from '@/prompts/reader'
-import { ProviderFactory } from '@/core/llm/provider'
+import { getServerProvider } from '@/lib/server-provider'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 export interface ReaderOutput {
@@ -145,7 +145,7 @@ export class ReaderAgent implements AgentInterface {
     const targetLocale: Locale = payload.target_locale || sourceLocale
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
-    const provider = ProviderFactory.fromEnv()
+    const provider = getServerProvider()
     const response = await provider.chat(
       [
         { role: 'system', content: buildReaderPrompt({ finalLanguageDirective }) },
