@@ -126,7 +126,7 @@ interface SSEEvent {
   data: any
 }
 
-async function callResearchPipeline(abstract: string, locale: string, fixtureId: string): Promise<{
+async function callResearchPipeline(abstract: string, locale: string, fixtureId: string, fixtureTitle: string, fixtureAuthors: string[], fixtureYear: number): Promise<{
   success: boolean
   durationMs: number
   totalTokens?: number
@@ -151,6 +151,13 @@ async function callResearchPipeline(abstract: string, locale: string, fixtureId:
   // Node.js 没有 btoa/escape，用 Buffer 实现 btoa(unescape(encodeURIComponent(json)))
   const base64 = Buffer.from(configJson, 'utf-8').toString('base64')
   const userConfigCookie = `researchkit-provider=${base64}`
+  // 把 fixture metadata 注入 content 头部，让 Analyzer 能正确提取 authors/year
+  // 模拟真实场景：用户粘贴论文时通常包含 title + authors + abstract
+  const metadataHeader = `Title: ${fixtureTitle}
+Authors: ${fixtureAuthors.join(', ')}
+Year: ${fixtureYear}
+
+${abstract}`
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Cookie': userConfigCookie,
@@ -161,7 +168,8 @@ async function callResearchPipeline(abstract: string, locale: string, fixtureId:
       method: 'POST',
       headers,
       body: JSON.stringify({
-        content: abstract,
+        content: metadataHeader,
+        title: fixtureTitle,
         source: `fixture-${fixtureId}`,
       }),
     })
@@ -212,10 +220,15 @@ async function callResearchPipeline(abstract: string, locale: string, fixtureId:
 
         try {
           const data = JSON.parse(dataStr)
-          if (eventType === 'result' && data.knowledge_card) {
-            finalKc = data.knowledge_card
-            totalTokens = data.total_tokens ?? data.totalTokens
-            totalCostUsd = data.total_cost_usd ?? data.totalCostUsd
+          if (eventType === 'result') {
+            if (data.knowledge_card) {
+              finalKc = data.knowledge_card
+            }
+            // token / cost 在 metadata 中（与 /api/research/multi-agent 一致）
+            if (data.metadata) {
+              totalTokens = data.metadata.total_tokens
+              totalCostUsd = data.metadata.total_cost_usd
+            }
           } else if (eventType === 'error') {
             lastError = data.message || data.error || 'Unknown SSE error'
           }
@@ -309,7 +322,7 @@ function validateKc(kc: any, fixture: PaperFixture): QualityCheck {
 async function runSingleCase(fixture: PaperFixture): Promise<TestCaseResult> {
   log(`▶ ${fixture.id} [${fixture.locale}] ${fixture.title.substring(0, 40)}...`)
 
-  const result = await callResearchPipeline(fixture.abstract, fixture.locale, fixture.id)
+  const result = await callResearchPipeline(fixture.abstract, fixture.locale, fixture.id, fixture.title, fixture.authors, fixture.year)
 
   const caseResult: TestCaseResult = {
     fixtureId: fixture.id,
