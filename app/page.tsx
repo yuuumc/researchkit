@@ -8,6 +8,7 @@ import { SmartSuggestionBanner } from '@/components/SmartSuggestionBanner'
 import { ChatWithKC } from '@/components/ChatWithKC'
 import { ExplainKC } from '@/components/ExplainKC'
 import { PluginPanel } from '@/components/PluginPanel'
+import { LanguageDetectBanner } from '@/components/LanguageDetectBanner'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
@@ -16,6 +17,12 @@ import { getKcFieldLabels } from '@/lib/ui-labels'
 import { appendCostRun } from '@/lib/cost-history'
 import { appendKCToHistory, loadKCHistory } from '@/lib/kc-history'
 import { computeSmartSuggestion, type SmartSuggestion } from '@/lib/smart-suggestion'
+import {
+  getUserPreferencesClient,
+  saveUserPreferencesClient,
+  type UserPreferences,
+} from '@/lib/user-preferences'
+import type { Locale } from '@/lib/locale'
 
 type InputMode = 'text' | 'url' | 'pdf' | 'batch'
 
@@ -57,8 +64,23 @@ export default function Home() {
   // D9 — Compare tab 预选触发器（Smart Suggestion "Compare Now" 跳转用）
   const [comparePreselectId, setComparePreselectId] = useState<string | null>(null)
   const [comparePreselectTrigger, setComparePreselectTrigger] = useState(0)
+  // D39 — User Preferences (用于 LanguageDetectBanner 的 appLocale/outputLocale + 应用建议)
+  const [userPrefs, setUserPrefs] = useState<UserPreferences | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mindmapRef = useRef<HTMLDivElement>(null)
+
+  // D39 — 首次加载 UserPreferences(客户端 hydration 后)
+  useEffect(() => {
+    setUserPrefs(getUserPreferencesClient())
+  }, [])
+
+  // D39 — LanguageDetectBanner 应用建议:切换 outputLocale 并保存
+  const handleApplyLanguageSuggestion = (suggested: Locale) => {
+    const current = userPrefs || getUserPreferencesClient()
+    const updated: UserPreferences = { ...current, outputLocale: suggested }
+    saveUserPreferencesClient(updated)
+    setUserPrefs(updated)
+  }
 
   // 进度面板"已耗时"实时刷新：每秒强制 re-render
   useEffect(() => {
@@ -1174,6 +1196,16 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                 </>
               )}
             </div>
+          )}
+
+          {/* D39 — Language Detect Banner(只在 text / url / batch 模式显示) */}
+          {mode !== 'pdf' && userPrefs && (
+            <LanguageDetectBanner
+              input={input}
+              appLocale={userPrefs.appLocale}
+              outputLocale={userPrefs.outputLocale}
+              onApplySuggestion={handleApplyLanguageSuggestion}
+            />
           )}
 
           {/* Actions */}

@@ -138,6 +138,33 @@
     "title": "⚡ 批量处理结果",
     "stats": "共 {total} 个 URL · 成功 {success} · 失败 {failed}"
   },
+  "detect": {
+    "detectedLabel": "检测到",
+    "confidence": "置信度 {percent}%",
+    "sampleSize": "样本 {size} 字符",
+    "detailsTitle": "检测详情",
+    "details": {
+      "chinese": "中文字符",
+      "hiragana": "平假名",
+      "katakana": "片假名",
+      "korean": "韩文字符",
+      "latin": "拉丁字母"
+    },
+    "suggestionTitle": "💡 智能建议",
+    "suggestionHint": "检测到 {detected} 论文，但你的 UI 是 {appLocale}。建议把 Output Language 切换为 {suggested}，让知识卡用你能看懂的语言输出？",
+    "applySuggestion": "切换到 {suggested}",
+    "dismiss": "忽略",
+    "locales": {
+      "zh-CN": "中文",
+      "en-US": "英文",
+      "ja-JP": "日文",
+      "ko-KR": "韩文",
+      "fr-FR": "法文",
+      "de-DE": "德文",
+      "es-ES": "西班牙文",
+      "other": "未知"
+    }
+  },
   "footer": {
     "version": "ResearchKit OS v0.9.0",
     "description": "Powered by DeepSeek · AI Research Pipeline · Agent Workflow + MCP Tools + Reflection Loop · 3 Export Formats (MD / Obsidian / Knowledge Graph) · Built for OKX.AI Genesis Hackathon"
