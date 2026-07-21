@@ -22,6 +22,7 @@
 
 import { detectLocale, buildLanguageDirective, Locale } from '@/lib/locale'
 import { ExportAgent } from '@/lib/agents/export'
+import { beginCollection, endCollection, type ChatUsage, type AgentUsageSummary } from '@/lib/usage-collector'
 import type {
   KnowledgeCard,
   RecommendationOutput,
@@ -81,6 +82,13 @@ export interface CoordinatorOutput {
     success: boolean
   }>
   totalDurationMs: number
+  // ===== D6 Cost & Token Dashboard =====
+  /** 本次 Pipeline 的总 token 用量 */
+  totalUsage?: ChatUsage
+  /** 本次 Pipeline 的总成本（USD） */
+  totalCostUsd?: number
+  /** 按 Agent 聚合的 token/cost 详情 */
+  perAgentUsage?: AgentUsageSummary[]
 }
 
 // ============================================================================
@@ -100,6 +108,9 @@ export interface CoordinatorOutput {
 export async function coordinate(input: CoordinatorInput): Promise<CoordinatorOutput> {
   const startTime = Date.now()
   const onStage = input.onStage
+
+  // D6 Cost & Token Dashboard — 入口开始采集
+  const collector = beginCollection()
 
   // ===== Locale 检测（升级版：两阶段语言架构） =====
   // 入口检测一次，所有 Agent 共享
@@ -211,6 +222,10 @@ export async function coordinate(input: CoordinatorInput): Promise<CoordinatorOu
     success: e.success,
   }))
 
+  // D6 Cost & Token Dashboard — 出口汇总 + 清空全局状态
+  const usageSummary = collector.summarize()
+  endCollection()  // 清空 currentCollector，避免污染下个请求
+
   return {
     plan,
     plannerDurationMs,
@@ -226,5 +241,9 @@ export async function coordinate(input: CoordinatorInput): Promise<CoordinatorOu
     toolCallDurationMs,
     pipeline,
     totalDurationMs: Date.now() - startTime,
+    // D6
+    totalUsage: usageSummary.totalUsage,
+    totalCostUsd: usageSummary.totalCostUsd,
+    perAgentUsage: usageSummary.perAgent,
   }
 }

@@ -36,6 +36,7 @@ import type {
   ChatResponse,
   ChatUsage,
 } from '../provider'
+import { recordUsage } from '@/lib/usage-collector'
 
 // ============================================================================
 // OpenAICompatProvider — 所有 OpenAI Compatible API 的统一实现
@@ -116,12 +117,18 @@ export class OpenAICompatProvider implements LLMProvider {
       totalTokens: usage?.total_tokens ?? 0,
     }
 
+    const durationMs = Date.now() - start
+    const actualModel = response.model ?? this.model
+
+    // D6 Cost & Token Dashboard — 记录到当前 collector（如有）
+    recordUsage(chatUsage, actualModel, durationMs)
+
     return {
       content,
-      model: response.model ?? this.model,
+      model: actualModel,
       usage: chatUsage,
       finishReason: response.choices[0]?.finish_reason ?? undefined,
-      durationMs: Date.now() - start,
+      durationMs,
     }
   }
 

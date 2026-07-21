@@ -23,6 +23,7 @@ import { getServerProvider } from './server-provider'
 import { PromptBuilder } from '@/core/prompt'
 import { getServerProjectExtension } from './server-prompt-extensions'
 import { getServerUserPreferences, getEffectiveOutputLocale } from './server-user-preferences'
+import { setCurrentAgent } from './usage-collector'
 
 export interface PlanStep {
   id: string               // 'step-1' | 'step-2' ...
@@ -113,6 +114,9 @@ export const PlannerAgent: Agent = {
       project: getServerProjectExtension('Planner'),
       preset: prefs.preset,
     })
+    // D6 Cost Dashboard — 标记当前 Agent name（PlannerAgent.handleMessage 内部走的是 v1.0 接口，
+    // 但 LLM 调用都在这里发生，所以入口标记一次即可）
+    setCurrentAgent('Planner')
     const response = await provider.chat(
       [
         {
@@ -263,6 +267,8 @@ export async function reflect(
       project: getServerProjectExtension('Reflection'),
       preset: prefs.preset,
     })
+    // D6 Cost Dashboard
+    setCurrentAgent('Reflection')
     const response = await provider.chat(
       [
         {
@@ -386,6 +392,8 @@ export async function replan(
       project: getServerProjectExtension('Replan'),
       preset: prefs.preset,
     })
+    // D6 Cost Dashboard
+    setCurrentAgent('Replan')
     const response = await provider.chat(
       [
         {
