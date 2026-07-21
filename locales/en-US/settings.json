@@ -1,0 +1,73 @@
+{
+  "tabs": {
+    "provider": "Provider",
+    "prompt": "Prompt",
+    "general": "General",
+    "cost": "Cost",
+    "about": "About"
+  },
+  "general": {
+    "title": "General Settings",
+    "presetTitle": "Prompt Preset — Role Persona",
+    "presetHint": "Preset is injected into all Agent prompts, affecting LLM perspective and output style; Output Language forces the final output language.",
+    "languageTitle": "Language",
+    "languageHint": "Application Language controls UI; Output Language controls KC final output; Prompt Language is locked to English (best LLM performance).",
+    "appLanguage": "Application Language",
+    "appLanguageHint": "Controls UI / Help / Tooltip language",
+    "outputLanguage": "Output Language",
+    "outputLanguageHint": "Language used by all Agents when generating Knowledge Cards",
+    "promptLanguage": "Prompt Language",
+    "promptLanguageHint": "Prompt is always in English (best LLM performance with English prompts), not modifiable",
+    "promptLanguageLocked": "English ✓ Recommended",
+    "autoTranslate": "Auto Translate",
+    "autoTranslateHint": "When enabled, responses from Explain / Chat / Compare modules are automatically translated to Application Language",
+    "usingDefault": "(Preset=Academic, Output Language=Auto follows source language)",
+    "usingCustom": "(Preset={preset}, Output Language={outputLocale})",
+    "resetConfirm": "Reset to default settings? Preset=Academic, Output Language=Auto.",
+    "saved": "✓ Saved",
+    "resetToDefault": "Reset to default",
+    "promptArchitecture": "Three-Layer Prompt + Persona Injection",
+    "promptArchitectureDesc": "System (read-only built-in) → Preset Persona (selected here) → Project (Prompt Tab) → User (one-shot extension)",
+    "personaPreview": "{label} Persona"
+  },
+  "provider": {
+    "title": "Provider Configuration",
+    "apiKey": "API Key",
+    "baseUrl": "Base URL",
+    "model": "Model",
+    "type": "Provider Type",
+    "testConnection": "Test Connection",
+    "testing": "Testing...",
+    "testSuccess": "✓ Connection successful",
+    "testFail": "✗ Connection failed",
+    "saved": "✓ Configuration saved",
+    "reset": "Reset configuration"
+  },
+  "prompt": {
+    "title": "Prompt Extension",
+    "projectExtension": "Project Extension",
+    "projectExtensionHint": "Append this text to all Agent prompts (affects all calls)",
+    "saveProject": "Save Project Extension",
+    "saved": "✓ Saved",
+    "playground": "Prompt Playground",
+    "playgroundHint": "Debug single Agent calls without affecting production Pipeline"
+  },
+  "cost": {
+    "title": "Cost & Token Dashboard",
+    "totalRuns": "Total Runs",
+    "totalTokens": "Total tokens",
+    "totalCost": "Total cost",
+    "avgTokens": "Avg tokens / run",
+    "avgCost": "Avg cost / run",
+    "clearHistory": "Clear history",
+    "clearConfirm": "Clear all history? This cannot be undone."
+  },
+  "about": {
+    "title": "About ResearchKit OS",
+    "version": "Version",
+    "description": "AI Research Operating System — Multi-agent paper reading & knowledge management",
+    "github": "GitHub",
+    "docs": "Documentation",
+    "license": "License"
+  }
+}

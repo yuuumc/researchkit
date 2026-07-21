@@ -1,0 +1,22 @@
+{
+  "academic": {
+    "label": "学术研究",
+    "description": "学术研究者视角 — 严谨、方法学导向、术语精准"
+  },
+  "beginner": {
+    "label": "初学者",
+    "description": "入门读者视角 — 直观、类比、避免术语堆砌"
+  },
+  "developer": {
+    "label": "开发者",
+    "description": "实战工程师视角 — 工程实现、可复现、避坑"
+  },
+  "researcher": {
+    "label": "资深研究员",
+    "description": "资深研究员视角 — 突出创新、定位、未来方向"
+  },
+  "product_manager": {
+    "label": "产品经理",
+    "description": "产品经理视角 — 商业价值、应用场景、ROI"
+  }
+}

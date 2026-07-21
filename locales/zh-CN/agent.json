@@ -1,0 +1,75 @@
+{
+  "agentTimeline": {
+    "title": "Agent 时间线",
+    "status": {
+      "pending": "待执行",
+      "running": "执行中",
+      "success": "成功",
+      "failed": "失败",
+      "skipped": "跳过"
+    },
+    "duration": "耗时",
+    "tokens": "tokens",
+    "cost": "费用",
+    "model": "模型"
+  },
+  "smartSuggestion": {
+    "title": "Smart Suggestion",
+    "compareNow": "⚡ Compare Now",
+    "dismiss": "✕ Dismiss",
+    "reasons": {
+      "field": "同领域",
+      "authors": "同作者",
+      "keyTerms": "共享术语",
+      "tags": "同标签",
+      "year": "同年"
+    },
+    "relationType": {
+      "sameField": "同领域论文",
+      "sameAuthor": "同作者论文",
+      "sharedTerms": "共享术语论文",
+      "sameTags": "同标签论文"
+    }
+  },
+  "chatWithKC": {
+    "title": "💬 与知识卡对话",
+    "placeholder": "针对这篇论文提问...",
+    "send": "发送",
+    "clear": "清空对话",
+    "loading": "思考中...",
+    "empty": "暂无对话,先问个问题吧!",
+    "error": "对话失败,请重试"
+  },
+  "explainKC": {
+    "title": "🔍 解释这篇论文",
+    "selectAudience": "👥 选择目标受众",
+    "generate": "生成解释",
+    "regenerate": "重新生成",
+    "audiences": {
+      "highschool": "高中生",
+      "engineer": "工程师",
+      "researcher": "研究员",
+      "pm": "产品经理"
+    },
+    "loading": "🤖 LLM 正在为该受众重新组织语言..."
+  },
+  "compare": {
+    "title": "📚 论文对比",
+    "selectTwo": "请选择两篇论文进行对比",
+    "compareFields": "字段对比",
+    "differences": "差异分析",
+    "empty": "暂无可对比的知识卡"
+  },
+  "pluginPanel": {
+    "title": "🔌 Plugin 面板",
+    "enabled": "已启用",
+    "disabled": "未启用",
+    "enable": "启用",
+    "disable": "禁用",
+    "configure": "配置",
+    "run": "运行",
+    "running": "运行中...",
+    "success": "✓ 执行成功",
+    "error": "✗ 执行失败"
+  }
+}
