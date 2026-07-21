@@ -5,14 +5,16 @@ import { tabStyle } from '@/lib/ui-styles'
 import { ProviderTab } from './tabs/ProviderTab'
 import { PromptTab } from './tabs/PromptTab'
 import { GeneralTab } from './tabs/GeneralTab'
+import { CostTab } from './tabs/CostTab'
 import { AboutTab } from './tabs/AboutTab'
 
-type TabId = 'provider' | 'prompt' | 'general' | 'about'
+type TabId = 'provider' | 'prompt' | 'general' | 'cost' | 'about'
 
 const TABS: Array<{ id: TabId; label: string; icon: string }> = [
   { id: 'provider', label: 'Provider', icon: '🔌' },
   { id: 'prompt', label: 'Prompt', icon: '✏️' },
   { id: 'general', label: 'General', icon: '⚙️' },
+  { id: 'cost', label: 'Cost', icon: '💰' },
   { id: 'about', label: 'About', icon: 'ℹ️' },
 ]
 
@@ -27,8 +29,10 @@ const TABS: Array<{ id: TabId; label: string; icon: string }> = [
  * D4 v2.1 新增：
  * - Prompt — Agent Prompt 扩展配置（三层架构的 Project Extension）
  *
+ * D6 v2.1 新增：
+ * - Cost — Cost & Token Dashboard（汇总历史 Pipeline 的 token/cost）
+ *
  * v2.2 计划新增：
- * - Cost — Cost Dashboard（D6）
  * - Plugins — 插件管理（D12）
  * - Advanced — 高级（D14 Prompt Playground）
  */
@@ -67,6 +71,7 @@ export default function SettingsContainer() {
         {active === 'provider' && <ProviderTab />}
         {active === 'prompt' && <PromptTab />}
         {active === 'general' && <GeneralTab />}
+        {active === 'cost' && <CostTab />}
         {active === 'about' && <AboutTab />}
       </div>
     </div>
