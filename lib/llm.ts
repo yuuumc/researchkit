@@ -1,22 +1,16 @@
 /**
  * OpenAI/DeepSeek 兼容 LLM 调用封装
  *
+ * v2.1 升级：内部改用 ProviderFactory（不动 generateKnowledgeCard 签名）
+ * - 旧路径：const openai = new OpenAI(...) → openai.chat.completions.create(...)
+ * - 新路径：const provider = ProviderFactory.fromEnv() → provider.chat(messages, options)
+ *
  * 升级版：KnowledgeCard 接口与 multi-agent 输出对齐
  * 旧 endpoint (/api/research/knowledge-card) 现在也输出完整研究 schema
  */
 
-import OpenAI from 'openai'
 import { KNOWLEDGE_CARD_SYSTEM_PROMPT, KNOWLEDGE_CARD_USER_PROMPT } from './prompts'
-
-// 初始化 LLM 客户端（支持 OpenAI 和 DeepSeek，通过环境变量切换）
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  // DeepSeek 用户：在 .env.local 中设置 OPENAI_BASE_URL=https://api.deepseek.com/v1
-  baseURL: (process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').trim(),
-})
-
-// 模型名称（DeepSeek 最新模型：deepseek-v4-flash / deepseek-v4-pro）
-const LLM_MODEL = process.env.LLM_MODEL?.trim() || 'deepseek-v4-flash'
+import { ProviderFactory } from '@/core/llm/provider'
 
 export interface KnowledgeCard {
   // 基础
@@ -78,24 +72,20 @@ export async function generateKnowledgeCard(
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: KNOWLEDGE_CARD_SYSTEM_PROMPT,
-        },
-        {
-          role: 'user',
-          content: KNOWLEDGE_CARD_USER_PROMPT(content, language),
-        },
+    const provider = ProviderFactory.fromEnv()
+    const response = await provider.chat(
+      [
+        { role: 'system', content: KNOWLEDGE_CARD_SYSTEM_PROMPT },
+        { role: 'user', content: KNOWLEDGE_CARD_USER_PROMPT(content, language) },
       ],
-      max_tokens: maxTokensMap[detailLevel],
-      temperature: 0.3, // 低温度保证输出稳定
-      response_format: { type: 'json_object' },
-    })
+      {
+        maxTokens: maxTokensMap[detailLevel],
+        temperature: 0.3, // 低温度保证输出稳定
+        responseFormat: 'json_object',
+      }
+    )
 
-    const rawContent = response.choices[0].message.content
+    const rawContent = response.content
     if (!rawContent) {
       throw new Error('LLM 返回内容为空')
     }
@@ -149,17 +139,18 @@ export async function generateKnowledgeCard(
       } catch (repairErr) {
         // 修复失败 → 重试一次，加大 max_tokens
         console.warn('[LLM] JSON 截断兜底失败，重试一次（max_tokens +1000）')
-        const retryResponse = await openai.chat.completions.create({
-          model: LLM_MODEL,
-          messages: [
+        const retryResponse = await provider.chat(
+          [
             { role: 'system', content: KNOWLEDGE_CARD_SYSTEM_PROMPT },
             { role: 'user', content: KNOWLEDGE_CARD_USER_PROMPT(content, language) },
           ],
-          max_tokens: maxTokensMap[detailLevel] + 1000,
-          temperature: 0.3,
-          response_format: { type: 'json_object' },
-        })
-        const retryContent = retryResponse.choices[0].message.content
+          {
+            maxTokens: maxTokensMap[detailLevel] + 1000,
+            temperature: 0.3,
+            responseFormat: 'json_object',
+          }
+        )
+        const retryContent = retryResponse.content
         if (!retryContent) throw new Error('LLM 重试返回空内容')
         try {
           parsed = JSON.parse(retryContent)

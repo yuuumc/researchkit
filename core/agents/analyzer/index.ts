@@ -13,18 +13,11 @@
  *   - required_schema: Planner 决定的字段清单（可选；不传则全部字段都试）
  */
 
-import OpenAI from 'openai'
 import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import type { ReaderOutput } from '@/lib/agents/reader'
 import { buildAnalyzerPrompt } from '@/prompts/analyzer'
+import { ProviderFactory } from '@/core/llm/provider'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: (process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').trim(),
-})
-
-const LLM_MODEL = process.env.LLM_MODEL?.trim() || 'deepseek-v4-flash'
 
 /**
  * 所有可能的 Analyzer 字段
@@ -157,9 +150,9 @@ export class AnalyzerAgent implements AgentInterface {
       schema = DEFAULT_SCHEMA_BY_INPUT_TYPE.unknown
     }
 
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
+    const provider = ProviderFactory.fromEnv()
+    const response = await provider.chat(
+      [
         {
           role: 'system',
           content: buildAnalyzerPrompt({
@@ -178,11 +171,13 @@ Original text:
 ${content.substring(0, 20000)}`,
         },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.3,
+      }
+    )
 
-    const raw = response.choices[0]?.message?.content || '{}'
+    const raw = response.content || '{}'
     let parsed: any
     try {
       parsed = JSON.parse(raw)

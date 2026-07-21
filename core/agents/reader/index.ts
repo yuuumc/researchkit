@@ -12,18 +12,11 @@
  *   readingTimeMin 由程序计算（content.length / 1000 字符 ≈ 250 词 ≈ 1 分钟）
  */
 
-import OpenAI from 'openai'
 import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, localeToLanguage, localeDisplayName, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildReaderPrompt } from '@/prompts/reader'
+import { ProviderFactory } from '@/core/llm/provider'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: (process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').trim(),
-})
-
-const LLM_MODEL = process.env.LLM_MODEL?.trim() || 'deepseek-v4-flash'
 
 export interface ReaderOutput {
   // ===== 旧字段（向后兼容 KnowledgeBuilder） =====
@@ -152,23 +145,19 @@ export class ReaderAgent implements AgentInterface {
     const targetLocale: Locale = payload.target_locale || sourceLocale
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
-    const response = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: buildReaderPrompt({ finalLanguageDirective }),
-        },
-        {
-          role: 'user',
-          content: content.substring(0, 30000),
-        },
+    const provider = ProviderFactory.fromEnv()
+    const response = await provider.chat(
+      [
+        { role: 'system', content: buildReaderPrompt({ finalLanguageDirective }) },
+        { role: 'user', content: content.substring(0, 30000) },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.4,
-    })
+      {
+        responseFormat: 'json_object',
+        temperature: 0.4,
+      }
+    )
 
-    const raw = response.choices[0]?.message?.content || '{}'
+    const raw = response.content || '{}'
     let parsed: any
     try {
       parsed = JSON.parse(raw)
