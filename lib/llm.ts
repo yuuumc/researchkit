@@ -13,6 +13,7 @@ import { KNOWLEDGE_CARD_SYSTEM_PROMPT, KNOWLEDGE_CARD_USER_PROMPT } from './prom
 import { getServerProvider } from './server-provider'
 import { PromptBuilder } from '@/core/prompt'
 import { getServerProjectExtension } from './server-prompt-extensions'
+import { getServerUserPreferences } from './server-user-preferences'
 
 export interface KnowledgeCard {
   // 基础
@@ -75,10 +76,12 @@ export async function generateKnowledgeCard(
 
   try {
     const provider = getServerProvider()
+    const prefs = getServerUserPreferences()
     const kbBuilt = PromptBuilder.build({
       agent: 'KnowledgeBuilder',
       system: KNOWLEDGE_CARD_SYSTEM_PROMPT,
       project: getServerProjectExtension('KnowledgeBuilder'),
+      preset: prefs.preset,
     })
     const response = await provider.chat(
       [

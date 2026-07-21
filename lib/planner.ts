@@ -22,6 +22,7 @@ import { buildPlannerPrompt, buildReflectionPrompt, buildReplanPrompt } from '@/
 import { getServerProvider } from './server-provider'
 import { PromptBuilder } from '@/core/prompt'
 import { getServerProjectExtension } from './server-prompt-extensions'
+import { getServerUserPreferences, getEffectiveOutputLocale } from './server-user-preferences'
 
 export interface PlanStep {
   id: string               // 'step-1' | 'step-2' ...
@@ -93,7 +94,7 @@ export const PlannerAgent: Agent = {
 
     // Locale 检测（升级版：从 coordinator 传入或本地检测）
     const sourceLocale: Locale = message.payload.source_locale || detectLocale(content)
-    const targetLocale: Locale = message.payload.target_locale || sourceLocale
+    const targetLocale: Locale = message.payload.target_locale || getEffectiveOutputLocale(sourceLocale)
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     const agentListText = AGENT_REGISTRY.map(a => `- ${a.name}: ${a.description}`).join('\n')
@@ -105,10 +106,12 @@ export const PlannerAgent: Agent = {
       agentListText,
       toolsText,
     })
+    const prefs = getServerUserPreferences()
     const plannerBuilt = PromptBuilder.build({
       agent: 'Planner',
       system: plannerSystem,
       project: getServerProjectExtension('Planner'),
+      preset: prefs.preset,
     })
     const response = await provider.chat(
       [
@@ -253,10 +256,12 @@ export async function reflect(
   try {
     const provider = getServerProvider()
     const reflectionSystem = buildReflectionPrompt({ languageDirective })
+    const prefs = getServerUserPreferences()
     const reflectionBuilt = PromptBuilder.build({
       agent: 'Reflection',
       system: reflectionSystem,
       project: getServerProjectExtension('Reflection'),
+      preset: prefs.preset,
     })
     const response = await provider.chat(
       [
@@ -374,10 +379,12 @@ export async function replan(
   try {
     const provider = getServerProvider()
     const replanSystem = buildReplanPrompt({ languageDirective })
+    const prefs = getServerUserPreferences()
     const replanBuilt = PromptBuilder.build({
       agent: 'Replan',
       system: replanSystem,
       project: getServerProjectExtension('Replan'),
+      preset: prefs.preset,
     })
     const response = await provider.chat(
       [

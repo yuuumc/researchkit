@@ -21,6 +21,7 @@ import { buildRecommendationIntentPrompt, buildRecommendationReasonPrompt } from
 import { getServerProvider } from '@/lib/server-provider'
 import { PromptBuilder } from '@/core/prompt'
 import { getServerProjectExtension } from '@/lib/server-prompt-extensions'
+import { getServerUserPreferences, getEffectiveOutputLocale } from '@/lib/server-user-preferences'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 export type RecommendationIntent = 'improve' | 'challenge' | 'apply' | 'survey'
@@ -155,16 +156,18 @@ export class RecommendationAgent implements AgentInterface {
     const { content, knowledgeCard, language_directive } = payload
 
     const sourceLocale: Locale = payload.source_locale || detectLocale(content)
-    const targetLocale: Locale = payload.target_locale || sourceLocale
+    const targetLocale: Locale = payload.target_locale || getEffectiveOutputLocale(sourceLocale)
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     // ===== Step 1: 让 LLM 生成 4 类 intent 关键词 =====
     const provider = getServerProvider()
     const intentSystem = buildRecommendationIntentPrompt({ finalLanguageDirective })
+    const prefs = getServerUserPreferences()
     const intentBuilt = PromptBuilder.build({
       agent: 'Recommendation',
       system: intentSystem,
       project: getServerProjectExtension('Recommendation'),
+      preset: prefs.preset,
     })
     const intentResponse = await provider.chat(
       [
@@ -250,6 +253,7 @@ ${content.substring(0, 2000)}`,
         agent: 'Recommendation',
         system: reasonSystem,
         project: getServerProjectExtension('Recommendation'),
+        preset: prefs.preset,
       })
       const reasonResponse = await provider.chat(
         [

@@ -17,6 +17,7 @@ import { buildTerminologyPrompt } from '@/prompts/terminology'
 import { getServerProvider } from '@/lib/server-provider'
 import { PromptBuilder } from '@/core/prompt'
 import { getServerProjectExtension } from '@/lib/server-prompt-extensions'
+import { getServerUserPreferences, getEffectiveOutputLocale } from '@/lib/server-user-preferences'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 export interface TerminologyTerm {
@@ -81,7 +82,7 @@ export class TerminologyAgent implements AgentInterface {
     const { content, analyzerMethodology, language_directive } = payload
 
     const sourceLocale: Locale = payload.source_locale || detectLocale(content)
-    const targetLocale: Locale = payload.target_locale || sourceLocale
+    const targetLocale: Locale = payload.target_locale || getEffectiveOutputLocale(sourceLocale)
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     const provider = getServerProvider()
@@ -89,10 +90,12 @@ export class TerminologyAgent implements AgentInterface {
       finalLanguageDirective,
       analyzerMethodology,
     })
+    const prefs = getServerUserPreferences()
     const built = PromptBuilder.build({
       agent: 'Terminology',
       system: systemPrompt,
       project: getServerProjectExtension('Terminology'),
+      preset: prefs.preset,
     })
     const response = await provider.chat(
       [
