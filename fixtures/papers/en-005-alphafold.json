@@ -1,0 +1,10 @@
+{
+  "id": "en-005",
+  "locale": "en-US",
+  "field": "Bioinformatics / Genomics",
+  "title": "AlphaFold: Highly Accurate Protein Structure Prediction with Deep Learning",
+  "authors": ["John Jumper", "Kathryn Tunyasuvunakool", "Pushmeet Kohli", "Demis Hassabis"],
+  "year": 2021,
+  "url": "https://www.nature.com/articles/s41586-021-03819-2",
+  "abstract": "Proteins are essential to life and understanding their structure is fundamental to understanding how they work. Experimental protein structure determination remains expensive and time-consuming, while computational methods have historically fallen short of the accuracy required for atomic-level understanding. Here we present AlphaFold, a deep learning system that predicts protein structures with accuracy comparable to experimental methods. AlphaFold uses a novel neural network architecture based on attention mechanisms and evolutionary constraints to predict 3D coordinates of atoms from amino acid sequences. In the CASP14 international competition, AlphaFold achieved a median GDT_TS score of 92.4, significantly outperforming other methods and approaching the accuracy of experimental structures. We provide the predicted structures of nearly all catalogued proteins known to science, covering 214 million protein structure predictions across the tree of life."
+}

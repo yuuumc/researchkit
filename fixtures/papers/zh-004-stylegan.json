@@ -1,0 +1,10 @@
+{
+  "id": "zh-004",
+  "locale": "zh-CN",
+  "field": "计算机视觉 / 图像生成",
+  "title": "StyleGAN：基于风格生成对抗网络的高质量图像合成",
+  "authors": ["Tero Karras", "Samuli Laine", "Timo Aila"],
+  "year": 2019,
+  "url": "https://arxiv.org/abs/1812.04948",
+  "abstract": "本文提出 StyleGAN，一种基于风格生成对抗网络的图像生成方法，可以生成高质量、高分辨率的人脸图像，并支持细粒度的风格控制。StyleGAN 借鉴了风格迁移的工作，将生成器的输入从随机噪声改为常量，并通过 AdaIN（Adaptive Instance Normalization）层在每个分辨率上注入风格向量。该方法引入了样式混合（style mixing）和噪声注入机制，使得生成的图像在粗粒度结构、细粒度特征、随机细节（如头发、雀斑）等不同层次上可以独立控制。StyleGAN 在 FFHQ 数据集上生成的 1024x1024 分辨率人脸图像质量超越以往所有 GAN 方法，成为图像生成领域的标志性工作，并催生了 StyleGAN2、StyleGAN3 等改进版本。"
+}

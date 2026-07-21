@@ -1,0 +1,10 @@
+{
+  "id": "en-003",
+  "locale": "en-US",
+  "field": "Computer Vision / Generative Models",
+  "title": "Denoising Diffusion Probabilistic Models",
+  "authors": ["Jonathan Ho", "Ajay Jain", "Pieter Abbeel"],
+  "year": 2020,
+  "url": "https://arxiv.org/abs/2006.11239",
+  "abstract": "We present high quality image synthesis results using diffusion probabilistic models, a class of latent variable models inspired by considerations from nonequilibrium thermodynamics. Our best results are obtained by training on weighted variational objectives designed according to a novel connection between diffusion probabilistic models and Langevin dynamics with denoising score matching. Our models naturally admit a progressive lossy decompression scheme that can be interpreted as a generalization of autoregressive decoding along a bit ordering. We obtain FID scores of 2.97 on the unconditional CIFAR10 dataset and 7.03 on the LSUN dataset, and our implementation with progressive decoding produces samples in a way that is competitive with progressive generative GANs while maintaining a sample quality competitive with StyleGAN2 on ImageNet 128x128."
+}
