@@ -1,0 +1,10 @@
+{
+  "id": "zh-003",
+  "locale": "zh-CN",
+  "field": "机器学习 / 推荐系统",
+  "title": "Wide & Deep Learning：推荐系统的深度记忆与泛化",
+  "authors": ["Heng-Tze Cheng", "Levent Koc", "Jeremiah Harmsen", "Tal Shaked", "Tushar Chandra", "Hrishi Aradhye", "Glen Anderson", "Greg Corrado", "Wei Chai", "Mustafa Ispir"],
+  "year": 2016,
+  "url": "https://arxiv.org/abs/1606.07792",
+  "abstract": "推荐系统通常需要同时具备记忆能力（memorization）和泛化能力（generalization）。记忆能力可以学习特征之间的频繁共现，泛化能力可以探索新的特征组合，提升推荐的新颖性。本文提出 Wide & Deep 联合学习框架，将宽线性模型（wide model）和深度神经网络（deep model）结合，同时享受记忆与泛化的优势。宽模型负责记忆特征交互，深模型负责泛化到未见过的特征组合。该模型在 Google Play 应用商店上线后，相比单独的宽模型，应用下载转化率显著提升。Wide & Deep 已成为推荐系统工业界的经典基线模型，催生了 DeepFM、Deep & Cross 等一系列改进工作。"
+}

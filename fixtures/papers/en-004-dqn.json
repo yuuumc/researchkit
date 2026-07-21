@@ -1,0 +1,10 @@
+{
+  "id": "en-004",
+  "locale": "en-US",
+  "field": "Reinforcement Learning",
+  "title": "Human-Level Control Through Deep Reinforcement Learning",
+  "authors": ["Volodymyr Mnih", "Koray Kavukcuoglu", "David Silver", "Andrei A. Rusu", "Joel Veness", "Marc G. Bellemare", "Alex Graves", "Martin Riedmiller", "Andreas K. Fidjeland", "Georg Ostrovski"],
+  "year": 2015,
+  "url": "https://www.nature.com/articles/nature14236",
+  "abstract": "The theory of reinforcement learning provides a normative account, deeply rooted in psychological and neuroscientific perspectives on animal behaviour, of how agents may optimize their control of an environment. To use reinforcement learning in a general agent operating in complex environments, agents must confront the challenging task of synthesizing a compact, informative, and generalizable representation of the environment, and of using this representation to discover an effective control policy. Here we use deep neural networks to learn such representations, jointly with the action values. We introduce DQN, a convolutional neural network trained with a variant of Q-learning, with the input being raw pixels and the output being a value function estimating future rewards. We apply our method to 49 Atari 2600 games, achieving human-level performance on the majority of them, using the same architecture and hyperparameters."
+}
