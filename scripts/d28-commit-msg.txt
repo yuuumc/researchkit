@@ -1,0 +1,17 @@
+D28 — SSE 协议升级 + Coordinator 透传 onAgentToken
+
+Phase 3 Day 2 — 把 D27 的 chatStream() 能力贯穿到 Coordinator →
+Planner / Reflection / Replan → SSE → 前端，实现"AI 实时思考"逐 token
+渲染效果。
+
+- coordinator.ts: CoordinatorInput 新增 onAgentToken，透传给 runPlanner / runReflectionLoop
+- lib/planner.ts: PlannerAgent / reflect / replan 三个 text-mode Agent 检测到 onToken
+  时改用 provider.chatStream()
+- workflow.ts: runReflectionLoop 新增 onAgentToken 参数，传给 reflect/replan
+- planner.ts (core): runPlanner 通过 on_agent_token 字段传给 PlannerAgent
+- SSE route: 新增 agent_token 事件，30ms 节流 buffer 合并同 agent delta
+- 前端 LiveThoughts.tsx 浮窗组件：右下角玻璃态，每个 agent 一块 +
+  闪烁光标 + 折叠 + 2.5s 淡出
+- page.tsx: 用 ref Map 累积 + 60ms throttle setState，避免每 token re-render
+
+Build: tsc + next build 通过，/ 路由 39.9 kB / 127 kB First Load JS
