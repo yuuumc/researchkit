@@ -310,13 +310,13 @@ export default function Home() {
       setIterations(finalData.iterations || [])
       setTotalIterations(finalData.total_iterations || 0)
 
-      // D6 Cost Dashboard — 持久化到 localStorage（供 CostTab 读取）
+      // D6 Cost Dashboard — 持久化到 server-side（D29 改造）
       // 只在确实生成了知识卡 + 有 token 统计时记录（避免失败请求污染历史）
       const md = finalData.metadata || {}
       const perAgent = Array.isArray(md.per_agent_usage) ? md.per_agent_usage : []
       if (md.total_tokens > 0 && perAgent.length > 0 && finalData.knowledge_card) {
         try {
-          appendCostRun({
+          await appendCostRun({
             timestamp: Date.now(),
             title: String(finalData.knowledge_card.title || '').substring(0, 60),
             source: String(finalData.metadata?.source || actualSource || '用户输入'),
@@ -333,16 +333,17 @@ export default function Home() {
             model: perAgent[0]?.model || undefined,
           })
         } catch (err) {
-          // localStorage 写失败不影响主流程
+          // server-side 写失败不影响主流程
           console.warn('[cost-history] append failed:', err)
         }
       }
 
       // D8 Compare Papers — 把当前 KC 追加到历史（供 CompareTab 选另一篇对比）
+      // D29 — 改为 server-side 持久化
       // 只在确实生成了知识卡时记录（避免失败请求污染历史）
       if (finalData.knowledge_card) {
         try {
-          appendKCToHistory({
+          await appendKCToHistory({
             knowledgeCard: finalData.knowledge_card,
             source: String(actualSource || '用户输入'),
           })
@@ -351,8 +352,9 @@ export default function Home() {
         }
 
         // D9 Memory v1 — 计算与历史 KC 的相似度，弹出 Smart Suggestion banner
+        // D29 — history 从 server-side 读取
         try {
-          const history = loadKCHistory()
+          const history = await loadKCHistory()
           // 排除刚加入的当前 KC（按 title+year 比较）
           const filteredHistory = history.filter(e => {
             const sameTitle = e.title === String(finalData.knowledge_card.title || '').substring(0, 80)

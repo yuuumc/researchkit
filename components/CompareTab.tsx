@@ -62,8 +62,9 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
   const [expandedDim, setExpandedDim] = useState<number | null>(0) // 默认展开第一个维度
   const [lastPreselectId, setLastPreselectId] = useState<string | null>(null)
 
-  const refresh = useCallback(() => {
-    setHistory(loadKCHistory())
+  const refresh = useCallback(async () => {
+    // D29 — loadKCHistory 改为 async + fetch /api/history/kc
+    setHistory(await loadKCHistory())
   }, [])
 
   useEffect(() => {

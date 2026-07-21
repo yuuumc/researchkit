@@ -75,8 +75,9 @@ export function CostTab() {
   const [summary, setSummary] = useState<CostHistorySummary>(() => summarizeCostHistory([]))
   const [loaded, setLoaded] = useState(false)
 
-  const refresh = useCallback(() => {
-    const list = loadCostHistory()
+  const refresh = useCallback(async () => {
+    // D29 — loadCostHistory 改为 async + fetch /api/history/cost
+    const list = await loadCostHistory()
     setRuns(list)
     setSummary(summarizeCostHistory(list))
     setLoaded(true)
@@ -86,9 +87,10 @@ export function CostTab() {
     refresh()
   }, [refresh])
 
-  const handleClear = () => {
+  const handleClear = async () => {
     if (!confirm('确定要清空所有历史记录吗？此操作不可撤销。')) return
-    clearCostHistory()
+    // D29 — clearCostHistory 改为 async
+    await clearCostHistory()
     refresh()
   }
 
