@@ -19,7 +19,7 @@ import { ExportAgent } from '@/lib/agents/export'
 import { callTool } from '@/lib/tools/registry'
 import type { ToolCall } from '@/lib/tools/types'
 import type { Locale } from '@/lib/locale'
-import { setCurrentAgent } from '@/lib/usage-collector'
+import { withAgent } from '@/lib/usage-collector'
 import type {
   Plan,
   PlanStep,
@@ -74,10 +74,11 @@ export async function callAgent(
   // AgentInterface.execute 内部已 try/catch，不会再 throw
   // 这里保留 try/catch 作为极端情况兜底
   try {
-    // D6 Cost Dashboard — 标记当前 Agent name（provider.chat() 自动归到该 agent）
-    // 注意：并行执行时会有竞态（接受此限制，D6 评委演示场景单请求足够）
-    setCurrentAgent(agent.name)
-    return await agent.execute(ctx)
+    // D25 Cost Dashboard — 用 withAgent 包住 execute 创建独立 ALS 子上下文
+    // 解决并行执行竞态：Promise.all 多个 callAgent 时，每个进入独立子上下文，
+    // agentName 不再共享，token 归因准确
+    // 旧的 setCurrentAgent 在串行场景仍可用（planner / route）
+    return await withAgent(agent.name, () => agent.execute(ctx))
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Agent failed'
     return {

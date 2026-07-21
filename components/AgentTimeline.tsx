@@ -15,7 +15,7 @@
  */
 
 import { PipelineChip } from '@/components/ui/Chip'
-import type { AgentUsageSummary, ChatUsage } from '@/lib/usage-collector'
+import type { AgentUsageSummary, ChatUsage } from '@/types/usage'
 
 // ============================================================================
 // Agent 配色 — 与 KnowledgeGraph / Pipeline 视觉一致
