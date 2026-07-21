@@ -3,11 +3,13 @@
 import { useState, useRef, useEffect } from 'react'
 import KnowledgeGraph, { buildKnowledgeGraph } from '@/components/KnowledgeGraph'
 import AgentTimeline from '@/components/AgentTimeline'
+import { CompareTab } from '@/components/CompareTab'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
 import { getLabels } from '@/lib/ui-labels'
 import { appendCostRun } from '@/lib/cost-history'
+import { appendKCToHistory } from '@/lib/kc-history'
 
 type InputMode = 'text' | 'url' | 'pdf' | 'batch'
 
@@ -24,7 +26,7 @@ export default function Home() {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
   const [showObsidian, setShowObsidian] = useState(false) // 已废弃（用 exportTab 代替），保留避免破坏其他引用
-  const [exportTab, setExportTab] = useState<'markdown' | 'obsidian' | 'mindmap'>('markdown')
+  const [exportTab, setExportTab] = useState<'markdown' | 'obsidian' | 'mindmap' | 'compare'>('markdown')
   const [plan, setPlan] = useState<any>(null)
   const [execution, setExecution] = useState<any[]>([])
   const [reflection, setReflection] = useState<any>(null)
@@ -318,6 +320,19 @@ export default function Home() {
         } catch (err) {
           // localStorage 写失败不影响主流程
           console.warn('[cost-history] append failed:', err)
+        }
+      }
+
+      // D8 Compare Papers — 把当前 KC 追加到历史（供 CompareTab 选另一篇对比）
+      // 只在确实生成了知识卡时记录（避免失败请求污染历史）
+      if (finalData.knowledge_card) {
+        try {
+          appendKCToHistory({
+            knowledgeCard: finalData.knowledge_card,
+            source: String(actualSource || '用户输入'),
+          })
+        } catch (err) {
+          console.warn('[kc-history] append failed:', err)
         }
       }
 
@@ -1492,9 +1507,9 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
             )}
 
             {/* Export toolbar — 折叠式：默认只显示 3 按钮，点 Preview 才展开 */}
-            {(markdown || obsidian || mindmap) && (
+            {(markdown || obsidian || mindmap || result) && (
               <Card title="📥 导出" color="#6366f1" defaultOpen={true} index={13}>
-                {/* Format toggle — 3 tabs */}
+                {/* Format toggle — 4 tabs (Markdown / Obsidian / Knowledge Graph / Compare) */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px' }}>
                     <button
@@ -1524,8 +1539,22 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                         fontWeight: 600, fontSize: '13px', boxShadow: exportTab === 'mindmap' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                       }}
                     >🧠 Knowledge Graph</button>
+                    <button
+                      onClick={() => { setExportTab('compare'); setMarkdownPreviewOpen(false) }}
+                      style={{
+                        padding: '6px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer',
+                        background: exportTab === 'compare' ? 'white' : 'transparent',
+                        color: exportTab === 'compare' ? '#dc2626' : '#5a6478',
+                        fontWeight: 600, fontSize: '13px', boxShadow: exportTab === 'compare' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      }}
+                    >🔄 Compare</button>
                   </div>
                 </div>
+
+                {/* Compare Tab — D8 */}
+                {exportTab === 'compare' && (
+                  <CompareTab currentKC={result} currentSource={undefined} />
+                )}
 
                 {/* Obsidian hint */}
                 {exportTab === 'obsidian' && (
@@ -1541,7 +1570,8 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                   </div>
                 )}
 
-                {/* Button group: Preview / Copy / Download */}
+                {/* Button group: Preview / Copy / Download — 仅非 Compare Tab 显示 */}
+                {exportTab !== 'compare' && (
                 <div style={{ display: 'flex', gap: '8px', marginBottom: exportTab === 'mindmap' ? '12px' : '0' }}>
                   {/* Markdown / Obsidian tab：显示「预览」按钮切换源码视图 */}
                   {/* Knowledge Graph tab：KG 本身就是可视化预览，不需要单独的预览按钮 */}
@@ -1571,6 +1601,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                     ⬇️ 下载
                   </button>
                 </div>
+                )}
 
                 {/* Markdown / Obsidian — code view, hidden by default */}
                 {exportTab !== 'mindmap' && markdownPreviewOpen && (
