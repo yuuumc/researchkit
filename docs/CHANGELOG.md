@@ -5,6 +5,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## [v2.2] — 2026-07-21 — Interactive Knowledge Card + Plugin System
+
+### Added
+- **D8 Compare Papers** — 6 维对比 API + UI（field / methodology / key_contributions / strengths / limitations / complexity）+ overallScore + recommendedOrder + 双色雷达图
+- **D9 Memory v1（Smart Suggestion）** — 纯客户端启发式评分（7 信号加权：field/authors/key_terms/tags/year + cross-title-summary + light stem），阈值 ≥ 30 显示 amber banner，零 LLM 调用零延迟
+- **D10 Chat with Knowledge Card** — 青色卡片 Chat 组件，注入完整 KC 上下文（temperature 0.4），消息气泡 + 三点跳动 loading + 自实现 MarkdownLite 渲染 + 空状态动态生成 4 个建议问题
+- **D11 Explain Agent** — 4 受众驱动解释（high_school / software_engineer / researcher / product_manager），每种独立 focus + style，输出 6 区块结构化 JSON（summary / whyItMatters / coreConcept / actionable / questions[3] / tags）
+- **D12 Plugin System 三层架构** — UI (PluginPanel) → Registry (singleton) → Plugins (ExportPlugin interface)，热插拔 + 幂等 + 不 throw，含 2 个示例插件（jsonDownloadPlugin + markdownDownloadPlugin）
+- **D13 Onchain Export Plugin（Demo Mode）** — 真实 SHA-256（Web Crypto API）+ 确定性派生 mock tx hash + localStorage ledger（FIFO 50 条），明确标注 Demo Mode，版本号 `0.9.0-mvp`
+- **D14 Prompt Playground** — 双栏布局（左 prompt 编辑 + 右结果展示）+ 4 个 preset（Summarizer / JSON Extractor / Creative Writer / Translator）+ 参数控制（temperature 0-2 / maxTokens 上限 2048 / responseFormat）
+- **D15 Demo 视频脚本** — 5 个分镜总时长 85s ≤ 90s OKX 硬性要求，9 章节 checklist 含应急方案
+
+### Changed
+- `components/PluginPanel.tsx` +295 行（OnchainHistory + OnchainRecordItem + Demo Mode 警告条）
+- `app/page.tsx` 多次扩展（添加 ChatWithKC / ExplainKC / PluginPanel 折叠卡片）
+- `package.json` version → 2.2.0
+
+### Fixed
+- BigInt literals 在 ES2019 target 下不可用 — 改用 `Math.imul` + `>>> 0` 实现 32-bit hash
+- Uint8Array → Blob SharedArrayBuffer 类型冲突 — 改用 `new TextEncoder().encode()` 统一转 Uint8Array
+
+### Operational
+- **8 个 PR**（#14-#21）覆盖 D8-D15，每个独立通过 tsc + SSE 冒烟测试
+- tsc --noEmit：0 错误
+- 全链路冒烟测试通过（Health / Home / Settings / Playground / Compare / Chat / Explain API 均 200）
+
+### Known Limitations（v2.3 改进）
+- Onchain Export 是 Demo Mode（真实 SHA-256 + mock tx hash，未实际广播到 X Layer mainnet）
+- Smart Suggestion 仅同会话（跨会话记忆需要 server side 持久化）
+- Plugin 配置全局共享（不能按文档/项目区分）
+- Explain 仅 4 受众（自定义受众需要扩展）
+
+---
+
 ## [v2.1] — 2026-07-21 — Model Provider Abstraction + Agent Studio
 
 > 7-day incremental extension (D1-D7) of v2.0. Transforms the rigid v2.0 (hardcoded DeepSeek SDK) into a configurable Agent Studio — judges and users can switch LLM providers, customize prompts, select role presets, and view token costs in the Settings UI without touching code.

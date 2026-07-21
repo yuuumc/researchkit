@@ -3,11 +3,18 @@
 import { useState, useRef, useEffect } from 'react'
 import KnowledgeGraph, { buildKnowledgeGraph } from '@/components/KnowledgeGraph'
 import AgentTimeline from '@/components/AgentTimeline'
+import { CompareTab } from '@/components/CompareTab'
+import { SmartSuggestionBanner } from '@/components/SmartSuggestionBanner'
+import { ChatWithKC } from '@/components/ChatWithKC'
+import { ExplainKC } from '@/components/ExplainKC'
+import { PluginPanel } from '@/components/PluginPanel'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
 import { getLabels } from '@/lib/ui-labels'
 import { appendCostRun } from '@/lib/cost-history'
+import { appendKCToHistory, loadKCHistory } from '@/lib/kc-history'
+import { computeSmartSuggestion, type SmartSuggestion } from '@/lib/smart-suggestion'
 
 type InputMode = 'text' | 'url' | 'pdf' | 'batch'
 
@@ -24,7 +31,7 @@ export default function Home() {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
   const [showObsidian, setShowObsidian] = useState(false) // 已废弃（用 exportTab 代替），保留避免破坏其他引用
-  const [exportTab, setExportTab] = useState<'markdown' | 'obsidian' | 'mindmap'>('markdown')
+  const [exportTab, setExportTab] = useState<'markdown' | 'obsidian' | 'mindmap' | 'compare'>('markdown')
   const [plan, setPlan] = useState<any>(null)
   const [execution, setExecution] = useState<any[]>([])
   const [reflection, setReflection] = useState<any>(null)
@@ -42,6 +49,12 @@ export default function Home() {
   const [progressStage, setProgressStage] = useState(0) // 0=未开始, 1-6=各阶段, 7=完成
   const [progressStartedAt, setProgressStartedAt] = useState<number>(0)
   const [, setTick] = useState(0) // 用于强制 re-render 更新进度面板"已耗时"
+  // D9 Memory v1 — Smart Suggestion banner
+  const [smartSuggestion, setSmartSuggestion] = useState<SmartSuggestion | null>(null)
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false)
+  // D9 — Compare tab 预选触发器（Smart Suggestion "Compare Now" 跳转用）
+  const [comparePreselectId, setComparePreselectId] = useState<string | null>(null)
+  const [comparePreselectTrigger, setComparePreselectTrigger] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mindmapRef = useRef<HTMLDivElement>(null)
 
@@ -99,6 +112,10 @@ export default function Home() {
     setUiMode('simple')
     setMarkdownPreviewOpen(false)
     setPipelineExpanded(false)
+    // D9 — 重置 Smart Suggestion 状态
+    setSmartSuggestion(null)
+    setSuggestionDismissed(false)
+    setComparePreselectId(null)
 
     // 启动可视化进度 — Stage 1 立即触发（Document Loaded）
     // 后续 Stage 2-7 由 SSE 实时推送（/api/research/multi-agent-stream）
@@ -318,6 +335,37 @@ export default function Home() {
         } catch (err) {
           // localStorage 写失败不影响主流程
           console.warn('[cost-history] append failed:', err)
+        }
+      }
+
+      // D8 Compare Papers — 把当前 KC 追加到历史（供 CompareTab 选另一篇对比）
+      // 只在确实生成了知识卡时记录（避免失败请求污染历史）
+      if (finalData.knowledge_card) {
+        try {
+          appendKCToHistory({
+            knowledgeCard: finalData.knowledge_card,
+            source: String(actualSource || '用户输入'),
+          })
+        } catch (err) {
+          console.warn('[kc-history] append failed:', err)
+        }
+
+        // D9 Memory v1 — 计算与历史 KC 的相似度，弹出 Smart Suggestion banner
+        try {
+          const history = loadKCHistory()
+          // 排除刚加入的当前 KC（按 title+year 比较）
+          const filteredHistory = history.filter(e => {
+            const sameTitle = e.title === String(finalData.knowledge_card.title || '').substring(0, 80)
+            const sameYear = e.year === finalData.knowledge_card.year
+            return !(sameTitle && sameYear)
+          })
+          const suggestion = computeSmartSuggestion(finalData.knowledge_card, filteredHistory)
+          if (suggestion.bestMatch) {
+            setSmartSuggestion(suggestion)
+            setSuggestionDismissed(false)
+          }
+        } catch (err) {
+          console.warn('[smart-suggestion] compute failed:', err)
         }
       }
 
@@ -1268,6 +1316,25 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           ))}
         </div>
 
+        {/* D9 Memory v1 — Smart Suggestion Banner（result 顶部） */}
+        {result && smartSuggestion && smartSuggestion.bestMatch && !suggestionDismissed && (
+          <SmartSuggestionBanner
+            suggestion={smartSuggestion}
+            onCompareNow={() => {
+              if (!smartSuggestion.bestMatch) return
+              setComparePreselectId(smartSuggestion.bestMatch.id)
+              setComparePreselectTrigger(t => t + 1)
+              setExportTab('compare')
+              // 滚动到 Compare tab 区
+              setTimeout(() => {
+                const el = document.getElementById('export-section')
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }, 100)
+            }}
+            onDismiss={() => setSuggestionDismissed(true)}
+          />
+        )}
+
         {/* Result */}
         {result && (() => {
           const L = getLabels(result.language, result.locale)
@@ -1491,10 +1558,44 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               </div>
             )}
 
+            {/* D10 Chat with Knowledge Card — 可折叠，默认展开 */}
+            {result && (
+              <div style={{ marginBottom: '16px' }}>
+                <Card title="💬 Ask Anything" color="#06b6d4" defaultOpen={false} index={13}>
+                  <div style={{ marginTop: '4px' }}>
+                    <ChatWithKC knowledgeCard={result} />
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* D11 Explain Agent — 为不同受众重新解释论文 */}
+            {result && (
+              <div style={{ marginBottom: '16px' }}>
+                <Card title="🎯 Explain for Audience" color="#f59e0b" defaultOpen={false} index={14}>
+                  <div style={{ marginTop: '4px' }}>
+                    <ExplainKC knowledgeCard={result} />
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* D12 Plugin System — 一键导出 KC 到第三方工具 */}
+            {result && (
+              <div style={{ marginBottom: '16px' }}>
+                <Card title="🧩 Plugins" color="#8b5cf6" defaultOpen={false} index={15}>
+                  <div style={{ marginTop: '4px' }}>
+                    <PluginPanel knowledgeCard={result} />
+                  </div>
+                </Card>
+              </div>
+            )}
+
             {/* Export toolbar — 折叠式：默认只显示 3 按钮，点 Preview 才展开 */}
-            {(markdown || obsidian || mindmap) && (
+            {(markdown || obsidian || mindmap || result) && (
+              <div id="export-section">
               <Card title="📥 导出" color="#6366f1" defaultOpen={true} index={13}>
-                {/* Format toggle — 3 tabs */}
+                {/* Format toggle — 4 tabs (Markdown / Obsidian / Knowledge Graph / Compare) */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px' }}>
                     <button
@@ -1524,8 +1625,27 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                         fontWeight: 600, fontSize: '13px', boxShadow: exportTab === 'mindmap' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                       }}
                     >🧠 Knowledge Graph</button>
+                    <button
+                      onClick={() => { setExportTab('compare'); setMarkdownPreviewOpen(false) }}
+                      style={{
+                        padding: '6px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer',
+                        background: exportTab === 'compare' ? 'white' : 'transparent',
+                        color: exportTab === 'compare' ? '#dc2626' : '#5a6478',
+                        fontWeight: 600, fontSize: '13px', boxShadow: exportTab === 'compare' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      }}
+                    >🔄 Compare</button>
                   </div>
                 </div>
+
+                {/* Compare Tab — D8 */}
+                {exportTab === 'compare' && (
+                  <CompareTab
+                    currentKC={result}
+                    currentSource={undefined}
+                    preselectId={comparePreselectId}
+                    preselectTrigger={comparePreselectTrigger}
+                  />
+                )}
 
                 {/* Obsidian hint */}
                 {exportTab === 'obsidian' && (
@@ -1541,7 +1661,8 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                   </div>
                 )}
 
-                {/* Button group: Preview / Copy / Download */}
+                {/* Button group: Preview / Copy / Download — 仅非 Compare Tab 显示 */}
+                {exportTab !== 'compare' && (
                 <div style={{ display: 'flex', gap: '8px', marginBottom: exportTab === 'mindmap' ? '12px' : '0' }}>
                   {/* Markdown / Obsidian tab：显示「预览」按钮切换源码视图 */}
                   {/* Knowledge Graph tab：KG 本身就是可视化预览，不需要单独的预览按钮 */}
@@ -1571,6 +1692,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                     ⬇️ 下载
                   </button>
                 </div>
+                )}
 
                 {/* Markdown / Obsidian — code view, hidden by default */}
                 {exportTab !== 'mindmap' && markdownPreviewOpen && (
@@ -1623,6 +1745,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                   </div>
                 )}
               </Card>
+              </div>
             )}
           </div>
           )
