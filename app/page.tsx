@@ -852,6 +852,69 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           from { opacity: 0; transform: translateY(12px); }
           to { opacity: 1; transform: translateY(0); }
         }
+
+        /* === D20 KC 生成成功庆祝动效 === */
+        /* KC title card 入场：从 scale 0.95 + 模糊 → 清晰，配合 staggered card-field-enter 形成视觉爆点 */
+        .kc-success-enter {
+          animation: kc-success-enter 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+        @keyframes kc-success-enter {
+          0% { opacity: 0; transform: scale(0.94); filter: blur(4px); }
+          60% { opacity: 1; filter: blur(0); }
+          100% { opacity: 1; transform: scale(1); filter: blur(0); }
+        }
+        /* 顶部彩带粒子（纯 CSS 实现，无 JS 依赖） */
+        .success-burst {
+          position: fixed;
+          top: 0; left: 0; right: 0;
+          height: 4px;
+          background: linear-gradient(90deg, transparent 0%, #10b981 30%, #06b6d4 50%, #6366f1 70%, transparent 100%);
+          animation: success-sweep 0.9s ease-out forwards;
+          pointer-events: none;
+          z-index: 9999;
+          transform-origin: center;
+        }
+        @keyframes success-sweep {
+          0% { transform: scaleX(0); opacity: 0; }
+          40% { transform: scaleX(1); opacity: 1; }
+          100% { transform: scaleX(1); opacity: 0; }
+        }
+
+        /* === D20 移动端响应式 === */
+        /* 小屏（< 640px）优化：评委在手机上也能看清 */
+        @media (max-width: 640px) {
+          /* 主容器 padding 收紧 */
+          main { padding: 20px 12px !important; }
+          /* Hero 标题缩小，避免溢出 */
+          h1 { font-size: 26px !important; }
+          /* 输入卡 padding 收紧 */
+          .input-card { padding: 16px !important; }
+          /* 输入框高度降低 */
+          textarea, input[type="url"] { min-height: 100px !important; font-size: 14px !important; }
+          /* KC title card 标题字号缩小 */
+          .kc-title { font-size: 18px !important; padding: 16px !important; }
+          /* Cap matrix 网格强制单列 */
+          .cap-grid { grid-template-columns: 1fr !important; }
+          /* Agent / Tool 卡片 padding 收紧 */
+          .agent-card { padding: 10px !important; }
+          /* 按钮全宽 + 高度 ≥ 44px 触摸友好 */
+          .action-row { flex-direction: column !important; gap: 8px !important; }
+          .action-row > button { width: 100%; min-height: 44px; padding: 12px 16px !important; }
+          /* 进度面板 padding 收紧 */
+          .progress-panel { padding: 16px !important; }
+          /* Settings 浮动入口靠下（避免遮挡 header） */
+          .settings-fab { top: 12px !important; right: 12px !important; }
+          /* Knowledge Graph 字号缩小 */
+          .kg-tree { font-size: 12px !important; }
+          /* Export tabs 横向滚动 */
+          .export-tabs { overflow-x: auto; flex-wrap: nowrap !important; }
+          .export-tabs > button { white-space: nowrap; }
+        }
+
+        /* 中等屏（641-768px）轻度调整 */
+        @media (max-width: 768px) and (min-width: 641px) {
+          .cap-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
       `}} />
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 20px' }}>
@@ -859,6 +922,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         <a
           href="/settings"
           aria-label="Settings"
+          className="settings-fab"
           style={{
             position: 'fixed',
             top: '20px',
@@ -966,7 +1030,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         </div>
 
         {/* === Input Card — 紧接 Hero，第一屏即可见 === */}
-        <div className="section-fade-in hero-fade-delay-4" style={{ background: 'white', borderRadius: '20px', padding: '28px', boxShadow: '0 4px 20px rgba(99, 102, 241, 0.08)', marginTop: '24px', marginBottom: '24px' }}>
+        <div className="section-fade-in hero-fade-delay-4 input-card" style={{ background: 'white', borderRadius: '20px', padding: '28px', boxShadow: '0 4px 20px rgba(99, 102, 241, 0.08)', marginTop: '24px', marginBottom: '24px' }}>
           {/* Mode tabs */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
             <button key="text" onClick={() => { setMode('text'); setError('') }} style={tabStyle(mode === 'text')} className={mode === 'text' ? 'mode-tab-active' : ''}>📝 文本</button>
@@ -1086,7 +1150,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           )}
 
           {/* Actions */}
-          <div style={{ display: 'flex', gap: '12px', marginTop: '20px', alignItems: 'center' }}>
+          <div className="action-row" style={{ display: 'flex', gap: '12px', marginTop: '20px', alignItems: 'center' }}>
             <button
               onClick={handleSubmit}
               disabled={loading}
@@ -1112,7 +1176,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
 
           {/* 可视化生成进度面板 */}
           {progressStage > 0 && progressStage < 8 && (
-            <div style={{
+            <div className="progress-panel" style={{
               marginTop: '20px',
               padding: '24px',
               background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
@@ -1251,7 +1315,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         </div>
 
         {/* === Capability Matrix — 移到输入框之后，不再占第一屏 === */}
-        <div style={{
+        <div className="cap-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
           gap: '12px',
@@ -1399,8 +1463,11 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               />
             )}
 
+            {/* D20 KC 生成成功庆祝彩带 — 仅在 KC 标题变化时挂载一次 */}
+            <div key={`burst-${result.title}`} className="success-burst" aria-hidden />
+
             {/* Title card with metadata */}
-            <div style={{ background: 'linear-gradient(135deg, #6366f1 0%, #06b6d4 100%)', borderRadius: '20px', padding: '28px', color: 'white', marginBottom: '16px', boxShadow: '0 8px 24px rgba(99, 102, 241, 0.25)' }}>
+            <div key={`kc-${result.title}`} className="kc-success-enter kc-title" style={{ background: 'linear-gradient(135deg, #6366f1 0%, #06b6d4 100%)', borderRadius: '20px', padding: '28px', color: 'white', marginBottom: '16px', boxShadow: '0 8px 24px rgba(99, 102, 241, 0.25)' }}>
               <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{L.knowledgeCard}</div>
               <h2 className="title-glow" style={{ fontSize: '24px', fontWeight: 700, margin: '0 0 12px 0' }}>{result.title}</h2>
               {/* Meta chips */}
@@ -1597,7 +1664,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               <Card title="📥 导出" color="#6366f1" defaultOpen={true} index={13}>
                 {/* Format toggle — 4 tabs (Markdown / Obsidian / Knowledge Graph / Compare) */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px' }}>
+                  <div className="export-tabs" style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px' }}>
                     <button
                       onClick={() => { setExportTab('markdown'); setMarkdownPreviewOpen(false) }}
                       style={{
@@ -1703,7 +1770,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
 
                 {/* Knowledge Graph — 可折叠 + 生成动画（替代静态 Mermaid Mindmap） */}
                 {exportTab === 'mindmap' && (
-                  <div>
+                  <div className="kg-tree">
                     {/* 优先：KnowledgeGraph 自渲染组件 */}
                     {result && (
                       <KnowledgeGraph
