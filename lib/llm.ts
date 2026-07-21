@@ -10,7 +10,7 @@
  */
 
 import { KNOWLEDGE_CARD_SYSTEM_PROMPT, KNOWLEDGE_CARD_USER_PROMPT } from './prompts'
-import { ProviderFactory } from '@/core/llm/provider'
+import { getServerProvider } from './server-provider'
 
 export interface KnowledgeCard {
   // 基础
@@ -72,7 +72,7 @@ export async function generateKnowledgeCard(
   }
 
   try {
-    const provider = ProviderFactory.fromEnv()
+    const provider = getServerProvider()
     const response = await provider.chat(
       [
         { role: 'system', content: KNOWLEDGE_CARD_SYSTEM_PROMPT },

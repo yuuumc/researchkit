@@ -16,7 +16,7 @@
 import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import type { ReaderOutput } from '@/lib/agents/reader'
 import { buildAnalyzerPrompt } from '@/prompts/analyzer'
-import { ProviderFactory } from '@/core/llm/provider'
+import { getServerProvider } from '@/lib/server-provider'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 /**
@@ -150,7 +150,7 @@ export class AnalyzerAgent implements AgentInterface {
       schema = DEFAULT_SCHEMA_BY_INPUT_TYPE.unknown
     }
 
-    const provider = ProviderFactory.fromEnv()
+    const provider = getServerProvider()
     const response = await provider.chat(
       [
         {

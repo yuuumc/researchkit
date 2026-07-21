@@ -19,7 +19,7 @@ import { Agent, AgentMessage, createMessage, AgentCapability } from './mcp'
 import { formatToolsForPrompt } from './tools/registry'
 import { detectLocale, Locale, buildLanguageDirective } from './locale'
 import { buildPlannerPrompt, buildReflectionPrompt, buildReplanPrompt } from '@/prompts/planner'
-import { ProviderFactory } from '@/core/llm/provider'
+import { getServerProvider } from './server-provider'
 
 export interface PlanStep {
   id: string               // 'step-1' | 'step-2' ...
@@ -97,7 +97,7 @@ export const PlannerAgent: Agent = {
     const agentListText = AGENT_REGISTRY.map(a => `- ${a.name}: ${a.description}`).join('\n')
     const toolsText = formatToolsForPrompt()
 
-    const provider = ProviderFactory.fromEnv()
+    const provider = getServerProvider()
     const response = await provider.chat(
       [
         {
@@ -243,7 +243,7 @@ export async function reflect(
   languageDirective?: string
 ): Promise<ReflectionResult> {
   try {
-    const provider = ProviderFactory.fromEnv()
+    const provider = getServerProvider()
     const response = await provider.chat(
       [
         {
@@ -358,7 +358,7 @@ export async function replan(
   }
 
   try {
-    const provider = ProviderFactory.fromEnv()
+    const provider = getServerProvider()
     const response = await provider.chat(
       [
         {

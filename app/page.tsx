@@ -776,6 +776,40 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
       `}} />
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 20px' }}>
+        {/* === Settings 浮动入口（右上角） === */}
+        <a
+          href="/settings"
+          aria-label="Settings"
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            width: '44px',
+            height: '44px',
+            borderRadius: '12px',
+            background: 'white',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '20px',
+            textDecoration: 'none',
+            zIndex: 1000,
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+            border: '1px solid #e2e8f2',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'scale(1.05)'
+            e.currentTarget.style.boxShadow = '0 6px 16px rgba(99, 102, 241, 0.2)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
+          }}
+          title="Settings"
+        >
+          ⚙️
+        </a>
         {/* === HERO === */}
         <div style={{ textAlign: 'center', marginBottom: '48px', position: 'relative' }}>
           {/* Floating background blobs */}
