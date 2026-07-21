@@ -1,0 +1,32 @@
+{
+  "tabs": {
+    "markdown": "Markdown",
+    "obsidian": "Obsidian",
+    "mindmap": "Knowledge Graph",
+    "compare": "对比"
+  },
+  "actions": {
+    "copyMarkdown": "复制 Markdown",
+    "copyObsidian": "复制 Obsidian",
+    "copyMermaid": "复制 Mermaid 源码",
+    "download": "下载",
+    "downloadMd": "下载 .md",
+    "downloadObsidian": "下载 .md (Obsidian)",
+    "downloadPng": "下载 PNG"
+  },
+  "status": {
+    "copied": "✓ 已复制",
+    "downloaded": "✓ 已下载"
+  },
+  "onchain": {
+    "title": "⛓️ 上链导出",
+    "broadcast": "广播到 X Layer",
+    "broadcasting": "广播中...",
+    "success": "✓ 已上链",
+    "txHash": "交易哈希",
+    "ipfsCid": "IPFS CID",
+    "gasEstimate": "预估 gas",
+    "walletAddress": "钱包地址",
+    "viewOnOklink": "在 OKLink 查看"
+  }
+}

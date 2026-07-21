@@ -1,0 +1,73 @@
+{
+  "tabs": {
+    "provider": "模型",
+    "prompt": "提示词",
+    "general": "通用",
+    "cost": "费用",
+    "about": "关于"
+  },
+  "general": {
+    "title": "通用设置",
+    "presetTitle": "Prompt Preset — 角色预设",
+    "presetHint": "Preset 会注入到所有 Agent 的 prompt 中,影响 LLM 视角和输出风格;Output Language 会强制覆盖最终输出语言。",
+    "languageTitle": "语言",
+    "languageHint": "Application Language 控制 UI 界面语言;Output Language 控制知识卡最终输出语言;Prompt Language 锁死英文(LLM 效果最佳)。",
+    "appLanguage": "Application Language",
+    "appLanguageHint": "控制 UI / Help / Tooltip 等界面元素的语言",
+    "outputLanguage": "Output Language",
+    "outputLanguageHint": "所有 Agent 输出知识卡时使用的语言",
+    "promptLanguage": "Prompt Language",
+    "promptLanguageHint": "Prompt 始终使用英文(LLM 英文 prompt 效果最佳),不支持修改",
+    "promptLanguageLocked": "English ✓ Recommended",
+    "autoTranslate": "Auto Translate",
+    "autoTranslateHint": "开启后,Explain / Chat / Compare 模块的回复会自动翻译为 Application Language",
+    "usingDefault": "（Preset=Academic，Output Language=Auto 跟随源语言）",
+    "usingCustom": "（Preset={preset}，Output Language={outputLocale}）",
+    "resetConfirm": "确定要重置为默认设置吗？Preset=Academic，Output Language=Auto。",
+    "saved": "✓ 已保存",
+    "resetToDefault": "重置为默认设置",
+    "promptArchitecture": "Prompt 三层架构 + 角色注入",
+    "promptArchitectureDesc": "System（只读内置） → Preset Persona（本页选择的角色） → Project（Prompt Tab） → User（单次扩展）",
+    "personaPreview": "{label} Persona"
+  },
+  "provider": {
+    "title": "Provider 配置",
+    "apiKey": "API Key",
+    "baseUrl": "Base URL",
+    "model": "Model",
+    "type": "Provider 类型",
+    "testConnection": "测试连接",
+    "testing": "测试中...",
+    "testSuccess": "✓ 连接成功",
+    "testFail": "✗ 连接失败",
+    "saved": "✓ 配置已保存",
+    "reset": "重置配置"
+  },
+  "prompt": {
+    "title": "Prompt 扩展",
+    "projectExtension": "Project Extension",
+    "projectExtensionHint": "在所有 Agent 的 prompt 末尾追加这段文本(影响所有调用)",
+    "saveProject": "保存 Project Extension",
+    "saved": "✓ 已保存",
+    "playground": "Prompt Playground",
+    "playgroundHint": "调试单次 Agent 调用,不影响正式 Pipeline"
+  },
+  "cost": {
+    "title": "费用 & Token Dashboard",
+    "totalRuns": "总运行次数",
+    "totalTokens": "总 tokens",
+    "totalCost": "总费用",
+    "avgTokens": "平均 tokens / 次",
+    "avgCost": "平均费用 / 次",
+    "clearHistory": "清空历史",
+    "clearConfirm": "确定清空所有历史记录吗？此操作不可恢复。"
+  },
+  "about": {
+    "title": "关于 ResearchKit OS",
+    "version": "版本",
+    "description": "AI 研究操作系统 — 多 Agent 协同的论文阅读与知识管理",
+    "github": "GitHub",
+    "docs": "文档",
+    "license": "License"
+  }
+}

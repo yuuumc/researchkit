@@ -1,0 +1,75 @@
+{
+  "agentTimeline": {
+    "title": "Agent Timeline",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "duration": "Duration",
+    "tokens": "tokens",
+    "cost": "Cost",
+    "model": "Model"
+  },
+  "smartSuggestion": {
+    "title": "Smart Suggestion",
+    "compareNow": "⚡ Compare Now",
+    "dismiss": "✕ Dismiss",
+    "reasons": {
+      "field": "Same field",
+      "authors": "Same authors",
+      "keyTerms": "Shared terms",
+      "tags": "Same tags",
+      "year": "Same year"
+    },
+    "relationType": {
+      "sameField": "Same-field paper",
+      "sameAuthor": "Same-author paper",
+      "sharedTerms": "Shared-terms paper",
+      "sameTags": "Same-tags paper"
+    }
+  },
+  "chatWithKC": {
+    "title": "💬 Chat with Knowledge Card",
+    "placeholder": "Ask a question about this paper...",
+    "send": "Send",
+    "clear": "Clear chat",
+    "loading": "Thinking...",
+    "empty": "No messages yet, ask a question!",
+    "error": "Chat failed, please retry"
+  },
+  "explainKC": {
+    "title": "🔍 Explain this paper",
+    "selectAudience": "👥 Select target audience",
+    "generate": "Generate explanation",
+    "regenerate": "Regenerate",
+    "audiences": {
+      "highschool": "High School Student",
+      "engineer": "Engineer",
+      "researcher": "Researcher",
+      "pm": "Product Manager"
+    },
+    "loading": "🤖 LLM is rephrasing for this audience..."
+  },
+  "compare": {
+    "title": "📚 Compare Papers",
+    "selectTwo": "Select two papers to compare",
+    "compareFields": "Field comparison",
+    "differences": "Difference analysis",
+    "empty": "No knowledge cards to compare"
+  },
+  "pluginPanel": {
+    "title": "🔌 Plugin Panel",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "configure": "Configure",
+    "run": "Run",
+    "running": "Running...",
+    "success": "✓ Execution successful",
+    "error": "✗ Execution failed"
+  }
+}

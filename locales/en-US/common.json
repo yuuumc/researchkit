@@ -1,0 +1,20 @@
+{
+  "appName": "ResearchKit OS",
+  "tagline": "AI Research Operating System",
+  "loading": "Loading...",
+  "error": "Error",
+  "retry": "Retry",
+  "cancel": "Cancel",
+  "save": "Save",
+  "reset": "Reset",
+  "confirm": "Confirm",
+  "close": "Close",
+  "copy": "Copy",
+  "copied": "Copied",
+  "generate": "Generate",
+  "generating": "Generating...",
+  "dismiss": "Dismiss",
+  "yes": "Yes",
+  "no": "No",
+  "auto": "Auto"
+}
