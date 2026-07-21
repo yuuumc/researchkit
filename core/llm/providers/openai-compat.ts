@@ -21,9 +21,11 @@
  * - 健康检查：发送一个最小请求，验证 API Key + Base URL 有效
  *
  * 不支持（v2.3+）：
- * - Streaming
  * - Tool use / Function calling
  * - 多模态（图片 / 音频）
+ *
+ * v2.3 D27 起支持：
+ * - Streaming（chatStream() — OpenAI SDK stream: true + stream_options.include_usage）
  */
 
 import OpenAI from 'openai'
@@ -34,6 +36,7 @@ import type {
   ChatMessage,
   ChatOptions,
   ChatResponse,
+  ChatStreamCallbacks,
   ChatUsage,
 } from '../provider'
 import { recordUsage } from '@/lib/usage-collector'
@@ -133,6 +136,86 @@ export class OpenAICompatProvider implements LLMProvider {
   }
 
   /**
+   * 流式聊天 — D27 新增
+   *
+   * 与 chat() 返回相同的 ChatResponse，但通过 onToken 回调实时推送每个 delta。
+   * 内部用 OpenAI SDK 的 stream: true + stream_options.include_usage。
+   *
+   * 调用方：
+   * ```typescript
+   * const response = await provider.chatStream(messages, { responseFormat: 'json_object' }, {
+   *   onToken: (delta) => sendToClient(delta),
+   * })
+   * // response.content 包含完整内容，response.usage 在流末尾由 SDK 发送
+   * ```
+   *
+   * Provider 不支持 stream_options.include_usage 时，usage 全为 0（Cost Dashboard 优雅降级）
+   */
+  async chatStream(
+    messages: ChatMessage[],
+    options?: ChatOptions,
+    callbacks?: ChatStreamCallbacks
+  ): Promise<ChatResponse> {
+    const start = Date.now()
+
+    const stream = await this.client.chat.completions.create(
+      {
+        model: this.model,
+        messages,
+        temperature: options?.temperature ?? this.defaultTemperature,
+        ...(options?.maxTokens && { max_tokens: options.maxTokens }),
+        ...(options?.responseFormat === 'json_object' && {
+          response_format: { type: 'json_object' },
+        }),
+        stream: true,
+        // 让 OpenAI SDK 在流末尾发送 usage chunk
+        // DeepSeek / OpenAI / OpenRouter 均支持；Groq 支持；其他不支持时 usage 全为 0
+        stream_options: { include_usage: true },
+      },
+      {
+        timeout: options?.timeout ?? this.defaultTimeout,
+      }
+    )
+
+    let content = ''
+    let actualModel = this.model
+    let finishReason: string | undefined
+    let chatUsage: ChatUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+
+    for await (const chunk of stream) {
+      // 大部分 chunk 有 choices[0]，但 usage-only chunk（流末尾）choices 可能为空数组
+      const choice = chunk.choices?.[0]
+      const delta = choice?.delta?.content
+      if (delta) {
+        content += delta
+        callbacks?.onToken?.(delta)
+      }
+      if (chunk.model) actualModel = chunk.model
+      if (choice?.finish_reason) finishReason = choice.finish_reason
+      if (chunk.usage) {
+        chatUsage = {
+          promptTokens: chunk.usage.prompt_tokens ?? 0,
+          completionTokens: chunk.usage.completion_tokens ?? 0,
+          totalTokens: chunk.usage.total_tokens ?? 0,
+        }
+      }
+    }
+
+    const durationMs = Date.now() - start
+
+    // D6 Cost & Token Dashboard — 记录到当前 collector（如有）
+    recordUsage(chatUsage, actualModel, durationMs)
+
+    return {
+      content: content || null,
+      model: actualModel,
+      usage: chatUsage,
+      finishReason: finishReason ?? 'stop',
+      durationMs,
+    }
+  }
+
+  /**
    * 健康检查 — 发送一个最小请求，验证 API Key + Base URL + Model
    *
    * Settings 页"测试连接"按钮用
@@ -185,10 +268,11 @@ function getDisplayName(type: string): string {
 
 function getCapabilities(type: string): ProviderCapabilities {
   // 所有 OpenAI Compatible API 都支持 JSON mode（response_format）
-  // Streaming / Tool use 暂不启用（v2.3+）
+  // D27 起：所有 Provider 都支持 streaming（OpenAI SDK 的 stream: true 是标准协议）
+  // Tool use 暂不启用（v2.3+）
   const common: ProviderCapabilities = {
     supportsJsonMode: true,
-    supportsStreaming: false,
+    supportsStreaming: true,
     supportsToolUse: false,
     maxContextLength: 64_000, // 默认 64K，D3 Settings UI 可让用户覆盖
   }

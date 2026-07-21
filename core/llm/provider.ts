@@ -63,12 +63,35 @@ export interface ChatOptions {
    */
   timeout?: number
 
-  // ===== 未来扩展（v2.3+，先占位） =====
+  // ===== v2.3 起启用 =====
+  /**
+   * 是否流式输出（D27 起生效）
+   *
+   * - false（默认）：chat() 一次性返回完整 ChatResponse
+   * - true：调用方应改用 chatStream()，通过 onToken 回调接收每个 delta
+   *
+   * 注意：ChatOptions.stream 仅作为 hint。Provider 实际是否流式取决于调用 chat() 还是 chatStream()
+   */
+  stream?: boolean
+
+  // 其他未来扩展（v2.3+）
   // topP?: number
   // stop?: string[]
   // seed?: number
-  // stream?: boolean
   // tools?: ToolDefinition[]
+}
+
+/**
+ * 流式回调 — D27 新增
+ *
+ * chatStream() 调用方传入，Provider 在每个 token delta 到达时触发
+ */
+export interface ChatStreamCallbacks {
+  /**
+   * 收到新 token delta 时触发
+   * @param delta 增量内容（如 " Hel" 或 "lo"）
+   */
+  onToken?: (delta: string) => void
 }
 
 /**
@@ -158,13 +181,33 @@ export interface LLMProvider {
   displayName: string
 
   /**
-   * 聊天接口 — 所有 Agent 的唯一入口
+   * 聊天接口 — 所有 Agent 的统一入口
    *
    * @param messages 聊天消息数组（必须含 system message）
    * @param options 调用选项（可选）
    * @returns ChatResponse（含 content + usage + durationMs）
    */
   chat(messages: ChatMessage[], options?: ChatOptions): Promise<ChatResponse>
+
+  /**
+   * 流式聊天接口 — D27 新增
+   *
+   * 与 chat() 返回相同的 ChatResponse，但通过 onToken 回调实时推送每个 delta。
+   * 用于 SSE 路由（multi-agent-stream / chat-kc / explain-kc）把 LLM token 透传到前端。
+   *
+   * usage 在流末尾由 OpenAI SDK 发送（需 stream_options.include_usage: true）；
+   * 若 Provider 不支持，promptTokens / completionTokens 可能为 0（Cost Dashboard 优雅降级）。
+   *
+   * @param messages 聊天消息数组（必须含 system message）
+   * @param options 调用选项（可选）
+   * @param callbacks 流式回调（可选）— onToken 在每个 delta 到达时触发
+   * @returns ChatResponse（与 chat() 相同结构，含完整 content + usage + durationMs）
+   */
+  chatStream?(
+    messages: ChatMessage[],
+    options?: ChatOptions,
+    callbacks?: ChatStreamCallbacks
+  ): Promise<ChatResponse>
 
   /** Provider 能力清单 */
   capabilities: ProviderCapabilities
