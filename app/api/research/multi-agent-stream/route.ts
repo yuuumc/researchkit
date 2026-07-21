@@ -56,6 +56,14 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // D19 SSE 首字节优化：立即发送 ping 事件强制 flush 连接
+        // 原因：Next.js / Node.js HTTP 可能缓冲响应直到第一个 await 才 flush，
+        // 导致客户端等待 Planner 完成（~3s）才收到第一个字节
+        // 修复：在 coordinate() 之前发送一个 ping，建立 SSE 连接并 flush 头部
+        send('ping', { ts: Date.now() })
+        // 让出事件循环，让 HTTP 层把 ping 事件 flush 到网络
+        await new Promise(resolve => setTimeout(resolve, 0))
+
         try {
           const result = await coordinate({
             content,

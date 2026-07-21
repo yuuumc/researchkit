@@ -153,9 +153,18 @@ export async function runReflectionLoop(
 
     // ===== 3e. 执行补充步骤（同步更新 results，让 KB 重建能用上新结果） =====
     // 升级版：把 replan 的 prompt_patches 传给重跑的 Agent
+    //
+    // D19 Token 优化：截断 supplementary_steps 到最多 MAX_SUPPLEMENTARY_STEPS 个
+    // 原因：Replan prompt 允许最多 3 个，但 3 个 agent 重跑成本高（每个 ~2000 tokens）
+    // 截断策略：保留 Replan 返回顺序的前 N 个（Replan 通常按重要性排序）
+    const MAX_SUPPLEMENTARY_STEPS = 2
+    const truncatedSteps = replanResult.supplementary_steps.slice(0, MAX_SUPPLEMENTARY_STEPS)
+    if (truncatedSteps.length < replanResult.supplementary_steps.length) {
+      console.warn(`[workflow] D19 token optimization: truncated supplementary steps from ${replanResult.supplementary_steps.length} to ${MAX_SUPPLEMENTARY_STEPS}`)
+    }
     const supplementaryPlan: Plan = {
       ...plan,
-      steps: replanResult.supplementary_steps,
+      steps: truncatedSteps,
       tool_calls: [],  // 补调阶段不调工具
     }
     const suppStart = Date.now()
