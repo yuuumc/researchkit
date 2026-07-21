@@ -11,7 +11,61 @@
     "duration": "Duration",
     "tokens": "tokens",
     "cost": "Cost",
-    "model": "Model"
+    "model": "Model",
+    "pipelineSteps": {
+      "read": "Read",
+      "analyze": "Analyze",
+      "structure": "Structure",
+      "reflect": "Reflect",
+      "export": "Export"
+    },
+    "summary": {
+      "totalLabel": "Total:",
+      "tokensUnit": "tokens",
+      "costLabel": "Cost:",
+      "agents": "{count} agents",
+      "duration": "⚡ {duration}"
+    },
+    "pipeline": "Pipeline",
+    "iter": "🔁 {count} iter",
+    "tools": "🔧 {count} tools",
+    "durationMs": "⚡ {ms}ms",
+    "plannerReasoning": "🪧 Planner Reasoning",
+    "chips": {
+      "type": "Type: {value}",
+      "complexity": "Complexity: {value}",
+      "plannerMs": "Planning: {ms}ms",
+      "reflectionMs": "Reflection: {ms}ms",
+      "totalMs": "Total: {ms}ms"
+    },
+    "reflectionLoop": "🔁 Reflection Loop ({count} {iterWord})",
+    "iterationWord": "iteration",
+    "iterationsWord": "iterations",
+    "iterBadge": "ITER {n}",
+    "satisfied": "Satisfied",
+    "needsWork": "Needs Work",
+    "reflectMs": "reflect: {ms}ms",
+    "replanMs": "+ replan: {ms}ms",
+    "execMs": "+ exec: {ms}ms",
+    "replanCont": "🔄 Replan: continuing with supplementary steps",
+    "replanStop": "🛑 Replan: stopping",
+    "supplementarySteps": "Supplementary steps:",
+    "executionTrace": "⚡ Execution Trace",
+    "group": "Group {n}",
+    "optional": "optional",
+    "tokCost": "{tokens} tok · {cost}",
+    "reflectionSatisfied": "Reflection: Satisfied",
+    "reflectionNeedsMore": "Reflection: Needs More Work",
+    "missing": "Missing: {items}",
+    "mcpToolCalls": "🔧 MCP Tool Calls (Autonomous)",
+    "byAgent": "by {agent}",
+    "meta": {
+      "planner": "🧠 Planner: {ms}ms",
+      "reflect": "🔁 Reflect: {iter} iter ({ms}ms)",
+      "supp": "🔄 Supp: {steps} steps",
+      "tools": "🔧 Tools: {ok}/{total} ok ({ms}ms)",
+      "total": "⚡ Total: {ms}ms"
+    }
   },
   "smartSuggestion": {
     "title": "Smart Suggestion",
@@ -29,6 +83,16 @@
       "sameAuthor": "Same-author paper",
       "sharedTerms": "Shared-terms paper",
       "sameTags": "Same-tags paper"
+    },
+    "scoreLabel": "💡 Smart Suggestion · Score {score}",
+    "relativeTime": {
+      "justNow": "just now",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago",
+      "yesterday": "yesterday",
+      "daysAgo": "{n}d ago",
+      "weeksAgo": "{n}w ago",
+      "monthsAgo": "{n}mo ago"
     }
   },
   "chatWithKC": {
@@ -38,7 +102,32 @@
     "clear": "Clear chat",
     "loading": "Thinking...",
     "empty": "No messages yet, ask a question!",
-    "error": "Chat failed, please retry"
+    "error": "Chat failed, please retry",
+    "headerTitle": "Ask Anything",
+    "headerHint": "Ask the LLM questions about the current Knowledge Card",
+    "placeholderWith": "Ask the LLM about \"{title}\"...",
+    "sendBtnLoading": "💬...",
+    "sendBtn": "Send",
+    "sendHint": "Enter to send · Shift+Enter for newline",
+    "emptyTitle": "Ask anything about this paper",
+    "emptyHint": "The LLM has read the full Knowledge Card; ask any detail",
+    "thinkingDots": "LLM thinking...",
+    "suggestions": {
+      "method": "What is the method of this paper? Explain in plain language",
+      "innovation": "What are the core innovations of this paper?",
+      "limitations": "What are the limitations and how to improve?",
+      "keyTerm": "What is \"{term}\"? Why is it important?",
+      "futureWork": "What future work do the authors mention?",
+      "applications": "What real-world applications does this paper have?",
+      "takeaway": "Summarize this paper in one sentence",
+      "advancedDifficulty": "As a beginner, what prerequisites should I learn first?",
+      "default1": "Summarize the core contribution of this paper in one sentence",
+      "default2": "What real-world applications does this paper have?",
+      "default3": "What are the key steps if I want to reproduce this paper?",
+      "default4": "What is unique about this paper compared to other work in the field?"
+    },
+    "requestFailed": "❌ {error}",
+    "networkError": "❌ Network error: {error}"
   },
   "explainKC": {
     "title": "🔍 Explain this paper",
@@ -51,14 +140,67 @@
       "researcher": "Researcher",
       "pm": "Product Manager"
     },
-    "loading": "🤖 LLM is rephrasing for this audience..."
+    "audienceOptions": {
+      "highschool": { "label": "High School Student", "desc": "Plain analogies, no jargon" },
+      "engineer": { "label": "Engineer", "desc": "Implementation details, system design" },
+      "researcher": { "label": "Researcher", "desc": "Academic depth, comparative contributions" },
+      "pm": { "label": "Product Manager", "desc": "Business value, application scenarios" }
+    },
+    "loading": "🤖 LLM is rephrasing for this audience...",
+    "headerTitle": "Explain for Audience",
+    "headerHint": "Select an audience and let the LLM rephrase the paper",
+    "generating": "⏳ Generating...",
+    "regenerateBtn": "🚀 Rephrase for {audience}",
+    "retry": "Retry",
+    "forAudience": "Explained for \"{audience}\"",
+    "oneSentence": "📝 One-Sentence Summary",
+    "whyMatters": "Why It Matters",
+    "coreConcept": "Core Concept",
+    "actionable": "Actionable Insight",
+    "shouldAsk": "🤔 You should ask",
+    "generateFailed": "Generation failed",
+    "networkError": "Network error"
   },
   "compare": {
     "title": "📚 Compare Papers",
     "selectTwo": "Select two papers to compare",
     "compareFields": "Field comparison",
     "differences": "Difference analysis",
-    "empty": "No knowledge cards to compare"
+    "empty": "No knowledge cards to compare",
+    "empty1Title": "No Knowledge Card yet",
+    "empty1Hint": "Generate a knowledge card from a paper/URL/PDF first, then come back to compare.",
+    "empty2Title": "Only 1 current KC, cannot compare",
+    "empty2Hint": "Generate a second paper's knowledge card, then come back to compare the two papers.",
+    "header": "🔄 Compare Papers",
+    "aCurrent": "A (current):",
+    "b": "B:",
+    "selectHistory": "— Select a history KC —",
+    "comparing": "🔄 Comparing...",
+    "startCompare": "⚡ Start Compare",
+    "refresh": "🔄 Refresh history",
+    "loadingHint": "Calling LLM to compare 6 dimensions...",
+    "loadingHint2": "Usually takes 5-15 seconds",
+    "overallScore": "Overall Difference Score",
+    "readingOrder": "Recommended Reading Order",
+    "breakdown": "📊 6-Dimension Breakdown",
+    "aPaper": "A · Paper",
+    "bPaper": "B · Paper",
+    "radar": "📡 Radar Chart (6 Dimensions)",
+    "aCurrent2": "A · Current",
+    "bHistory": "B · History",
+    "diffLabels": {
+      "highly": "Highly Different",
+      "significantly": "Significantly Different",
+      "moderately": "Moderately Different",
+      "similar": "Similar"
+    },
+    "orderLabels": {
+      "aBeforeB": "📖 A → B (read A first)",
+      "bBeforeA": "📖 B → A (read B first)",
+      "parallel": "🔀 Parallel (no order required)"
+    },
+    "failed": "Compare failed",
+    "requestFailed": "Request failed"
   },
   "pluginPanel": {
     "title": "🔌 Plugin Panel",
@@ -70,6 +212,33 @@
     "run": "Run",
     "running": "Running...",
     "success": "✓ Execution successful",
-    "error": "✗ Execution failed"
+    "error": "✗ Execution failed",
+    "marketplace": "Plugin Marketplace",
+    "hint": "One-click export Knowledge Card to third-party tools",
+    "installed": "📦 {count} installed",
+    "requireKc": "⚠️ Please generate a Knowledge Card before using Plugin export",
+    "demoMode": "⚠️ <strong>Demo Mode</strong>: the onchain-export plugin uses Web Crypto API to compute SHA-256 and generate EVM-compatible mock tx hashes, but does not actually broadcast to X Layer mainnet. v2.3 will integrate OKX Agentic Wallet for real signing and broadcasting.",
+    "onchainHistory": "📜 Onchain History",
+    "times": "{count} times",
+    "hide": "Hide",
+    "details": "Details",
+    "config": "⚙️ Config",
+    "executing": "⏳ Executing...",
+    "executeBtn": "🚀 {icon} Export",
+    "successLabel": "Success",
+    "failureLabel": "Failed",
+    "precheckFailed": "Pre-check failed: {error}",
+    "execError": "Execution error",
+    "block": "📦 Block #{n}",
+    "gasUsed": "⛽ {gas} OKB",
+    "txLabel": "Tx",
+    "shaLabel": "SHA-256:",
+    "ipfsLabel": "IPFS:",
+    "contractLabel": "Contract:",
+    "relativeTime": {
+      "secondsAgo": "{n}s ago",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago"
+    }
   }
 }

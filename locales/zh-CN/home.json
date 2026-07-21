@@ -1,16 +1,34 @@
 {
   "title": "ResearchKit OS",
   "subtitle": "把任何论文变成结构化知识卡",
+  "heroHint": "AI Research Agent · 论文/文档 → 结构化知识卡 + Knowledge Graph + 推荐阅读",
   "inputModes": {
     "text": "文本",
     "url": "URL",
     "pdf": "PDF",
     "batch": "批量"
   },
+  "modeTabs": {
+    "text": "📝 文本",
+    "url": "🔗 URL",
+    "pdf": "📄 PDF",
+    "batch": "⚡ 批量"
+  },
   "placeholders": {
     "text": "把论文摘要 / 全文粘贴到这里...",
+    "textLong": "粘贴论文摘要、技术文档或任意研究内容...",
     "url": "https://arxiv.org/abs/...",
-    "batch": "每行一个 URL..."
+    "urlLong": "https://arxiv.org/abs/2301.00001 或任意网页链接",
+    "batch": "每行一个 URL...",
+    "batchLong": "每行一个 URL，最多 10 个：\nhttps://arxiv.org/abs/1706.03762\nhttps://arxiv.org/abs/1810.04805\nhttps://arxiv.org/abs/2005.14165",
+    "batchHint": "⚡ 3 并发处理 · 默认 brief 模式（节省 token）· 失败的 URL 不会中断其他"
+  },
+  "pdf": {
+    "dropHint": "点击上传或拖拽 PDF 到这里",
+    "dropHint2": "最大 10MB · 支持文字版 PDF",
+    "selected": "点击重新选择",
+    "wrongType": "只支持 PDF 文件",
+    "tooLarge": "PDF 文件过大（{size} MB），最大支持 10 MB"
   },
   "buttons": {
     "generate": "⚡ 生成知识卡",
@@ -21,7 +39,9 @@
     "copyObsidian": "复制 Obsidian",
     "copyMindmap": "复制 Mermaid",
     "reset": "重置",
-    "compare": "对比"
+    "compare": "对比",
+    "generating": "⏳ 生成中...",
+    "loadExample": "📋 载入示例"
   },
   "errors": {
     "noInputText": "请输入论文/文档内容",
@@ -34,7 +54,14 @@
     "networkInterrupted": "网络请求被中断（可能是页面刷新或代码热更新）。请稍等 1-2 秒后重试。",
     "streamInterrupted": "生成过程中连接被中断。请稍等 1-2 秒后重试。",
     "generateFailed": "生成失败",
-    "incompleteData": "生成失败：返回数据不完整"
+    "incompleteData": "生成失败：返回数据不完整",
+    "requestFailed": "请求失败",
+    "pdfParseFailed": "PDF 解析失败",
+    "copyFailed": "复制失败：请手动选择文本复制",
+    "mermaidCdnFailed": "Mermaid CDN 加载失败",
+    "mermaidRenderFailed": "Mermaid 渲染失败",
+    "mermaidSourceFailed": "⚠️ Mermaid 源码渲染失败（不影响 Knowledge Graph）：{error}",
+    "compareFailed": "对比失败"
   },
   "progress": {
     "stage1Label": "Document Loaded",
@@ -48,16 +75,72 @@
     "stage5Label": "Reflection Loop",
     "stage5Desc": "反思结果，必要时补调 Agent",
     "stage6Label": "Exports Ready",
-    "stage6Desc": "生成 Markdown / Obsidian / Knowledge Graph"
+    "stage6Desc": "生成 Markdown / Obsidian / Knowledge Graph",
+    "done": "✓ 完成",
+    "executing": "Agent Pipeline 执行中",
+    "stageXofY": "Stage {current} / 6 · 已耗时 {seconds}s",
+    "totalTime": "总耗时 {seconds}s",
+    "badgeDone": "DONE",
+    "badgeRunning": "RUNNING"
   },
   "uiMode": {
     "simple": "简洁",
-    "advanced": "高级"
+    "advanced": "高级",
+    "simpleBtn": "📖 Simple",
+    "advancedBtn": "🔬 Advanced"
   },
   "pipeline": {
     "title": "Agent 流水线",
     "expand": "展开",
-    "collapse": "收起"
+    "collapse": "收起",
+    "autonomous": "Agent Pipeline · Autonomous Workflow",
+    "mcpTools": "MCP Tools · Model Context Protocol"
+  },
+  "agents": {
+    "planner": { "name": "Planner", "role": "LLM 自主规划" },
+    "reader": { "name": "Reader", "role": "阅读理解" },
+    "analyzer": { "name": "Analyzer", "role": "深度分析" },
+    "terminology": { "name": "Terminology", "role": "术语分类" },
+    "kbBuilder": { "name": "KB Builder", "role": "汇总构建" },
+    "recommend": { "name": "Recommend", "role": "arXiv 推荐" },
+    "export": { "name": "Export", "role": "多格式导出" }
+  },
+  "tools": {
+    "memory": { "name": "Memory", "desc": "跨会话记忆读过论文" },
+    "filesystem": { "name": "Filesystem", "desc": "保存 .md / .json 文件" },
+    "arxiv": { "name": "Arxiv", "desc": "搜索相关学术论文" },
+    "webSearch": { "name": "Web Search", "desc": "DuckDuckGo 网络搜索" }
+  },
+  "cardTitles": {
+    "askAnything": "💬 Ask Anything",
+    "explainForAudience": "🎯 Explain for Audience",
+    "plugins": "🧩 Plugins",
+    "export": "📥 导出"
+  },
+  "exportTabs": {
+    "markdown": "Markdown",
+    "obsidian": "🔮 Obsidian",
+    "knowledgeGraph": "🧠 Knowledge Graph",
+    "compare": "🔄 Compare"
+  },
+  "export": {
+    "hintObsidian": "🔮 Obsidian 双链格式：术语自动用 [[term]] 包裹，含 YAML frontmatter，导入 Obsidian 后可形成知识图谱。",
+    "hintGraph": "🧠 Knowledge Graph：可折叠知识图谱。默认只展示主分支，点击节点展开叶子。底部可查看 Mermaid 源码用于 Obsidian / mermaid.live。",
+    "preview": "▸ 预览",
+    "hidePreview": "▾ 隐藏预览",
+    "copy": "📋 复制",
+    "copied": "✓ 已复制",
+    "download": "⬇️ 下载",
+    "showMermaidSource": "▸ 查看 Mermaid 源码（用于 Obsidian / mermaid.live）",
+    "hideMermaidSource": "▾ 隐藏 Mermaid 源码"
+  },
+  "batchResults": {
+    "title": "⚡ 批量处理结果",
+    "stats": "共 {total} 个 URL · 成功 {success} · 失败 {failed}"
+  },
+  "footer": {
+    "version": "ResearchKit OS v0.9.0",
+    "description": "Powered by DeepSeek · AI Research Pipeline · Agent Workflow + MCP Tools + Reflection Loop · 3 Export Formats (MD / Obsidian / Knowledge Graph) · Built for OKX.AI Genesis Hackathon"
   },
   "knowledgeCard": "📖 知识卡",
   "fields": {

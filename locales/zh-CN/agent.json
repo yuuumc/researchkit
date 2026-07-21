@@ -11,7 +11,61 @@
     "duration": "耗时",
     "tokens": "tokens",
     "cost": "费用",
-    "model": "模型"
+    "model": "模型",
+    "pipelineSteps": {
+      "read": "Read",
+      "analyze": "Analyze",
+      "structure": "Structure",
+      "reflect": "Reflect",
+      "export": "Export"
+    },
+    "summary": {
+      "totalLabel": "Total:",
+      "tokensUnit": "tokens",
+      "costLabel": "Cost:",
+      "agents": "{count} agents",
+      "duration": "⚡ {duration}"
+    },
+    "pipeline": "Pipeline",
+    "iter": "🔁 {count} iter",
+    "tools": "🔧 {count} tools",
+    "durationMs": "⚡ {ms}ms",
+    "plannerReasoning": "🪧 Planner Reasoning",
+    "chips": {
+      "type": "类型: {value}",
+      "complexity": "复杂度: {value}",
+      "plannerMs": "规划耗时: {ms}ms",
+      "reflectionMs": "反思耗时: {ms}ms",
+      "totalMs": "总耗时: {ms}ms"
+    },
+    "reflectionLoop": "🔁 Reflection Loop ({count} {iterWord})",
+    "iterationWord": "iteration",
+    "iterationsWord": "iterations",
+    "iterBadge": "ITER {n}",
+    "satisfied": "Satisfied",
+    "needsWork": "Needs Work",
+    "reflectMs": "reflect: {ms}ms",
+    "replanMs": "+ replan: {ms}ms",
+    "execMs": "+ exec: {ms}ms",
+    "replanCont": "🔄 Replan: continuing with supplementary steps",
+    "replanStop": "🛑 Replan: stopping",
+    "supplementarySteps": "补充步骤：",
+    "executionTrace": "⚡ Execution Trace",
+    "group": "Group {n}",
+    "optional": "optional",
+    "tokCost": "{tokens} tok · {cost}",
+    "reflectionSatisfied": "Reflection: Satisfied",
+    "reflectionNeedsMore": "Reflection: Needs More Work",
+    "missing": "Missing: {items}",
+    "mcpToolCalls": "🔧 MCP Tool Calls (Autonomous)",
+    "byAgent": "by {agent}",
+    "meta": {
+      "planner": "🧠 Planner: {ms}ms",
+      "reflect": "🔁 Reflect: {iter} iter ({ms}ms)",
+      "supp": "🔄 Supp: {steps} steps",
+      "tools": "🔧 Tools: {ok}/{total} ok ({ms}ms)",
+      "total": "⚡ Total: {ms}ms"
+    }
   },
   "smartSuggestion": {
     "title": "Smart Suggestion",
@@ -29,6 +83,16 @@
       "sameAuthor": "同作者论文",
       "sharedTerms": "共享术语论文",
       "sameTags": "同标签论文"
+    },
+    "scoreLabel": "💡 Smart Suggestion · Score {score}",
+    "relativeTime": {
+      "justNow": "刚刚",
+      "minutesAgo": "{n}分钟前",
+      "hoursAgo": "{n}小时前",
+      "yesterday": "昨天",
+      "daysAgo": "{n}天前",
+      "weeksAgo": "{n}周前",
+      "monthsAgo": "{n}月前"
     }
   },
   "chatWithKC": {
@@ -38,7 +102,32 @@
     "clear": "清空对话",
     "loading": "思考中...",
     "empty": "暂无对话,先问个问题吧!",
-    "error": "对话失败,请重试"
+    "error": "对话失败,请重试",
+    "headerTitle": "Ask Anything",
+    "headerHint": "基于当前 Knowledge Card 追问 LLM",
+    "placeholderWith": "向 LLM 提问关于 \"{title}\" 的问题...",
+    "sendBtnLoading": "💬...",
+    "sendBtn": "发送",
+    "sendHint": "Enter 发送 · Shift+Enter 换行",
+    "emptyTitle": "Ask anything about this paper",
+    "emptyHint": "LLM 已读取完整 Knowledge Card，可以追问任何细节",
+    "thinkingDots": "LLM 思考中...",
+    "suggestions": {
+      "method": "这篇论文的 method 是什么？用通俗语言解释",
+      "innovation": "这篇论文的核心创新点是什么？",
+      "limitations": "这篇论文有哪些局限性？怎么改进？",
+      "keyTerm": "什么是 \"{term}\"？为什么重要？",
+      "futureWork": "作者提到的未来工作是什么？",
+      "applications": "这篇论文有什么实际应用场景？",
+      "takeaway": "用一句话总结这篇论文",
+      "advancedDifficulty": "作为一个初学者，我应该先掌握什么前置知识？",
+      "default1": "用一句话总结这篇论文的核心贡献",
+      "default2": "这篇论文有什么实际应用场景？",
+      "default3": "如果我要复现这篇论文，关键步骤是什么？",
+      "default4": "这篇论文和当前领域其他工作相比有什么独特之处？"
+    },
+    "requestFailed": "❌ {error}",
+    "networkError": "❌ 网络错误：{error}"
   },
   "explainKC": {
     "title": "🔍 解释这篇论文",
@@ -51,14 +140,67 @@
       "researcher": "研究员",
       "pm": "产品经理"
     },
-    "loading": "🤖 LLM 正在为该受众重新组织语言..."
+    "audienceOptions": {
+      "highschool": { "label": "高中生", "desc": "通俗类比，避免术语" },
+      "engineer": { "label": "工程师", "desc": "实现细节，系统设计" },
+      "researcher": { "label": "研究员", "desc": "学术深度，对比贡献" },
+      "pm": { "label": "产品经理", "desc": "商业价值，应用场景" }
+    },
+    "loading": "🤖 LLM 正在为该受众重新组织语言...",
+    "headerTitle": "Explain for Audience",
+    "headerHint": "选择受众，让 LLM 重新解释这篇论文",
+    "generating": "⏳ 生成中...",
+    "regenerateBtn": "🚀 为 {audience} 重新解释",
+    "retry": "重试",
+    "forAudience": "为「{audience}」解释",
+    "oneSentence": "📝 One-Sentence Summary",
+    "whyMatters": "Why It Matters",
+    "coreConcept": "Core Concept",
+    "actionable": "Actionable Insight",
+    "shouldAsk": "🤔 你应该追问",
+    "generateFailed": "生成失败",
+    "networkError": "网络错误"
   },
   "compare": {
     "title": "📚 论文对比",
     "selectTwo": "请选择两篇论文进行对比",
     "compareFields": "字段对比",
     "differences": "差异分析",
-    "empty": "暂无可对比的知识卡"
+    "empty": "暂无可对比的知识卡",
+    "empty1Title": "还没有任何 Knowledge Card",
+    "empty1Hint": "先生成一篇论文/URL/PDF 的知识卡，再来这里对比。",
+    "empty2Title": "只有当前 1 篇 KC，无法对比",
+    "empty2Hint": "生成第二篇论文的知识卡后，再来这里对比两篇论文。",
+    "header": "🔄 Compare Papers",
+    "aCurrent": "A (当前):",
+    "b": "B:",
+    "selectHistory": "— 选择历史 KC —",
+    "comparing": "🔄 对比中...",
+    "startCompare": "⚡ 开始对比",
+    "refresh": "🔄 刷新历史",
+    "loadingHint": "正在调用 LLM 对比 6 个维度...",
+    "loadingHint2": "通常需要 5-15 秒",
+    "overallScore": "Overall Difference Score",
+    "readingOrder": "Recommended Reading Order",
+    "breakdown": "📊 6-Dimension Breakdown",
+    "aPaper": "A · Paper",
+    "bPaper": "B · Paper",
+    "radar": "📡 Radar Chart (6 Dimensions)",
+    "aCurrent2": "A · 当前",
+    "bHistory": "B · 历史",
+    "diffLabels": {
+      "highly": "Highly Different",
+      "significantly": "Significantly Different",
+      "moderately": "Moderately Different",
+      "similar": "Similar"
+    },
+    "orderLabels": {
+      "aBeforeB": "📖 A → B（先读 A）",
+      "bBeforeA": "📖 B → A（先读 B）",
+      "parallel": "🔀 Parallel（无顺序要求）"
+    },
+    "failed": "对比失败",
+    "requestFailed": "请求失败"
   },
   "pluginPanel": {
     "title": "🔌 Plugin 面板",
@@ -70,6 +212,33 @@
     "run": "运行",
     "running": "运行中...",
     "success": "✓ 执行成功",
-    "error": "✗ 执行失败"
+    "error": "✗ 执行失败",
+    "marketplace": "Plugin Marketplace",
+    "hint": "一键导出 Knowledge Card 到第三方工具",
+    "installed": "📦 {count} 个已安装",
+    "requireKc": "⚠️ 请先生成 Knowledge Card 后再使用 Plugin 导出",
+    "demoMode": "⚠️ <strong>Demo Mode</strong>：onchain-export 插件用 Web Crypto API 真实计算 SHA-256，并生成 EVM 兼容格式的 mock tx hash，但未实际广播到 X Layer mainnet。v2.3 将接入 OKX Agentic Wallet 完成真实签名与广播。",
+    "onchainHistory": "📜 Onchain History",
+    "times": "{count} 次",
+    "hide": "隐藏",
+    "details": "详情",
+    "config": "⚙️ 配置",
+    "executing": "⏳ 执行中...",
+    "executeBtn": "🚀 {icon} 执行导出",
+    "successLabel": "成功",
+    "failureLabel": "失败",
+    "precheckFailed": "预校验失败：{error}",
+    "execError": "执行异常",
+    "block": "📦 Block #{n}",
+    "gasUsed": "⛽ {gas} OKB",
+    "txLabel": "Tx",
+    "shaLabel": "SHA-256:",
+    "ipfsLabel": "IPFS:",
+    "contractLabel": "Contract:",
+    "relativeTime": {
+      "secondsAgo": "{n}s ago",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago"
+    }
   }
 }
