@@ -6,6 +6,7 @@ import AgentTimeline from '@/components/AgentTimeline'
 import { CompareTab } from '@/components/CompareTab'
 import { SmartSuggestionBanner } from '@/components/SmartSuggestionBanner'
 import { ChatWithKC } from '@/components/ChatWithKC'
+import { ExplainKC } from '@/components/ExplainKC'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
@@ -1562,6 +1563,17 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                 <Card title="💬 Ask Anything" color="#06b6d4" defaultOpen={false} index={13}>
                   <div style={{ marginTop: '4px' }}>
                     <ChatWithKC knowledgeCard={result} />
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* D11 Explain Agent — 为不同受众重新解释论文 */}
+            {result && (
+              <div style={{ marginBottom: '16px' }}>
+                <Card title="🎯 Explain for Audience" color="#f59e0b" defaultOpen={false} index={14}>
+                  <div style={{ marginTop: '4px' }}>
+                    <ExplainKC knowledgeCard={result} />
                   </div>
                 </Card>
               </div>
