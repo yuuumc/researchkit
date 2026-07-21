@@ -24,7 +24,7 @@ export interface AnalyzerPromptContext {
  * 字段说明 — 与原 agent 文件中的 fieldDescriptions 一字一致
  */
 const FIELD_DESCRIPTIONS: Record<string, string> = {
-  authors: 'authors: list of author names from header/byline (if Reader missed them)',
+  authors: 'authors: list of author names from header/byline. If the input text includes an explicit author list, use it. If no authors are mentioned, return empty array [] — do NOT fabricate names.',
   field: 'field: research field, e.g., "NLP", "Computer Vision", "Distributed Systems"',
   year: 'year: publication year (number or null)',
   researchGoals: 'researchGoals: up to 5 goals/questions the work tries to address',
