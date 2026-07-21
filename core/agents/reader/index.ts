@@ -18,6 +18,7 @@ import { buildReaderPrompt } from '@/prompts/reader'
 import { getServerProvider } from '@/lib/server-provider'
 import { PromptBuilder } from '@/core/prompt'
 import { getServerProjectExtension } from '@/lib/server-prompt-extensions'
+import { getServerUserPreferences, getEffectiveOutputLocale } from '@/lib/server-user-preferences'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 export interface ReaderOutput {
@@ -144,15 +145,17 @@ export class ReaderAgent implements AgentInterface {
 
     // ===== Locale 检测（升级版：从 coordinator 传入或本地检测） =====
     const sourceLocale: Locale = payload.source_locale || detectLocale(content)
-    const targetLocale: Locale = payload.target_locale || sourceLocale
+    const targetLocale: Locale = payload.target_locale || getEffectiveOutputLocale(sourceLocale)
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     const provider = getServerProvider()
     const systemPrompt = buildReaderPrompt({ finalLanguageDirective })
+    const prefs = getServerUserPreferences()
     const built = PromptBuilder.build({
       agent: 'Reader',
       system: systemPrompt,
       project: getServerProjectExtension('Reader'),
+      preset: prefs.preset,
     })
     const response = await provider.chat(
       [

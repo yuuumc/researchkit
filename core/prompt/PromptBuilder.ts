@@ -3,13 +3,15 @@
  *
  * 设计：
  * - System 🔒 永远在最前（不可被覆盖）
- * - Project ➕ 追加在 System 末尾（项目级，可空）
+ * - Preset 🎭 角色模板（D5 接入，注入到 System 之后、Project 之前）
+ * - Project ➕ 追加在 Preset 末尾（项目级，可空）
  * - User ➕ 追加在 Project 末尾（单次，可空）
- * - Preset 🎭 D5 接入（暂时占位）
  *
  * 拼接策略：
  * ```
  * {system}
+ *
+ * {preset.persona}    <- D5 新增
  *
  * --- Project Extension ---
  * {project.appendInstructions}
@@ -19,17 +21,15 @@
  *
  * --- User Extension ---
  * {user.appendInstructions}
- *
- * --- User Output Preferences ---
- * {user.outputPreferences}
  * ```
  *
  * 安全限制：
  * - 总长度超 8000 字符时丢 User（Project 保留）
- * - 仍超 8000 时丢 Project（只保留 System）
+ * - 仍超 8000 时丢 Project（保留 System + Preset）
  * - System 永远不被丢弃
  */
 
+import { getPresetTemplate } from '@/config/presets'
 import type { BuiltPrompt, PromptBuildInput } from './types'
 
 const MAX_PROMPT_LENGTH = 8000
@@ -46,6 +46,7 @@ export class PromptBuilder {
    *   system,
    *   project: getProjectExtension('Reader'),
    *   user: { appendInstructions: '今天重点抓 methodology' },
+   *   preset: 'academic',  // D5 角色
    * })
    * const messages = [
    *   { role: 'system', content: built.content },
@@ -58,17 +59,17 @@ export class PromptBuilder {
     const { system, project, user, preset } = input
 
     let content = system
+    let presetUsed = false
     let projectUsed = false
     let userUsed = false
-    let presetUsed = false
 
-    // Preset 占位（D5 接入：注入角色描述到 system 末尾）
+    // Preset — 注入角色 persona（D5）
     if (preset) {
-      presetUsed = true
-      // D5 会在 config/presets.ts 中实现 PRESET_TEMPLATES[preset]
-      // 当前阶段只加一行 marker（不影响 LLM 行为）
-      // content += `\n\n--- Preset (${preset}) ---\n`
-      // 暂不拼接（等 D5 实现）
+      const template = getPresetTemplate(preset)
+      if (template.persona && content.length + template.persona.length + 4 <= MAX_PROMPT_LENGTH) {
+        content += '\n\n' + template.persona
+        presetUsed = true
+      }
     }
 
     // Project extension

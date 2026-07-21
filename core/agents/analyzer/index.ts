@@ -19,6 +19,7 @@ import { buildAnalyzerPrompt } from '@/prompts/analyzer'
 import { getServerProvider } from '@/lib/server-provider'
 import { PromptBuilder } from '@/core/prompt'
 import { getServerProjectExtension } from '@/lib/server-prompt-extensions'
+import { getServerUserPreferences } from '@/lib/server-user-preferences'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 /**
@@ -159,10 +160,12 @@ export class AnalyzerAgent implements AgentInterface {
       extraInstruction,
       prompt_patch,
     })
+    const prefs = getServerUserPreferences()
     const built = PromptBuilder.build({
       agent: 'Analyzer',
       system: systemPrompt,
       project: getServerProjectExtension('Analyzer'),
+      preset: prefs.preset,
     })
     const response = await provider.chat(
       [
