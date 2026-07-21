@@ -15,6 +15,8 @@ import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildTerminologyPrompt } from '@/prompts/terminology'
 import { getServerProvider } from '@/lib/server-provider'
+import { PromptBuilder } from '@/core/prompt'
+import { getServerProjectExtension } from '@/lib/server-prompt-extensions'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 export interface TerminologyTerm {
@@ -83,14 +85,20 @@ export class TerminologyAgent implements AgentInterface {
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     const provider = getServerProvider()
+    const systemPrompt = buildTerminologyPrompt({
+      finalLanguageDirective,
+      analyzerMethodology,
+    })
+    const built = PromptBuilder.build({
+      agent: 'Terminology',
+      system: systemPrompt,
+      project: getServerProjectExtension('Terminology'),
+    })
     const response = await provider.chat(
       [
         {
           role: 'system',
-          content: buildTerminologyPrompt({
-            finalLanguageDirective,
-            analyzerMethodology,
-          }),
+          content: built.content,
         },
         {
           role: 'user',

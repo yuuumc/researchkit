@@ -19,6 +19,8 @@ import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildRecommendationIntentPrompt, buildRecommendationReasonPrompt } from '@/prompts/recommendation'
 import { getServerProvider } from '@/lib/server-provider'
+import { PromptBuilder } from '@/core/prompt'
+import { getServerProjectExtension } from '@/lib/server-prompt-extensions'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 export type RecommendationIntent = 'improve' | 'challenge' | 'apply' | 'survey'
@@ -158,11 +160,17 @@ export class RecommendationAgent implements AgentInterface {
 
     // ===== Step 1: 让 LLM 生成 4 类 intent 关键词 =====
     const provider = getServerProvider()
+    const intentSystem = buildRecommendationIntentPrompt({ finalLanguageDirective })
+    const intentBuilt = PromptBuilder.build({
+      agent: 'Recommendation',
+      system: intentSystem,
+      project: getServerProjectExtension('Recommendation'),
+    })
     const intentResponse = await provider.chat(
       [
         {
           role: 'system',
-          content: buildRecommendationIntentPrompt({ finalLanguageDirective }),
+          content: intentBuilt.content,
         },
         {
           role: 'user',
@@ -237,11 +245,17 @@ ${content.substring(0, 2000)}`,
     // ===== Step 3: LLM 综合每篇的推荐理由 =====
     let finalRecommendations = deduped
     if (deduped.length > 0) {
+      const reasonSystem = buildRecommendationReasonPrompt({ finalLanguageDirective })
+      const reasonBuilt = PromptBuilder.build({
+        agent: 'Recommendation',
+        system: reasonSystem,
+        project: getServerProjectExtension('Recommendation'),
+      })
       const reasonResponse = await provider.chat(
         [
           {
             role: 'system',
-            content: buildRecommendationReasonPrompt({ finalLanguageDirective }),
+            content: reasonBuilt.content,
           },
           {
             role: 'user',

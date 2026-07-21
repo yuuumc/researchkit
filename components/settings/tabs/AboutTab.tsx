@@ -79,8 +79,9 @@ export function AboutTab() {
           <tbody>
             <tr><td style={cellStyle}>D1</td><td style={cellStyle}>LLMProvider Interface</td><td style={{ ...cellStyle, color: '#22c55e' }}>✅ Done</td></tr>
             <tr><td style={cellStyle}>D2</td><td style={cellStyle}>OpenAICompatProvider + migrate</td><td style={{ ...cellStyle, color: '#22c55e' }}>✅ Done</td></tr>
-            <tr><td style={cellStyle}>D3</td><td style={cellStyle}>Settings UI + Provider config</td><td style={{ ...cellStyle, color: '#3b82f6' }}>🟡 Current</td></tr>
-            <tr><td style={cellStyle}>D4-D5</td><td style={cellStyle}>Prompt Builder + Preset + Locale</td><td style={{ ...cellStyle, color: '#94a3b8' }}>⏳ Planned</td></tr>
+            <tr><td style={cellStyle}>D3</td><td style={cellStyle}>Settings UI + Provider config</td><td style={{ ...cellStyle, color: '#22c55e' }}>✅ Done</td></tr>
+            <tr><td style={cellStyle}>D4</td><td style={cellStyle}>PromptBuilder (3-layer) + Prompt Tab</td><td style={{ ...cellStyle, color: '#22c55e' }}>✅ Done</td></tr>
+            <tr><td style={cellStyle}>D5</td><td style={cellStyle}>Prompt Preset + Output Language</td><td style={{ ...cellStyle, color: '#3b82f6' }}>🟡 Next</td></tr>
             <tr><td style={cellStyle}>D6-D7</td><td style={cellStyle}>Cost Dashboard + v2.1 tag</td><td style={{ ...cellStyle, color: '#94a3b8' }}>⏳ Planned</td></tr>
             <tr><td style={cellStyle}>D8-D16</td><td style={cellStyle}>ChainHack Sprint (Compare / Memory / Plugins / Onchain)</td><td style={{ ...cellStyle, color: '#94a3b8' }}>⏳ Planned</td></tr>
           </tbody>

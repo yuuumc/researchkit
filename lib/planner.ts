@@ -20,6 +20,8 @@ import { formatToolsForPrompt } from './tools/registry'
 import { detectLocale, Locale, buildLanguageDirective } from './locale'
 import { buildPlannerPrompt, buildReflectionPrompt, buildReplanPrompt } from '@/prompts/planner'
 import { getServerProvider } from './server-provider'
+import { PromptBuilder } from '@/core/prompt'
+import { getServerProjectExtension } from './server-prompt-extensions'
 
 export interface PlanStep {
   id: string               // 'step-1' | 'step-2' ...
@@ -98,15 +100,21 @@ export const PlannerAgent: Agent = {
     const toolsText = formatToolsForPrompt()
 
     const provider = getServerProvider()
+    const plannerSystem = buildPlannerPrompt({
+      finalLanguageDirective,
+      agentListText,
+      toolsText,
+    })
+    const plannerBuilt = PromptBuilder.build({
+      agent: 'Planner',
+      system: plannerSystem,
+      project: getServerProjectExtension('Planner'),
+    })
     const response = await provider.chat(
       [
         {
           role: 'system',
-          content: buildPlannerPrompt({
-            finalLanguageDirective,
-            agentListText,
-            toolsText,
-          }),
+          content: plannerBuilt.content,
         },
         {
           role: 'user',
@@ -244,11 +252,17 @@ export async function reflect(
 ): Promise<ReflectionResult> {
   try {
     const provider = getServerProvider()
+    const reflectionSystem = buildReflectionPrompt({ languageDirective })
+    const reflectionBuilt = PromptBuilder.build({
+      agent: 'Reflection',
+      system: reflectionSystem,
+      project: getServerProjectExtension('Reflection'),
+    })
     const response = await provider.chat(
       [
         {
           role: 'system',
-          content: buildReflectionPrompt({ languageDirective }),
+          content: reflectionBuilt.content,
         },
         {
           role: 'user',
@@ -359,11 +373,17 @@ export async function replan(
 
   try {
     const provider = getServerProvider()
+    const replanSystem = buildReplanPrompt({ languageDirective })
+    const replanBuilt = PromptBuilder.build({
+      agent: 'Replan',
+      system: replanSystem,
+      project: getServerProjectExtension('Replan'),
+    })
     const response = await provider.chat(
       [
         {
           role: 'system',
-          content: buildReplanPrompt({ languageDirective }),
+          content: replanBuilt.content,
         },
         {
           role: 'user',

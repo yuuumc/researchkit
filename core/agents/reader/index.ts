@@ -16,6 +16,8 @@ import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import { detectLocale, localeToLanguage, localeDisplayName, Locale, buildLanguageDirective } from '@/lib/locale'
 import { buildReaderPrompt } from '@/prompts/reader'
 import { getServerProvider } from '@/lib/server-provider'
+import { PromptBuilder } from '@/core/prompt'
+import { getServerProjectExtension } from '@/lib/server-prompt-extensions'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 export interface ReaderOutput {
@@ -146,9 +148,15 @@ export class ReaderAgent implements AgentInterface {
     const finalLanguageDirective = language_directive || buildLanguageDirective(sourceLocale, targetLocale)
 
     const provider = getServerProvider()
+    const systemPrompt = buildReaderPrompt({ finalLanguageDirective })
+    const built = PromptBuilder.build({
+      agent: 'Reader',
+      system: systemPrompt,
+      project: getServerProjectExtension('Reader'),
+    })
     const response = await provider.chat(
       [
-        { role: 'system', content: buildReaderPrompt({ finalLanguageDirective }) },
+        { role: 'system', content: built.content },
         { role: 'user', content: content.substring(0, 30000) },
       ],
       {
