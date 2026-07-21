@@ -17,6 +17,8 @@ import { AgentMessage, createMessage, AgentCapability } from '@/lib/mcp'
 import type { ReaderOutput } from '@/lib/agents/reader'
 import { buildAnalyzerPrompt } from '@/prompts/analyzer'
 import { getServerProvider } from '@/lib/server-provider'
+import { PromptBuilder } from '@/core/prompt'
+import { getServerProjectExtension } from '@/lib/server-prompt-extensions'
 import type { AgentInterface, AgentContext, AgentResult } from '@/types'
 
 /**
@@ -151,16 +153,22 @@ export class AnalyzerAgent implements AgentInterface {
     }
 
     const provider = getServerProvider()
+    const systemPrompt = buildAnalyzerPrompt({
+      language_directive,
+      schema,
+      extraInstruction,
+      prompt_patch,
+    })
+    const built = PromptBuilder.build({
+      agent: 'Analyzer',
+      system: systemPrompt,
+      project: getServerProjectExtension('Analyzer'),
+    })
     const response = await provider.chat(
       [
         {
           role: 'system',
-          content: buildAnalyzerPrompt({
-            language_directive,
-            schema,
-            extraInstruction,
-            prompt_patch,
-          }),
+          content: built.content,
         },
         {
           role: 'user',

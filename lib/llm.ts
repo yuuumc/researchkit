@@ -11,6 +11,8 @@
 
 import { KNOWLEDGE_CARD_SYSTEM_PROMPT, KNOWLEDGE_CARD_USER_PROMPT } from './prompts'
 import { getServerProvider } from './server-provider'
+import { PromptBuilder } from '@/core/prompt'
+import { getServerProjectExtension } from './server-prompt-extensions'
 
 export interface KnowledgeCard {
   // 基础
@@ -73,9 +75,14 @@ export async function generateKnowledgeCard(
 
   try {
     const provider = getServerProvider()
+    const kbBuilt = PromptBuilder.build({
+      agent: 'KnowledgeBuilder',
+      system: KNOWLEDGE_CARD_SYSTEM_PROMPT,
+      project: getServerProjectExtension('KnowledgeBuilder'),
+    })
     const response = await provider.chat(
       [
-        { role: 'system', content: KNOWLEDGE_CARD_SYSTEM_PROMPT },
+        { role: 'system', content: kbBuilt.content },
         { role: 'user', content: KNOWLEDGE_CARD_USER_PROMPT(content, language) },
       ],
       {
@@ -141,7 +148,7 @@ export async function generateKnowledgeCard(
         console.warn('[LLM] JSON 截断兜底失败，重试一次（max_tokens +1000）')
         const retryResponse = await provider.chat(
           [
-            { role: 'system', content: KNOWLEDGE_CARD_SYSTEM_PROMPT },
+            { role: 'system', content: kbBuilt.content },
             { role: 'user', content: KNOWLEDGE_CARD_USER_PROMPT(content, language) },
           ],
           {
