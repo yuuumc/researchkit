@@ -34,19 +34,33 @@ export interface CompareTabProps {
   currentKC: KnowledgeCard | null
   /** 当前 KC 的来源（URL 或 '用户输入'） */
   currentSource?: string
+  /**
+   * 预选历史 KC id（来自 SmartSuggestionBanner 的 "Compare Now" 跳转）
+   * - D9 新增：当用户点击 banner 的 CTA，page.tsx 传入 preselectId
+   *   CompareTab 收到后自动 setSelectedId + 自动触发对比
+   * - 同 tab 切换时不变（已选则不重复触发）
+   */
+  preselectId?: string | null
+  /**
+   * 预选触发器（每次 preselectId 变化时自增）
+   * - 传入相同 preselectId 但希望强制重新触发对比时使用
+   * - 默认不依赖此字段（preselectId 从 null → 'xxx' 即触发）
+   */
+  preselectTrigger?: number
 }
 
 // ============================================================================
 // 主组件
 // ============================================================================
 
-export function CompareTab({ currentKC, currentSource }: CompareTabProps) {
+export function CompareTab({ currentKC, currentSource, preselectId, preselectTrigger }: CompareTabProps) {
   const [history, setHistory] = useState<KCHistoryEntry[]>([])
   const [selectedId, setSelectedId] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<CompareResult | null>(null)
   const [expandedDim, setExpandedDim] = useState<number | null>(0) // 默认展开第一个维度
+  const [lastPreselectId, setLastPreselectId] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
     setHistory(loadKCHistory())
@@ -55,6 +69,56 @@ export function CompareTab({ currentKC, currentSource }: CompareTabProps) {
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  // D9 Smart Suggestion — 收到 preselectId 时自动选择并触发对比
+  useEffect(() => {
+    if (!preselectId || !currentKC) return
+    if (preselectId === lastPreselectId) return
+    setLastPreselectId(preselectId)
+    setSelectedId(preselectId)
+
+    // 自动触发对比（预选后立即调 API）
+    const selected = history.find(e => e.id === preselectId)
+    if (!selected) {
+      // 历史还没加载，等下次 effect 触发
+      return
+    }
+    void triggerCompare(currentKC, selected)
+  }, [preselectId, preselectTrigger, currentKC, history, lastPreselectId])
+
+  const triggerCompare = useCallback(async (kcA: KnowledgeCard, selected: KCHistoryEntry) => {
+    setLoading(true)
+    setError('')
+    setResult(null)
+
+    try {
+      const resp = await fetch('/api/research/compare-papers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kcA,
+          kcB: selected.knowledgeCard,
+        }),
+      })
+      const data = await resp.json()
+      if (!data.success) {
+        setError(data.error || '对比失败')
+        return
+      }
+      setResult(data.result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '请求失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const handleCompare = async () => {
+    if (!currentKC || !selectedId) return
+    const selected = history.find(e => e.id === selectedId)
+    if (!selected) return
+    await triggerCompare(currentKC, selected)
+  }
 
   // 历史不足 1 篇 + 当前无 KC → Empty State
   if (!currentKC && history.length === 0) {
@@ -76,37 +140,6 @@ export function CompareTab({ currentKC, currentSource }: CompareTabProps) {
         onRefresh={refresh}
       />
     )
-  }
-
-  const handleCompare = async () => {
-    if (!currentKC || !selectedId) return
-    const selected = history.find(e => e.id === selectedId)
-    if (!selected) return
-
-    setLoading(true)
-    setError('')
-    setResult(null)
-
-    try {
-      const resp = await fetch('/api/research/compare-papers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kcA: currentKC,
-          kcB: selected.knowledgeCard,
-        }),
-      })
-      const data = await resp.json()
-      if (!data.success) {
-        setError(data.error || '对比失败')
-        return
-      }
-      setResult(data.result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '请求失败')
-    } finally {
-      setLoading(false)
-    }
   }
 
   return (
