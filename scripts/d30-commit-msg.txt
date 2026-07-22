@@ -1,0 +1,16 @@
+D30 — Smart Suggestion v2
+
+Phase 4 — Smart Suggestion v1 (启发式评分) 升级到 v2 (LLM 判断)，
+保留 v1 启发式作为 fallback。
+
+- 新增 prompts/smart-suggestion.ts — LLM 判断 prompt builder
+- 新增 lib/server-smart-suggestion.ts — server-side LLM 实现
+  (provider.chat json_object, temperature 0.2, top 5 history)
+- 新增 app/api/research/smart-suggestion/route.ts — POST API
+  (LLM 失败自动 fallback 到 v1 启发式)
+- core/prompt/types.ts: AgentName 类型加 'SmartSuggestion'
+- app/page.tsx: import 改 alias computeSmartSuggestionHeuristic，
+  Smart Suggestion 改为调 LLM v2 API，失败 fallback v1
+
+Build: tsc + next build 通过，/ 路由 38.8 kB / 126 kB First Load JS
+新增 /api/research/smart-suggestion 动态路由

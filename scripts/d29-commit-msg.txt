@@ -1,0 +1,16 @@
+D29 — 持久化下沉到 server-side
+
+Phase 3 Day 3 — 把 KC History 和 Cost History 从 client-side localStorage
+迁移到 server-side 文件持久化，让数据能在不同设备/浏览器间共享。
+
+- 新增 lib/persistence/{kc-history-server,cost-history-server}.ts
+  (fs.promises + 原子写入 tmp+rename)
+- 新增 app/api/history/{kc,cost}/route.ts (GET/POST/DELETE)
+- lib/{kc-history,cost-history}.ts 改为 async + fetch API（函数名/类型保持不变）
+- app/page.tsx: appendCostRun / appendKCToHistory / loadKCHistory 加 await
+- components/CompareTab.tsx: refresh 改 async
+- components/settings/tabs/CostTab.tsx: refresh / handleClear 改 async
+- .gitignore: 新增 .researchkit-data/
+
+Build: tsc + next build 通过，/ 路由 38.6 kB / 126 kB First Load JS
+新增 2 个 dynamic API 路由 (/api/history/kc, /api/history/cost)

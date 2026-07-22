@@ -31,6 +31,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerProvider } from '@/lib/server-provider'
 import { setCurrentAgent } from '@/lib/usage-collector'
+import { buildAutoTranslateDirective } from '@/lib/server-user-preferences'
 import type { ChatMessage } from '@/core/llm/provider'
 import type { KnowledgeCard } from '@/types/knowledge'
 
@@ -130,6 +131,9 @@ export async function POST(req: NextRequest) {
  * - 当问题超出 KC 范围时，明确说明"KC 中未涉及"，但可补充常识性知识
  */
 function buildChatSystemPrompt(kc: KnowledgeCard): string {
+  // D39 — Auto Translate: 用户开启时追加 locale 指令(覆盖原 "跟随 KC 语言" 规则)
+  const autoTranslateDirective = buildAutoTranslateDirective()
+
   const parts: string[] = []
 
   parts.push(`You are ResearchKit's Knowledge Card Assistant. You help users deeply understand a research paper by answering follow-up questions based on the Knowledge Card (KC) generated for that paper.`)
@@ -144,7 +148,7 @@ function buildChatSystemPrompt(kc: KnowledgeCard): string {
 - **Use markdown** for readability: bullet lists, **bold** for key terms, \`inline code\` for technical terms, and short paragraphs.
 - **Use the KC's language**: If the KC is in English, answer in English. If Chinese, answer in Chinese. Match the user's question language when in doubt.
 - **Stay focused**: Don't re-summarize the whole paper. Answer the specific question asked.
-- **Suggest follow-ups**: At the end of complex answers, optionally suggest 1-2 related questions the user might want to ask next.`)
+- **Suggest follow-ups**: At the end of complex answers, optionally suggest 1-2 related questions the user might want to ask next.${autoTranslateDirective}`)
 
   return parts.join('\n')
 }
