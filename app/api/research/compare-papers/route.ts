@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerProvider } from '@/lib/server-provider'
 import { setCurrentAgent } from '@/lib/usage-collector'
+import { buildAutoTranslateDirective } from '@/lib/server-user-preferences'
 import type { KnowledgeCard } from '@/types/knowledge'
 import type { CompareResult, CompareDimension } from '@/types/compare'
 import { COMPARE_DIMENSIONS, COMPARE_DIMENSION_LABELS } from '@/types/compare'
@@ -118,6 +119,9 @@ export async function POST(req: NextRequest) {
 // ============================================================================
 
 function buildComparePrompt(kcA: KnowledgeCard, kcB: KnowledgeCard) {
+  // D39 — Auto Translate: 用户开启时追加 locale 指令(覆盖原 "跟随 KC 语言" 规则)
+  const autoTranslateDirective = buildAutoTranslateDirective()
+
   const system = `You are an expert research analyst who compares academic papers across 6 dimensions.
 
 Your task: compare two knowledge cards (Paper A and Paper B) across these 6 dimensions:
@@ -155,7 +159,7 @@ Return STRICT JSON only (no markdown, no comments):
   "summary": "Paper A introduces X, Paper B extends it to Y...",
   "recommendedOrder": "A_before_B",
   "orderReason": "Paper A's foundational concepts help understand Paper B's extension."
-}`
+}${autoTranslateDirective}`
 
   const user = `Compare these two papers:
 
