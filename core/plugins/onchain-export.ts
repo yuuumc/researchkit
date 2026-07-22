@@ -46,7 +46,7 @@ export const onchainExportPlugin: ExportPlugin = {
     id: 'onchain-export',
     name: '链上发布 (X Layer)',
     description: '把 Knowledge Card 锚定到 X Layer 链上（SHA-256 hash + tx hash）',
-    version: '0.9.0-mvp',
+    version: '2.3.0',
     author: 'ResearchKit',
     icon: '⛓️',
     color: '#f97316',
