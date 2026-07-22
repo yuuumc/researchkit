@@ -287,6 +287,11 @@ export interface KnowledgeCardLike {
  * - 其他 locale → 英文标签（统一 fallback）
  * - 兼容旧的 language 字段（'zh' 仍走中文路径）
  */
+// P3-2 — 此 getLabels 与 lib/ui-labels.ts 的 getKcFieldLabels 实现重复，
+// 但语义不同：本函数跟 KC 输出语言（card.language），用于导出文件的标签；
+// getKcFieldLabels 跟 Application Language，用于 UI 显示。
+// 导出文件的标签应跟 KC 内容语言（而非 UI 语言），故保留此函数。
+// v2.4 可考虑抽到 lib/export-labels.ts 与 ui-labels.ts 共享基础字段。
 function getLabels(language?: string, locale?: string) {
   const isZh = language === 'zh' || locale === 'zh-CN'
   return {

@@ -42,10 +42,25 @@ export function LiveThoughts({ thoughts, active }: LiveThoughtsProps) {
   const [collapsed, setCollapsed] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // 自动滚动到底（thoughts 变化时）
+  // P3-6 — 用 requestAnimationFrame 节流 autoscroll
+  // 原因：长流（Planner 1k+ token）时每个 token 都触发 scrollTop=scrollHeight 会 reflow
+  // 策略：rAF 合并多个 token 更新为一帧一次滚动
+  // 比 useLayoutEffect 更安全（不阻塞 paint），比纯 useEffect 更平滑（一帧一次）
+  const rafRef = useRef<number | null>(null)
   useEffect(() => {
-    if (scrollRef.current && !collapsed) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (!scrollRef.current || collapsed) return
+    if (rafRef.current !== null) return // 已有 pending rAF，跳过
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      if (scrollRef.current && !collapsed) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      }
+    })
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
     }
   }, [thoughts, collapsed])
 
