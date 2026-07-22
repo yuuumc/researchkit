@@ -65,8 +65,9 @@ export function CostTab() {
   const [summary, setSummary] = useState<CostHistorySummary>(() => summarizeCostHistory([]))
   const [loaded, setLoaded] = useState(false)
 
-  const refresh = useCallback(() => {
-    const list = loadCostHistory()
+  const refresh = useCallback(async () => {
+    // D29 — loadCostHistory 改为 async + fetch /api/history/cost
+    const list = await loadCostHistory()
     setRuns(list)
     setSummary(summarizeCostHistory(list))
     setLoaded(true)
@@ -76,9 +77,10 @@ export function CostTab() {
     refresh()
   }, [refresh])
 
-  const handleClear = () => {
+  const handleClear = async () => {
     if (!confirm(t('settings.cost.clearConfirm'))) return
-    clearCostHistory()
+    // D29 — clearCostHistory 改为 async
+    await clearCostHistory()
     refresh()
   }
 
