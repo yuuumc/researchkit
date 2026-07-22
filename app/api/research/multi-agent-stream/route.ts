@@ -24,6 +24,9 @@ import {
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+// Vercel serverless function timeout — multi-agent pipeline 通常需要 60-90s
+// Hobby plan 上限 60s，Pro plan 上限 300s，这里设 60s 兜底（Hobby 用户也能跑完）
+export const maxDuration = 60
 
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder()

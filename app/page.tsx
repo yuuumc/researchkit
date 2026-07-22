@@ -336,8 +336,15 @@ export default function Home() {
           }
         }
       } catch (streamErr) {
-        // 流读取过程中被中断（如 HMR 重新编译、页面刷新）
+        // 流读取过程中被中断
+        // 可能原因：
+        //   1. 用户主动操作（页面刷新、切换路由、关闭 tab）→ aborted
+        //   2. Vercel function timeout（10s/60s/300s 视 plan）→ connection reset
+        //   3. DeepSeek API 偶发网络抖动 → stream chunk 中断
+        //   4. 后端主动发 error 事件后 close → 但前端已收到 error 事件并 return，不会进这里
+        // 如果 finalData 已经有部分数据，提示用户重试而非清空
         const msg = String(streamErr instanceof Error ? streamErr.message : streamErr)
+        console.error('[SSE stream] 读取中断:', { msg, hasPartialData: !!finalData })
         if (msg.includes('aborted') || msg.includes('ABORTED') || msg.includes('network') || msg.includes('Failed to fetch')) {
           throw new Error(t('home.errors.streamInterrupted'))
         }
