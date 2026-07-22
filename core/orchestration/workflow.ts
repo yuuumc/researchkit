@@ -55,6 +55,7 @@ export interface WorkflowResult {
  * @param input — 用户输入
  * @param ctx — 语言上下文（sourceLocale / targetLocale / languageDirective）
  * @param onStage — 阶段进度回调（用于 SSE 推送）
+ * @param onAgentToken — D28 流式 token 回调（Reflection / Replan 时实时推送）
  */
 export async function runReflectionLoop(
   plan: Plan,
@@ -62,7 +63,8 @@ export async function runReflectionLoop(
   initialResults: Record<string, any>,
   input: CoordinatorInput,
   ctx: { sourceLocale: Locale; targetLocale: Locale; languageDirective: string },
-  onStage?: (stage: CoordinatorStage) => void
+  onStage?: (stage: CoordinatorStage) => void,
+  onAgentToken?: (agent: string, delta: string) => void
 ): Promise<WorkflowResult> {
   let execution = [...initialExecution]
   let results = { ...initialResults }
@@ -98,7 +100,8 @@ export async function runReflectionLoop(
       plan,
       results,
       currentKnowledgeCard,
-      ctx.languageDirective
+      ctx.languageDirective,
+      onAgentToken
     )
     const reflectionDurationMs = Date.now() - reflectionStart
 
@@ -139,7 +142,8 @@ export async function runReflectionLoop(
       currentKnowledgeCard,
       iter,
       MAX_ITERATIONS,
-      ctx.languageDirective
+      ctx.languageDirective,
+      onAgentToken
     )
     const replanDurationMs = Date.now() - replanStart
     iterationTrace.replan = replanResult

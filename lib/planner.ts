@@ -117,22 +117,28 @@ export const PlannerAgent: Agent = {
     // D6 Cost Dashboard — 标记当前 Agent name（PlannerAgent.handleMessage 内部走的是 v1.0 接口，
     // 但 LLM 调用都在这里发生，所以入口标记一次即可）
     setCurrentAgent('Planner')
-    const response = await provider.chat(
-      [
-        {
-          role: 'system',
-          content: plannerBuilt.content,
-        },
-        {
-          role: 'user',
-          content: `Input preview (first 1500 chars):\n${content.substring(0, 1500)}\n\nTotal length: ${content.length} chars\n\nProduce the plan with steps, tool_calls, and required_schema.`,
-        },
-      ],
+    // D28 — 如果上游传入 on_agent_token callback 且 provider 支持 chatStream，改用流式调用
+    // 用于 SSE 实时推送 Planner token 给前端（"AI 实时思考"效果）
+    const onToken = typeof message.payload.on_agent_token === 'function'
+      ? message.payload.on_agent_token as (delta: string) => void
+      : undefined
+    const plannerMessages = [
       {
-        responseFormat: 'json_object',
-        temperature: 0.4,
-      }
-    )
+        role: 'system' as const,
+        content: plannerBuilt.content,
+      },
+      {
+        role: 'user' as const,
+        content: `Input preview (first 1500 chars):\n${content.substring(0, 1500)}\n\nTotal length: ${content.length} chars\n\nProduce the plan with steps, tool_calls, and required_schema.`,
+      },
+    ]
+    const plannerOptions = {
+      responseFormat: 'json_object' as const,
+      temperature: 0.4,
+    }
+    const response = onToken && provider.chatStream
+      ? await provider.chatStream(plannerMessages, plannerOptions, { onToken })
+      : await provider.chat(plannerMessages, plannerOptions)
 
     const raw = response.content || '{}'
     let parsed: any
@@ -255,7 +261,8 @@ export async function reflect(
   plan: Plan,
   results: Record<string, any>,
   knowledgeCard: any,
-  languageDirective?: string
+  languageDirective?: string,
+  onAgentToken?: (agent: string, delta: string) => void
 ): Promise<ReflectionResult> {
   try {
     const provider = getServerProvider()
@@ -269,33 +276,38 @@ export async function reflect(
     })
     // D6 Cost Dashboard
     setCurrentAgent('Reflection')
-    const response = await provider.chat(
-      [
-        {
-          role: 'system',
-          content: reflectionBuilt.content,
-        },
-        {
-          role: 'user',
-          content: `Plan input_type: ${plan.input_type}\nPlan complexity: ${plan.complexity}\nExecuted agents: ${Object.keys(results).join(', ')}\n\nKnowledge card:\n${JSON.stringify({
-            title: knowledgeCard?.title,
-            summary: knowledgeCard?.summary,
-            takeaway: knowledgeCard?.takeaway,
-            whyItMatters: knowledgeCard?.whyItMatters,
-            innovation: knowledgeCard?.innovation,
-            results: knowledgeCard?.results,
-            limitations: knowledgeCard?.limitations,
-            methodology: knowledgeCard?.methodology,
-            key_terms_count: (knowledgeCard?.key_terms || []).length,
-            applications: knowledgeCard?.applications,
-          }, null, 2)}`,
-        },
-      ],
+    // D28 — 流式透传 Reflection token 给前端
+    const onToken = onAgentToken
+      ? (delta: string) => onAgentToken('Reflection', delta)
+      : undefined
+    const reflectionMessages = [
       {
-        responseFormat: 'json_object',
-        temperature: 0.3,
-      }
-    )
+        role: 'system' as const,
+        content: reflectionBuilt.content,
+      },
+      {
+        role: 'user' as const,
+        content: `Plan input_type: ${plan.input_type}\nPlan complexity: ${plan.complexity}\nExecuted agents: ${Object.keys(results).join(', ')}\n\nKnowledge card:\n${JSON.stringify({
+          title: knowledgeCard?.title,
+          summary: knowledgeCard?.summary,
+          takeaway: knowledgeCard?.takeaway,
+          whyItMatters: knowledgeCard?.whyItMatters,
+          innovation: knowledgeCard?.innovation,
+          results: knowledgeCard?.results,
+          limitations: knowledgeCard?.limitations,
+          methodology: knowledgeCard?.methodology,
+          key_terms_count: (knowledgeCard?.key_terms || []).length,
+          applications: knowledgeCard?.applications,
+        }, null, 2)}`,
+      },
+    ]
+    const reflectionOptions = {
+      responseFormat: 'json_object' as const,
+      temperature: 0.3,
+    }
+    const response = onToken && provider.chatStream
+      ? await provider.chatStream(reflectionMessages, reflectionOptions, { onToken })
+      : await provider.chat(reflectionMessages, reflectionOptions)
 
     const raw = response.content || '{}'
     const parsed = JSON.parse(raw)
@@ -360,7 +372,8 @@ export async function replan(
   knowledgeCard: any,
   iteration: number,
   maxIterations: number = 2,
-  languageDirective?: string
+  languageDirective?: string,
+  onAgentToken?: (agent: string, delta: string) => void
 ): Promise<ReplanResult> {
   if (iteration >= maxIterations) {
     return {
@@ -394,33 +407,38 @@ export async function replan(
     })
     // D6 Cost Dashboard
     setCurrentAgent('Replan')
-    const response = await provider.chat(
-      [
-        {
-          role: 'system',
-          content: replanBuilt.content,
-        },
-        {
-          role: 'user',
-          content: `Original plan:\n${JSON.stringify({ input_type: originalPlan.input_type, complexity: originalPlan.complexity, required_schema: originalPlan.required_schema }, null, 2)}\n\nReflection:\n${JSON.stringify({
-            satisfied: reflection.satisfied,
-            missing: reflection.missing,
-            reasoning: reflection.reasoning,
-            review: reflection.review,
-          }, null, 2)}\n\nExecuted steps (agent + success + output preview):\n${executedSteps.map(e => `  - ${e.step.agent} (success=${e.success}): ${e.output ? JSON.stringify(e.output).substring(0, 200) : 'no output'}`).join('\n')}\n\nCurrent knowledge card:\n${JSON.stringify({
-            title: knowledgeCard?.title,
-            innovation_count: (knowledgeCard?.innovation || []).length,
-            results_count: (knowledgeCard?.results || []).length,
-            methodology: knowledgeCard?.methodology,
-            limitations_count: (knowledgeCard?.limitations || []).length,
-          }, null, 2)}`,
-        },
-      ],
+    // D28 — 流式透传 Replan token 给前端
+    const onToken = onAgentToken
+      ? (delta: string) => onAgentToken('Replan', delta)
+      : undefined
+    const replanMessages = [
       {
-        responseFormat: 'json_object',
-        temperature: 0.2,  // 升级：从默认 1.0 降到 0.2，避免发散
-      }
-    )
+        role: 'system' as const,
+        content: replanBuilt.content,
+      },
+      {
+        role: 'user' as const,
+        content: `Original plan:\n${JSON.stringify({ input_type: originalPlan.input_type, complexity: originalPlan.complexity, required_schema: originalPlan.required_schema }, null, 2)}\n\nReflection:\n${JSON.stringify({
+          satisfied: reflection.satisfied,
+          missing: reflection.missing,
+          reasoning: reflection.reasoning,
+          review: reflection.review,
+        }, null, 2)}\n\nExecuted steps (agent + success + output preview):\n${executedSteps.map(e => `  - ${e.step.agent} (success=${e.success}): ${e.output ? JSON.stringify(e.output).substring(0, 200) : 'no output'}`).join('\n')}\n\nCurrent knowledge card:\n${JSON.stringify({
+          title: knowledgeCard?.title,
+          innovation_count: (knowledgeCard?.innovation || []).length,
+          results_count: (knowledgeCard?.results || []).length,
+          methodology: knowledgeCard?.methodology,
+          limitations_count: (knowledgeCard?.limitations || []).length,
+        }, null, 2)}`,
+      },
+    ]
+    const replanOptions = {
+      responseFormat: 'json_object' as const,
+      temperature: 0.2,  // 升级：从默认 1.0 降到 0.2，避免发散
+    }
+    const response = onToken && provider.chatStream
+      ? await provider.chatStream(replanMessages, replanOptions, { onToken })
+      : await provider.chat(replanMessages, replanOptions)
 
     const raw = response.content || '{}'
     const parsed = JSON.parse(raw)

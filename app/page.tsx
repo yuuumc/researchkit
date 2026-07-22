@@ -8,6 +8,7 @@ import { SmartSuggestionBanner } from '@/components/SmartSuggestionBanner'
 import { ChatWithKC } from '@/components/ChatWithKC'
 import { ExplainKC } from '@/components/ExplainKC'
 import { PluginPanel } from '@/components/PluginPanel'
+import { LiveThoughts, type LiveThought } from '@/components/LiveThoughts'
 import { LanguageDetectBanner } from '@/components/LanguageDetectBanner'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
@@ -64,6 +65,11 @@ export default function Home() {
   // D9 — Compare tab 预选触发器（Smart Suggestion "Compare Now" 跳转用）
   const [comparePreselectId, setComparePreselectId] = useState<string | null>(null)
   const [comparePreselectTrigger, setComparePreselectTrigger] = useState(0)
+  // D28 — Live Thoughts token 流式（用 ref 累积 + throttle setState，避免每个 token 触发 re-render）
+  const [liveThoughts, setLiveThoughts] = useState<LiveThought[]>([])
+  const [liveThoughtsActive, setLiveThoughtsActive] = useState(false)
+  const liveThoughtsBufferRef = useRef<Map<string, string>>(new Map())
+  const liveThoughtsFlushTimerRef = useRef<number | null>(null)
   // D39 — User Preferences (用于 LanguageDetectBanner 的 appLocale/outputLocale + 应用建议)
   const [userPrefs, setUserPrefs] = useState<UserPreferences | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -140,6 +146,14 @@ export default function Home() {
     setSmartSuggestion(null)
     setSuggestionDismissed(false)
     setComparePreselectId(null)
+    // D28 — 重置 Live Thoughts
+    setLiveThoughts([])
+    setLiveThoughtsActive(true)
+    liveThoughtsBufferRef.current = new Map()
+    if (liveThoughtsFlushTimerRef.current !== null) {
+      window.clearTimeout(liveThoughtsFlushTimerRef.current)
+      liveThoughtsFlushTimerRef.current = null
+    }
 
     // 启动可视化进度 — Stage 1 立即触发（Document Loaded）
     // 后续 Stage 2-7 由 SSE 实时推送（/api/research/multi-agent-stream）
@@ -302,6 +316,20 @@ export default function Home() {
               setError(payload.error || t('home.errors.generateFailed'))
               setProgressStage(0)
               return
+            } else if (eventName === 'agent_token') {
+              // D28 — token 流式：累积到 ref，throttle 触发 setState
+              const { agent, delta } = payload as { agent: string; delta: string }
+              const buf = liveThoughtsBufferRef.current
+              buf.set(agent, (buf.get(agent) || '') + delta)
+              // 每 60ms flush 一次（避免每个 token 触发 re-render）
+              if (liveThoughtsFlushTimerRef.current === null) {
+                liveThoughtsFlushTimerRef.current = window.setTimeout(() => {
+                  liveThoughtsFlushTimerRef.current = null
+                  const arr: LiveThought[] = Array.from(liveThoughtsBufferRef.current.entries())
+                    .map(([agent, text]) => ({ agent, text }))
+                  setLiveThoughts(arr)
+                }, 60)
+              }
             }
           }
         }
@@ -399,6 +427,15 @@ export default function Home() {
       setProgressStage(0)
     } finally {
       setLoading(false)
+      // D28 — 关闭 Live Thoughts 浮窗 active 状态（最后一批 token flush + 2.5s 后自动隐藏）
+      if (liveThoughtsFlushTimerRef.current !== null) {
+        window.clearTimeout(liveThoughtsFlushTimerRef.current)
+        liveThoughtsFlushTimerRef.current = null
+      }
+      const finalArr: LiveThought[] = Array.from(liveThoughtsBufferRef.current.entries())
+        .map(([agent, text]) => ({ agent, text }))
+      if (finalArr.length > 0) setLiveThoughts(finalArr)
+      setLiveThoughtsActive(false)
     }
   }
 
@@ -1933,6 +1970,9 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           <span style={{ fontSize: '12px' }}>{t('home.footer.description')}</span>
         </div>
       </main>
+
+      {/* D28 — Live Thoughts 浮窗：实时展示 Planner / Reflection / Replan 的 token 流 */}
+      <LiveThoughts thoughts={liveThoughts} active={liveThoughtsActive} />
     </div>
   )
 }
