@@ -88,6 +88,15 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
   const [executing, setExecuting] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, ExportResult>>({})
 
+  // D32 修复 — 已安装社区插件 manifest（mock 模式下不加载真实代码，仅渲染卡片 + mock 导出）
+  const [communityManifests, setCommunityManifests] = useState<PluginManifest[]>([])
+  const refreshCommunityManifests = useCallback(() => {
+    setCommunityManifests(loadInstalledManifests())
+  }, [])
+  useEffect(() => {
+    refreshCommunityManifests()
+  }, [refreshCommunityManifests])
+
   // D33 — 批量执行队列
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -420,6 +429,15 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
               isCurrentInBatch={batchProgress.currentPluginId === plugin.meta.id}
             />
           ))}
+
+          {/* D32 修复 — 已安装的社区插件（mock 卡片，仅展示 + 返回 mock 提示） */}
+          {communityManifests.length > 0 && (
+            <CommunityPluginCard
+              key={`community-${communityManifests.map(m => m.id).join('-')}`}
+              manifests={communityManifests}
+              disabled={!knowledgeCard}
+            />
+          )}
         </div>
 
         {/* D13 Onchain History — 历史发布记录 */}
@@ -428,7 +446,7 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
         )}
 
         {/* D32 — Plugin Marketplace 远程插件市场 */}
-        <MarketplacePanel />
+        <MarketplacePanel onInstalled={refreshCommunityManifests} />
 
         {/* Demo Mode 声明 */}
         <div
@@ -1267,7 +1285,8 @@ function PluginCard({
 // D32 — MarketplacePanel 远程插件市场
 // ============================================================================
 
-function MarketplacePanel() {
+function MarketplacePanel({ onInstalled }: { onInstalled: () => void }) {
+  const { t } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const [manifests, setManifests] = useState<PluginManifest[]>([])
   const [installed, setInstalled] = useState<PluginManifest[]>([])
@@ -1296,17 +1315,20 @@ function MarketplacePanel() {
     setToast(null)
     const result = await installPlugin(manifest.id)
     if (result.success) {
-      setToast(`✅ "${manifest.name}" 安装成功`)
-      window.setTimeout(() => setToast(null), 3000)
+      // D32 修复 — toast 明示 mock 模式
+      setToast(t('agent.pluginPanel.installToast', { name: manifest.name }))
+      window.setTimeout(() => setToast(null), 3500)
       // 刷新已安装列表
       setInstalled(loadInstalledManifests())
+      // 通知父组件刷新主面板的社区插件卡片
+      onInstalled()
     } else {
-      setError(result.error || '安装失败')
+      setError(result.error || '')
     }
     setInstalling(null)
-  }, [])
+  }, [t, onInstalled])
 
-  const isInstalled = (id: string) => installed.some(m => m.id === id)
+  const isInstalled = (id: string) => installed.some(m => m.id === id) || BUILTIN_PLUGINS.some(p => p.meta.id === id)
 
   // 按 official 排序：官方在前
   const sorted = [...manifests].sort((a, b) => {
@@ -1342,7 +1364,7 @@ function MarketplacePanel() {
         }}
       >
         <span>{expanded ? '▾' : '▸'}</span>
-        <span>🌐 Plugin Marketplace</span>
+        <span>{t('agent.pluginPanel.marketplaceTitle')}</span>
         <span
           style={{
             marginLeft: 'auto',
@@ -1354,7 +1376,7 @@ function MarketplacePanel() {
             color: '#6d28d9',
           }}
         >
-          {manifests.length} 可安装 · {installed.length} 已安装
+          {manifests.length} · {BUILTIN_PLUGINS.length + installed.length} ✓
         </span>
       </button>
 
@@ -1362,7 +1384,7 @@ function MarketplacePanel() {
         <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {manifests.length === 0 && (
             <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '11px', padding: '12px' }}>
-              正在加载市场...
+              {t('agent.pluginPanel.marketplaceLoading')}
             </div>
           )}
 
@@ -1373,12 +1395,13 @@ function MarketplacePanel() {
               installed={isInstalled(m.id)}
               installing={installing === m.id}
               onInstall={() => handleInstall(m)}
+              t={t}
             />
           ))}
 
           {error && (
             <div style={{ padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '4px', fontSize: '10px', color: '#991b1b' }}>
-              ❌ {error}
+              {t('agent.pluginPanel.installFailedToast', { error })}
             </div>
           )}
           {toast && (
@@ -1388,7 +1411,7 @@ function MarketplacePanel() {
           )}
 
           <div style={{ marginTop: '4px', fontSize: '9px', color: '#94a3b8', textAlign: 'center' }}>
-            v2.3 mock marketplace — 真实远程加载待 v2.4 沙箱化
+            {t('agent.pluginPanel.marketplaceFooter')}
           </div>
         </div>
       )}
@@ -1401,11 +1424,13 @@ function MarketplaceCard({
   installed,
   installing,
   onInstall,
+  t,
 }: {
   manifest: PluginManifest
   installed: boolean
   installing: boolean
   onInstall: () => void
+  t: TFn
 }) {
   const category = manifest.category || 'export'
   const rating = manifest.rating || 0
@@ -1468,7 +1493,7 @@ function MarketplaceCard({
           <span>📦 {(manifest.sizeKb || 0)} KB</span>
           <span>👤 {manifest.author}</span>
           {manifest.permissions?.walletSignature && (
-            <span style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ 需要钱包签名</span>
+            <span style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ 钱包签名</span>
           )}
         </div>
       </div>
@@ -1488,9 +1513,217 @@ function MarketplaceCard({
           flexShrink: 0,
         }}
       >
-        {installed ? '✓ 已装' : installing ? '⏳ 安装中...' : '+ 安装'}
+        {installed
+          ? t('agent.pluginPanel.installedBtn')
+          : installing
+            ? t('agent.pluginPanel.installingBtn')
+            : t('agent.pluginPanel.installBtn')}
       </button>
     </div>
+  )
+}
+
+// ============================================================================
+// D32 修复 — CommunityPluginCard：已安装社区插件 mock 卡片
+//
+// mock 模式下不加载真实代码，仅：
+// 1. 展示 manifest 元信息（icon / name / version / tags / 配置 schema）
+// 2. 提供配置表单（值写入 localStorage，但不影响任何导出逻辑）
+// 3. "执行导出" 按钮点击后返回 mock 提示（提示用户真实代码待 v2.4 沙箱化加载）
+//
+// 这是 D32 注释承诺"在 BUILTIN_PLUGINS 之外渲染已安装的市场插件"的兑现
+// ============================================================================
+
+function CommunityPluginCard({
+  manifests,
+  disabled,
+}: {
+  manifests: PluginManifest[]
+  disabled: boolean
+}) {
+  const { t } = useI18n()
+  const [configs, setConfigs] = useState<Record<string, Record<string, string>>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const raw = window.localStorage.getItem('researchkit:community-configs')
+      return raw ? JSON.parse(raw) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  const handleConfigChange = useCallback((pluginId: string, key: string, value: string) => {
+    setConfigs((prev) => {
+      const next = {
+        ...prev,
+        [pluginId]: { ...(prev[pluginId] || {}), [key]: value },
+      }
+      try {
+        window.localStorage.setItem('researchkit:community-configs', JSON.stringify(next))
+      } catch {
+        // 静默
+      }
+      return next
+    })
+  }, [])
+
+  const handleMockExport = useCallback((manifest: PluginManifest) => {
+    window.alert(
+      `⚠️ Mock 模式\n\n` +
+      `插件 "${manifest.name}" 的 manifest 已记录，` +
+      `但 v2.3 未加载真实代码。\n\n` +
+      `配置已保存到 localStorage，等 v2.4 沙箱化加载后即可真实执行。`
+    )
+  }, [])
+
+  return (
+    <>
+      {/* Mock banner — 只显示一次 */}
+      <div
+        key="community-mock-banner"
+        style={{
+          padding: '8px 10px',
+          background: '#fef3c7',
+          border: '1px solid #fcd34d',
+          borderRadius: '6px',
+          fontSize: '10px',
+          color: '#92400e',
+          lineHeight: 1.5,
+        }}
+      >
+        {t('agent.pluginPanel.communityMockBanner')}
+      </div>
+
+      {manifests.map((manifest) => {
+        const config = configs[manifest.id] || {}
+        return (
+          <div
+            key={manifest.id}
+            style={{
+              padding: '12px',
+              background: '#fafafa',
+              border: `1px dashed ${manifest.color}66`,
+              borderRadius: '8px',
+              opacity: 0.9,
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <div
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '4px',
+                  background: `${manifest.color}15`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                }}
+              >
+                {manifest.icon}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f1729' }}>
+                  {manifest.name}
+                </div>
+                <div style={{ fontSize: '9px', color: '#94a3b8' }}>
+                  v{manifest.version} · {manifest.author}
+                </div>
+              </div>
+              <span
+                style={{
+                  fontSize: '9px',
+                  padding: '1px 6px',
+                  background: '#fef3c7',
+                  color: '#92400e',
+                  borderRadius: '3px',
+                  fontWeight: 600,
+                }}
+              >
+                community · mock
+              </span>
+            </div>
+
+            {/* Description */}
+            <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '8px', lineHeight: 1.4 }}>
+              {manifest.description}
+            </div>
+
+            {/* Config form */}
+            {manifest.configSchema && manifest.configSchema.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+                {manifest.configSchema.map((field) => (
+                  <div key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <label style={{ fontSize: '10px', fontWeight: 600, color: '#475569' }}>
+                      {field.label}
+                      {field.required && <span style={{ color: '#dc2626', marginLeft: '2px' }}>*</span>}
+                    </label>
+                    {field.type === 'select' && field.options ? (
+                      <select
+                        value={config[field.key] ?? field.defaultValue ?? ''}
+                        onChange={(e) => handleConfigChange(manifest.id, field.key, e.target.value)}
+                        style={{
+                          padding: '4px 6px',
+                          fontSize: '11px',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '4px',
+                          background: 'white',
+                        }}
+                      >
+                        {field.options.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={field.type === 'password' ? 'password' : 'text'}
+                        value={config[field.key] ?? ''}
+                        placeholder={field.placeholder}
+                        onChange={(e) => handleConfigChange(manifest.id, field.key, e.target.value)}
+                        style={{
+                          padding: '4px 6px',
+                          fontSize: '11px',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '4px',
+                          background: 'white',
+                          fontFamily: field.type === 'password' ? 'ui-monospace, monospace' : 'inherit',
+                        }}
+                      />
+                    )}
+                    {field.helpText && (
+                      <div style={{ fontSize: '9px', color: '#94a3b8' }}>
+                        {field.helpText}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Mock export button */}
+            <button
+              onClick={() => handleMockExport(manifest)}
+              disabled={disabled}
+              style={{
+                ...btnPrimary,
+                width: '100%',
+                padding: '6px 12px',
+                background: disabled ? '#cbd5e1' : `linear-gradient(135deg, ${manifest.color} 0%, ${manifest.color}dd 100%)`,
+                opacity: disabled ? 0.7 : 1,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                fontSize: '11px',
+                fontWeight: 700,
+              }}
+            >
+              {t('agent.pluginPanel.executeBtn', { icon: manifest.icon })}
+            </button>
+          </div>
+        )
+      })}
+    </>
   )
 }
 

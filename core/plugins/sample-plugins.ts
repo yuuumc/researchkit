@@ -121,7 +121,7 @@ export const markdownDownloadPlugin: ExportPlugin = {
   meta: {
     id: 'markdown-download',
     name: 'Markdown 下载',
-    description: '把 Knowledge Card 转为 Markdown 文件（含 frontmatter + 标签）',
+    description: '把 Knowledge Card 转为 Markdown 文件（含 frontmatter + 标签）。💡 与 KC 下方"导出"栏的 Markdown 功能相同，保留作插件架构演示',
     version: '1.0.0',
     author: 'ResearchKit',
     icon: '📝',
