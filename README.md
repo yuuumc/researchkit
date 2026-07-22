@@ -4,20 +4,20 @@
 > chat with it, compare it, explain it, anchor it onchain.
 > Built for **OKX AI Genesis Hackathon** — ASP #6853 on [OKX.AI](https://www.okx.ai/agents/6853).
 
-![version](https://img.shields.io/badge/version-v2.3.1-blue)
+![version](https://img.shields.io/badge/version-v2.3.2-blue)
 ![status](https://img.shields.io/badge/status-live-brightgreen)
 ![i18n](https://img.shields.io/badge/i18n-zh--CN%20%2F%20en--US-orange)
 ![tests](https://img.shields.io/badge/regression-10%2F10-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 🌐 **Live demo**: https://researchkit-mu.vercel.app
-📦 **Latest release**: [v2.3.1 — 安全加固 + Vercel 部署修复 + 插件市场完善](https://github.com/yuuumc/researchkit/releases/tag/v2.3.1)
+📦 **Latest release**: [v2.3.2 — 安全加固迭代](https://github.com/yuuumc/researchkit/releases/tag/v2.3.2)
 
 📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.3.1 Release Notes](./releases/v2.3.1-release-notes.md) · [Branching](./docs/BRANCHING.md)
 
 ---
 
-## Quick Stats (v2.3.1)
+## Quick Stats (v2.3.2)
 
 | Metric | Value |
 |---|---|
@@ -57,6 +57,24 @@ Paste any paper, document, or URL → a team of 6 AI agents reads, analyzes, and
 - ⛓️ **Onchain Export (Dual Mode, D22)** — mock/real swappable via 6 interfaces (TxSigner / IpfsUploader / NonceProvider / GasEstimator / ContractCaller / WalletConnector)
 - 🧪 **Prompt Playground** — 4 presets + temperature / maxTokens / responseFormat controls
 - 🌐 **Full i18n (D36-D40)** — 4-layer language separation architecture + LanguageDetectBanner
+
+### v2.3.2 Highlights
+
+#### 安全加固 Critical
+- **API Key 从 cookie 移除**：apiKey 改存 localStorage（不写 cookie），cookie 只存非敏感字段（type/baseURL/model）+ HttpOnly；server 端 apiKey 从 `OPENAI_API_KEY` env 补全
+
+#### 安全加固 High
+- **工具白名单**：`/api/tools/call` 公开仅 `web_search` + `arxiv`，`filesystem`/`memory` 需 `x-internal-key` header
+- **SSRF 防护**：`/api/settings/test-provider` 校验 baseURL，拒绝 localhost/内网/云元数据 IP
+- **Rate limit**：fetch-url (15/min) + tools/call (20/min)
+- **生产 stack trace 脱敏**：`NODE_ENV === 'production'` 时不返回 `debug.stack`
+- **pluginId 格式校验**：`^[a-z0-9-]{1,64}$`
+
+#### 清账 Medium + Low
+- `redirect: 'error'` → `'follow'`（支持合法 301/302）
+- JSON 截断修复加 `wasRepaired` 标记 + tags 加 `json-repaired`（让 UI 可提示"数据可能不完整"）
+- 删除死代码 `computeWalletNonce`（D22 deprecated 遗留）
+- 删除未使用的 `import OpenAI`（重构遗留）
 
 ### v2.3.1 Highlights
 
@@ -460,7 +478,7 @@ researchkit/
 │   └── demo-video/                    # ≤ 90s demo MP4 files
 ├── .env.local.example
 ├── start.bat                          # Windows launcher
-├── package.json                       # v2.3.1
+├── package.json                       # v2.3.2
 └── README.md
 ```
 
@@ -475,7 +493,7 @@ researchkit/
 | Service type | A2MCP (free, 0 USDT) |
 | Endpoint | `https://researchkit-mu.vercel.app/api/research/multi-agent-stream` |
 | Network | X Layer |
-| Version | v2.3.1 (安全加固 + Vercel 部署修复 + 插件市场完善, 2026-07-22) |
+| Version | v2.3.2 (安全加固迭代, 2026-07-22) |
 | Onchain Mode | `mock (demo)` — 6 swappable interfaces stubbed, real SDK in D23/D24 roadmap |
 | Onchain OS TX | _mock_ (deterministic hash derived from KC content + wallet, never broadcast) |
 
@@ -488,6 +506,8 @@ researchkit/
 | **Major (x.0)** | Architecture-level changes (new agent roles, new protocol) |
 | **Minor (1.x)** | New features in existing architecture (new export, new input mode, new subsystem) |
 | **Patch (1.0.x)** | Bug fixes, prompt tuning, UI polish, quality releases |
+
+**v2.3.2** is a Patch release — security hardening based on `ResearchKit-2.3.1-审查报告.md`. Day 1: C1 Critical (API key moved out of cookie) + H1-H5 High (tool whitelist, SSRF guard, rate limit, stack trace sanitization, pluginId validation). Day 2: M2/M3/L1/L2/L3 cleanup (redirect policy, JSON truncation marker, dead code removal). See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.3.2) for full details.
 
 **v2.3.1** is a Patch release — security hardening (API key never shown in plain, danger styling, double confirmation), Vercel deployment fixes (58s timeout guard, MAX_ITERATIONS=0 on Vercel), and plugin marketplace improvements (deduped community plugins, built-in shown as installed). See [release notes](./releases/v2.3.1-release-notes.md) for full details.
 
