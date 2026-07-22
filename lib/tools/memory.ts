@@ -5,13 +5,24 @@
  * - 这是真 Agent 行为：能记住"之前读过什么"
  * - LLM 可以查询历史记忆，避免重复分析
  * - 持久化到 .researchkit-memory.json（server-side）
+ *
+ * Vercel 适配（D41）：
+ * - Vercel Serverless 函数运行在只读 fs（/var/task/），不能写 process.cwd()
+ * - 检测 VERCEL env var，改用 /tmp/ 作为存储路径
+ * - /tmp/ 在同一 serverless 实例内可读写（但不跨实例持久化），足够 demo 使用
  */
 
 import { promises as fs } from 'fs'
 import path from 'path'
 import { Tool, ToolCallResult } from './types'
 
-const MEMORY_FILE = path.join(process.cwd(), '.researchkit-memory.json')
+function getMemoryFilePath(): string {
+  // Vercel serverless: /var/task/ 是只读的，改用 /tmp/
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    return '/tmp/.researchkit-memory.json'
+  }
+  return path.join(process.cwd(), '.researchkit-memory.json')
+}
 
 interface MemoryEntry {
   id: string
@@ -30,7 +41,7 @@ interface MemoryStore {
 
 async function loadStore(): Promise<MemoryStore> {
   try {
-    const raw = await fs.readFile(MEMORY_FILE, 'utf-8')
+    const raw = await fs.readFile(getMemoryFilePath(), 'utf-8')
     return JSON.parse(raw) as MemoryStore
   } catch {
     return { entries: [] }
@@ -38,7 +49,7 @@ async function loadStore(): Promise<MemoryStore> {
 }
 
 async function saveStore(store: MemoryStore): Promise<void> {
-  await fs.writeFile(MEMORY_FILE, JSON.stringify(store, null, 2), 'utf-8')
+  await fs.writeFile(getMemoryFilePath(), JSON.stringify(store, null, 2), 'utf-8')
 }
 
 function makeId(): string {
