@@ -148,14 +148,18 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Multi-Agent API 错误:', error)
     const errMsg = error instanceof Error ? error.message : String(error)
+    // v2.3.2 (H4) — 生产环境不返回 stack trace，避免信息泄露
+    const isProd = process.env.NODE_ENV === 'production'
     return NextResponse.json(
       {
         success: false,
-        error: `服务器内部错误：${errMsg}`,
-        debug: {
-          name: error instanceof Error ? error.name : 'Unknown',
-          stack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
-        },
+        error: isProd ? '服务器内部错误' : `服务器内部错误：${errMsg}`,
+        ...(isProd ? {} : {
+          debug: {
+            name: error instanceof Error ? error.name : 'Unknown',
+            stack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+          },
+        }),
       },
       { status: 500 }
     )

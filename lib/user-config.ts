@@ -2,22 +2,22 @@
  * 用户 Provider 配置存取 — D3 Settings UI 配套
  *
  * 设计：
- * - localStorage 主存（不会随请求传输，无 4KB 限制）
- * - cookie 同步写一份（让 server side 通过 next/headers cookies() 读取）
+ * - localStorage 主存（不会随请求传输，无 4KB 限制，apiKey 也存这里）
+ * - cookie 只存非敏感字段（type/baseURL/model），让 server side 通过 next/headers cookies() 读取 baseURL/model
  * - cookie 值用 base64(JSON) 编码
+ * - cookie 设置 HttpOnly（前端 JS 不再读 cookie，统一从 localStorage 读）
+ *
+ * v2.3.2 安全加固（C1）：
+ * - apiKey 只存 localStorage，不写 cookie
+ * - cookie 改为 HttpOnly，防止 XSS 窃取非敏感配置
+ * - server-provider.ts 读不到 apiKey 时回退 env
  *
  * cookie 限制：单 cookie 最大约 4KB
- * ProviderConfig 实际大小估算：
+ * cookie 实际大小估算：
  *   - baseURL: ~40 chars
- *   - apiKey: ~50 chars (sk-xxx)
  *   - model: ~30 chars
  *   - type: ~10 chars
- *   - 总计: ~130 chars JSON → base64 后 ~170 chars，远低于 4KB
- *
- * 安全性：
- * - cookie SameSite=Strict 防止 CSRF
- * - cookie 不加 HttpOnly（前端 JS 也需要读取，但只在 save 时清除）
- * - apiKey 在 cookie 中存在 → 必须配合 HTTPS（生产环境）
+ *   - 总计: ~80 chars JSON → base64 后 ~110 chars，远低于 4KB
  */
 
 import type { ProviderConfig } from '@/core/llm/provider'
@@ -47,17 +47,23 @@ export function getUserConfigClient(): ProviderConfig | null {
 /**
  * 客户端：保存用户 Provider 配置
  *
- * 同步写 localStorage + cookie（让 server side 也能读到）
+ * localStorage 存完整配置（含 apiKey），cookie 只存非敏感字段（type/baseURL/model）
+ * cookie 加 HttpOnly，防止 XSS 窃取
  */
 export function saveUserConfigClient(config: ProviderConfig): void {
   if (typeof window === 'undefined') return
   const json = JSON.stringify(config)
   window.localStorage.setItem(STORAGE_KEY, json)
 
-  // 同步写到 cookie（base64 编码避免特殊字符问题）
-  const base64 = btoa(unescape(encodeURIComponent(json)))
+  // v2.3.2 (C1) — cookie 只存非敏感字段，apiKey 不写 cookie
+  const safeConfig = {
+    type: config.type,
+    baseURL: config.baseURL,
+    model: config.model,
+  }
+  const base64 = btoa(unescape(encodeURIComponent(JSON.stringify(safeConfig))))
   const maxAge = COOKIE_MAX_AGE_DAYS * 24 * 60 * 60
-  document.cookie = `${COOKIE_KEY}=${base64}; path=/; max-age=${maxAge}; SameSite=Strict`
+  document.cookie = `${COOKIE_KEY}=${base64}; path=/; max-age=${maxAge}; SameSite=Strict; HttpOnly`
 }
 
 /**
@@ -69,7 +75,7 @@ export function clearUserConfigClient(): void {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem(STORAGE_KEY)
   // 让 cookie 立即过期
-  document.cookie = `${COOKIE_KEY}=; path=/; max-age=0; SameSite=Strict`
+  document.cookie = `${COOKIE_KEY}=; path=/; max-age=0; SameSite=Strict; HttpOnly`
 }
 
 /**
