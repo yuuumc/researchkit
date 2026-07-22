@@ -13,9 +13,10 @@ import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 // D43 — magic numbers 集中到 config/orchestration.ts
 import { RATE_LIMIT_BATCH } from '@/config/orchestration'
 
-// TODO P2-8: 此 legacy endpoint 仍直接调 lib/llm.ts，绕过 cost dashboard 的 token 归因。
+// TODO P2-8 (v2.4 — 不会在 hackathon 前修): 此 legacy endpoint 仍直接调 lib/llm.ts，绕过 cost dashboard 的 token 归因。
 // v2.4 应改为走 coordinate()，或在 lib/llm.ts 入口包 beginCollection()/endCollection()。
 // 详见 docs/v2.3.0-code-review-2026-07-22.md P2-8
+// v2.3.2 (L2) — 明确标注为 v2.4 backlog，不在 hackathon 截止 (7/28) 前修复
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 

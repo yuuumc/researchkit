@@ -6,8 +6,6 @@
  * （research_goals / innovation / experiments / results / limitations / future_work / applications / datasets 等）
  */
 
-import OpenAI from 'openai'
-
 export type InputType = 'text' | 'url' | 'pdf'
 
 export interface ParsedContent {
@@ -97,11 +95,16 @@ export async function fetchFromUrl(url: string): Promise<ParsedContent> {
     throw new Error(`拒绝抓取内网地址：${hostname}（防止 SSRF）`)
   }
 
+  // v2.3.2 (M2) — redirect: 'follow'（之前 'error' 会拒绝合法 301/302，如 http→https 升级）
+  // 限制最多 5 次重定向，防止无限重定向
   const response = await fetch(trimmedUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; ResearchKit/1.0)',
     },
-    redirect: 'error',  // 拒绝重定向，避免绕过 SSRF 校验
+    redirect: 'follow',
+  }).catch(err => {
+    // 重定向次数超限或其他网络错误
+    throw new Error(`抓取失败：${err instanceof Error ? err.message : '网络错误'}`)
   })
 
   if (!response.ok) {

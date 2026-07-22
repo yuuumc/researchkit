@@ -272,13 +272,8 @@ function sortObjectKeys(obj: any): any {
 }
 
 /**
- * 计算钱包已发布的 KC 数 — D22 后已迁移到 MockNonceProvider
- * 保留此占位避免破坏 import（如果有外部引用）
- * @deprecated D22 — 改用 services.nonceProvider.getNonce()
+ * v2.3.2 (L3) — computeWalletNonce 死代码已删除（D22 起改用 services.nonceProvider.getNonce()）
  */
-function computeWalletNonce(_walletAddress: string): number {
-  return 1
-}
 
 function formatRelativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp

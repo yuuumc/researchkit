@@ -102,6 +102,7 @@ export async function generateKnowledgeCard(
 
     // 解析 JSON — 加截断容错（max_tokens 不够时 LLM 会输出不完整 JSON）
     let parsed: any
+    let wasRepaired = false  // v2.3.2 (M3) — 跟踪 JSON 是否被截断修复过
     try {
       parsed = JSON.parse(rawContent)
     } catch (parseErr) {
@@ -145,6 +146,7 @@ export async function generateKnowledgeCard(
 
       try {
         parsed = JSON.parse(repaired)
+        wasRepaired = true  // v2.3.2 (M3) — 标记数据经过截断修复
         console.warn('[LLM] JSON 截断兜底成功，原始长度=' + rawContent.length + '，修复后长度=' + repaired.length)
       } catch (repairErr) {
         // 修复失败 → 重试一次，加大 max_tokens
@@ -200,7 +202,9 @@ export async function generateKnowledgeCard(
       actionable_takeaways: parsed.actionable_takeaways || parsed.applications || [],
       references: parsed.references || [],
 
-      tags: ['researchkit', ...(parsed.tags || [])],
+      tags: ['researchkit', ...(parsed.tags || []),
+        // v2.3.2 (M3) — JSON 截断修复标记，让 UI 可以提示用户"数据可能不完整"
+        ...(wasRepaired ? ['json-repaired'] : [])],
     }
 
     // 基础验证

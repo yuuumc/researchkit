@@ -28,6 +28,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'pluginId is required' }, { status: 400 })
     }
 
+    // v2.3.2 (H5) — pluginId 格式校验（防御深度）
+    // 仅允许小写字母、数字、短横线，长度 1-64
+    if (!/^[a-z0-9-]{1,64}$/.test(pluginId)) {
+      return NextResponse.json(
+        { error: `Invalid pluginId format: "${pluginId}" (only lowercase letters, digits, and hyphens allowed, max 64 chars)` },
+        { status: 400 }
+      )
+    }
+
     const manifest = findManifest(pluginId)
     if (!manifest) {
       return NextResponse.json({ error: `Plugin "${pluginId}" not found in marketplace` }, { status: 404 })
