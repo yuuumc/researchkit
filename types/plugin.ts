@@ -1,11 +1,12 @@
 /**
- * Plugin System 类型定义 — D12
+ * Plugin System 类型定义 — D12 v2.2 起步 / D31 v2 扩展
  *
- * 设计目标：
- * - 让 Knowledge Card 可以导出到任意第三方工具（Notion / Obsidian / 飞书 / IPFS / Onchain）
- * - 插件可热插拔：注册 + 启用/禁用 + 调用
- * - v2.2 起步：定义接口 + 注册表 + 2 个示例插件（JSON 下载 / Markdown 下载）
- * - v2.3 扩展：Onchain Export Plugin（D13）+ Notion / Obsidian Publish
+ * v2.2 起步：定义接口 + 注册表 + 2 个示例插件（JSON 下载 / Markdown 下载）
+ * v2.3 扩展：Onchain Export Plugin（D13）+ Notion / Obsidian Publish
+ * v2.3 D31 扩展：
+ * - 新增 category（区分 export/source/sync 三类插件）
+ * - 新增 PluginLifecycle 钩子（onInstall/onEnable/onDisable/onUninstall）
+ * - 新增 PluginPermissions（声明插件可访问的 KC 字段 + 外部 API）
  *
  * 三层架构：
  *   ┌────────────────────────────────────────────┐
@@ -20,9 +21,90 @@
  * - export(kc, options) — 主入口，返回 ExportResult
  * - getCapabilities() — 描述插件能力（UI 用）
  * - validate?(kc) — 可选，预校验 KC 是否满足插件要求（如必须有 authors）
+ * - lifecycle?(event, ctx) — D31 可选，生命周期钩子
  */
 
 import type { KnowledgeCard } from './knowledge'
+
+// ============================================================================
+// D31 v2 扩展类型 — 插件类别 / 生命周期 / 权限
+// ============================================================================
+
+/**
+ * D31 — 插件类别
+ *
+ * - 'export': 把 KC 导出到第三方（Notion / Obsidian / IPFS / Onchain）— v2.2 已有
+ * - 'source': 从外部拉取内容作为 ResearchKit 输入（arXiv / RSS / Pocket）— v2.3 预留
+ * - 'sync':   双向同步（Notion 双向 / Obsidian Sync）— v2.3 预留
+ */
+export type PluginCategory = 'export' | 'source' | 'sync'
+
+/**
+ * D31 — 插件生命周期事件
+ *
+ * 钩子触发时机：
+ * - onInstall:    用户首次安装插件（UI 点"安装"按钮时）
+ * - onEnable:     插件从 disabled 切换到 enabled
+ * - onDisable:    插件从 enabled 切换到 disabled
+ * - onUninstall:  用户卸载插件
+ *
+ * 钩子用途：
+ * - 初始化外部资源（如建立 Notion database）
+ * - 清理外部资源（如删除 webhook）
+ * - 记录埋点
+ *
+ * 钩子约定：
+ * - 必须捕获所有异常（不能 throw）
+ * - 失败时返回 error，UI 显示但不阻塞安装/启用
+ */
+export type PluginLifecycleEvent =
+  | 'onInstall'
+  | 'onEnable'
+  | 'onDisable'
+  | 'onUninstall'
+
+export interface PluginLifecycleContext {
+  /** 用户配置 */
+  config: PluginConfig
+  /** 用户 ID（未来用，v2.3 暂未实现） */
+  userId?: string
+}
+
+export interface PluginLifecycleResult {
+  success: boolean
+  /** 成功/失败消息（UI 显示） */
+  message?: string
+  /** 失败原因 */
+  error?: string
+}
+
+export interface PluginLifecycle {
+  onInstall?(ctx: PluginLifecycleContext): Promise<PluginLifecycleResult>
+  onEnable?(ctx: PluginLifecycleContext): Promise<PluginLifecycleResult>
+  onDisable?(ctx: PluginLifecycleContext): Promise<PluginLifecycleResult>
+  onUninstall?(ctx: PluginLifecycleContext): Promise<PluginLifecycleResult>
+}
+
+/**
+ * D31 — 插件权限声明
+ *
+ * 用户在 UI 上能看到插件会访问哪些 KC 字段 + 调用哪些外部 API
+ * 未来 v2.4 接入沙箱时，权限用于运行时拦截（v2.3 仅做 UI 声明）
+ */
+export interface PluginPermissions {
+  /** 可读取的 KC 字段（如 ['title', 'authors', 'methodology']） */
+  kcFields?: string[]
+  /** 可读取的 KC 元数据（如 ['source', 'inputType']） */
+  kcMeta?: string[]
+  /** 调用的外部 API（如 ['api.notion.com', 'api.ipfs.com']） */
+  externalApis?: string[]
+  /** 是否需要网络访问 */
+  network?: boolean
+  /** 是否需要写入本地文件 */
+  filesystem?: boolean
+  /** 是否需要钱包签名（onchain 类插件） */
+  walletSignature?: boolean
+}
 
 // ============================================================================
 // 插件接口
@@ -68,6 +150,8 @@ export interface PluginMeta {
   configSchema?: PluginConfigField[]
   /** 主页 URL（可选，社区插件用） */
   homepage?: string
+  /** D31 — 插件类别（默认 'export'） */
+  category?: PluginCategory
 }
 
 /**
@@ -162,6 +246,21 @@ export interface ExportPlugin {
    * - publish 类型插件必须返回 url（用户可点击访问）
    */
   export(ctx: PluginContext): Promise<ExportResult>
+
+  /**
+   * D31 — 生命周期钩子（可选）
+   *
+   * 触发时机见 PluginLifecycleEvent
+   * registry.triggerLifecycle() 会调用对应钩子
+   */
+  lifecycle?: PluginLifecycle
+
+  /**
+   * D31 — 权限声明（可选）
+   *
+   * UI 在卡片详情中展示，未来 v2.4 用于沙箱拦截
+   */
+  permissions?: PluginPermissions
 }
 
 // ============================================================================

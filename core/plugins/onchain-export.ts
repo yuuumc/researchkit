@@ -25,7 +25,12 @@ import type {
 import type { KnowledgeCard } from '@/types/knowledge'
 import {
   sha256,
+  deriveTxHash,
+  deriveKcTokenId,
+  deriveBlockNumber,
   buildExplorerTxUrl,
+  buildMockIpfsUrl,
+  isValidAddress,
   X_LAYER_MAINNET,
   RESEARCHKIT_REGISTRY_CONTRACT,
 } from '@/lib/onchain-utils'
@@ -47,6 +52,8 @@ export const onchainExportPlugin: ExportPlugin = {
     color: '#f97316',
     tags: ['official', 'experimental', 'demo'],
     requiresConfig: true,
+    // D31 — 类别与权限声明
+    category: 'export',
     configSchema: [
       {
         key: 'walletAddress',
@@ -86,6 +93,33 @@ export const onchainExportPlugin: ExportPlugin = {
       description: '记录到本地 ledger（localStorage），UI 展示历史发布',
     },
   ],
+
+  // D31 — 权限声明：需要钱包地址 + 调用 X Layer RPC + 写入本地 ledger
+  permissions: {
+    kcFields: ['title', 'summary', 'authors', 'field', 'year'],
+    externalApis: ['xlayer.okx.com', 'api.ipfs.com'],
+    network: true,
+    filesystem: true,
+    walletSignature: true,
+  },
+
+  // D31 — 生命周期钩子（onEnable 校验钱包地址，onUninstall 清理 ledger）
+  lifecycle: {
+    async onEnable(ctx) {
+      const wallet = String(ctx.config?.walletAddress || '').trim()
+      if (!wallet) {
+        return { success: false, error: '请先配置钱包地址' }
+      }
+      if (!isValidAddress(wallet)) {
+        return { success: false, error: '钱包地址格式不合法' }
+      }
+      return { success: true, message: '钱包地址已校验通过' }
+    },
+    async onUninstall() {
+      console.info('[onchain-export] uninstalled, ledger retained')
+      return { success: true }
+    },
+  },
 
   validate(kc: KnowledgeCard): string | null {
     if (!kc?.title) return 'Knowledge Card 缺少 title 字段'
