@@ -30,6 +30,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { KnowledgeCard } from '@/types/knowledge'
 import type { ExportPlugin, ExportResult, PluginState, PluginConfig, PluginPermissions } from '@/types/plugin'
+import type { PluginManifest } from '@/types/plugin-manifest'
 import { jsonDownloadPlugin, markdownDownloadPlugin } from '@/core/plugins/sample-plugins'
 import { onchainExportPlugin, RESEARCHKIT_REGISTRY_CONTRACT } from '@/core/plugins/onchain-export'
 import {
@@ -42,6 +43,11 @@ import { loadLedger, type OnchainRecord } from '@/lib/onchain-ledger'
 import { shortAddress } from '@/lib/onchain-utils'
 import { btnPrimary, btnSecondary } from '@/lib/ui-styles'
 import { pluginRegistry } from '@/core/plugins/registry'
+import {
+  loadMarketplace,
+  installPlugin,
+  loadInstalledManifests,
+} from '@/lib/plugin-marketplace'
 import { useI18n } from '@/components/I18nProvider'
 
 type TFn = (key: string, params?: Record<string, string | number>) => string
@@ -267,6 +273,9 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
         {knowledgeCard && (
           <OnchainHistory knowledgeCard={knowledgeCard} refreshTrigger={executing} />
         )}
+
+        {/* D32 — Plugin Marketplace 远程插件市场 */}
+        <MarketplacePanel />
 
         {/* Demo Mode 声明 */}
         <div
@@ -865,6 +874,237 @@ function PluginCard({
           to { opacity: 1; transform: translateY(0); }
         }
       ` }} />
+    </div>
+  )
+}
+
+// ============================================================================
+// D32 — MarketplacePanel 远程插件市场
+// ============================================================================
+
+function MarketplacePanel() {
+  const [expanded, setExpanded] = useState(false)
+  const [manifests, setManifests] = useState<PluginManifest[]>([])
+  const [installed, setInstalled] = useState<PluginManifest[]>([])
+  const [installing, setInstalling] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    const [list, installedList] = await Promise.all([
+      loadMarketplace(),
+      Promise.resolve(loadInstalledManifests()),
+    ])
+    setManifests(list)
+    setInstalled(installedList)
+  }, [])
+
+  useEffect(() => {
+    if (expanded && manifests.length === 0) {
+      refresh()
+    }
+  }, [expanded, manifests.length, refresh])
+
+  const handleInstall = useCallback(async (manifest: PluginManifest) => {
+    setInstalling(manifest.id)
+    setError(null)
+    setToast(null)
+    const result = await installPlugin(manifest.id)
+    if (result.success) {
+      setToast(`✅ "${manifest.name}" 安装成功`)
+      window.setTimeout(() => setToast(null), 3000)
+      // 刷新已安装列表
+      setInstalled(loadInstalledManifests())
+    } else {
+      setError(result.error || '安装失败')
+    }
+    setInstalling(null)
+  }, [])
+
+  const isInstalled = (id: string) => installed.some(m => m.id === id)
+
+  // 按 official 排序：官方在前
+  const sorted = [...manifests].sort((a, b) => {
+    if (a.official !== b.official) return a.official ? -1 : 1
+    return (b.installCount || 0) - (a.installCount || 0)
+  })
+
+  return (
+    <div
+      style={{
+        marginTop: '12px',
+        padding: '10px 12px',
+        background: 'linear-gradient(135deg, #f0f9ff 0%, #faf5ff 100%)',
+        border: '1px solid #c4b5fd',
+        borderRadius: '8px',
+      }}
+    >
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+          padding: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: '#5b21b6',
+          fontSize: '12px',
+          fontWeight: 700,
+        }}
+      >
+        <span>{expanded ? '▾' : '▸'}</span>
+        <span>🌐 Plugin Marketplace</span>
+        <span
+          style={{
+            marginLeft: 'auto',
+            background: '#ede9fe',
+            padding: '1px 6px',
+            borderRadius: '999px',
+            fontSize: '10px',
+            fontWeight: 600,
+            color: '#6d28d9',
+          }}
+        >
+          {manifests.length} 可安装 · {installed.length} 已安装
+        </span>
+      </button>
+
+      {expanded && (
+        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {manifests.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '11px', padding: '12px' }}>
+              正在加载市场...
+            </div>
+          )}
+
+          {sorted.map((m) => (
+            <MarketplaceCard
+              key={m.id}
+              manifest={m}
+              installed={isInstalled(m.id)}
+              installing={installing === m.id}
+              onInstall={() => handleInstall(m)}
+            />
+          ))}
+
+          {error && (
+            <div style={{ padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '4px', fontSize: '10px', color: '#991b1b' }}>
+              ❌ {error}
+            </div>
+          )}
+          {toast && (
+            <div style={{ padding: '6px 8px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '4px', fontSize: '10px', color: '#166534' }}>
+              {toast}
+            </div>
+          )}
+
+          <div style={{ marginTop: '4px', fontSize: '9px', color: '#94a3b8', textAlign: 'center' }}>
+            v2.3 mock marketplace — 真实远程加载待 v2.4 沙箱化
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MarketplaceCard({
+  manifest,
+  installed,
+  installing,
+  onInstall,
+}: {
+  manifest: PluginManifest
+  installed: boolean
+  installing: boolean
+  onInstall: () => void
+}) {
+  const category = manifest.category || 'export'
+  const rating = manifest.rating || 0
+
+  return (
+    <div
+      style={{
+        padding: '8px 10px',
+        background: 'white',
+        border: `1px solid ${installed ? '#a7f3d0' : '#e2e8f0'}`,
+        borderRadius: '6px',
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'flex-start',
+        opacity: installing ? 0.6 : 1,
+      }}
+    >
+      <div
+        style={{
+          width: '28px',
+          height: '28px',
+          borderRadius: '6px',
+          background: `${manifest.color}15`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '16px',
+          flexShrink: 0,
+        }}
+      >
+        {manifest.icon}
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f1729' }}>
+            {manifest.name}
+          </span>
+          <span style={{ fontSize: '9px', padding: '1px 4px', background: '#f1f5f9', color: '#64748b', borderRadius: '3px' }}>
+            v{manifest.version}
+          </span>
+          {manifest.official ? (
+            <span style={{ fontSize: '9px', padding: '1px 4px', background: '#dbeafe', color: '#1e40af', borderRadius: '3px', fontWeight: 600 }}>
+              official
+            </span>
+          ) : (
+            <span style={{ fontSize: '9px', padding: '1px 4px', background: '#fef3c7', color: '#92400e', borderRadius: '3px', fontWeight: 600 }}>
+              community
+            </span>
+          )}
+          <span style={{ fontSize: '9px', padding: '1px 4px', background: '#f8fafc', color: '#475569', borderRadius: '3px' }}>
+            {category}
+          </span>
+        </div>
+        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px', lineHeight: 1.4 }}>
+          {manifest.description}
+        </div>
+        <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '3px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <span>⭐ {rating.toFixed(1)}</span>
+          <span>📦 {(manifest.sizeKb || 0)} KB</span>
+          <span>👤 {manifest.author}</span>
+          {manifest.permissions?.walletSignature && (
+            <span style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ 需要钱包签名</span>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={onInstall}
+        disabled={installed || installing}
+        style={{
+          padding: '4px 10px',
+          background: installed ? '#dcfce7' : installing ? '#e2e8f0' : btnPrimary.background,
+          color: installed ? '#166534' : installing ? '#64748b' : 'white',
+          border: 'none',
+          borderRadius: '4px',
+          fontSize: '10px',
+          fontWeight: 700,
+          cursor: installed || installing ? 'default' : 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        {installed ? '✓ 已装' : installing ? '⏳ 安装中...' : '+ 安装'}
+      </button>
     </div>
   )
 }
