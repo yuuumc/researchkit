@@ -40,6 +40,8 @@ export type AgentName =
   | 'Planner'
   | 'Reflection'
   | 'Replan'
+  // D30 — Smart Suggestion v2 也走 PromptBuilder（让 LLM 判断相关论文）
+  | 'SmartSuggestion'
 
 /**
  * Project Extension — 项目级 prompt 扩展
