@@ -1,0 +1,179 @@
+{
+  "title": "ResearchKit OS",
+  "subtitle": "Turn any paper into a structured knowledge card",
+  "heroHint": "AI Research Agent · Paper/Document → Structured Knowledge Card + Knowledge Graph + Recommended Reading",
+  "inputModes": {
+    "text": "Text",
+    "url": "URL",
+    "pdf": "PDF",
+    "batch": "Batch"
+  },
+  "modeTabs": {
+    "text": "📝 Text",
+    "url": "🔗 URL",
+    "pdf": "📄 PDF",
+    "batch": "⚡ Batch"
+  },
+  "placeholders": {
+    "text": "Paste paper abstract / full text here...",
+    "textLong": "Paste paper abstract, technical doc, or any research content...",
+    "url": "https://arxiv.org/abs/...",
+    "urlLong": "https://arxiv.org/abs/2301.00001 or any web link",
+    "batch": "One URL per line...",
+    "batchLong": "One URL per line, up to 10:\nhttps://arxiv.org/abs/1706.03762\nhttps://arxiv.org/abs/1810.04805\nhttps://arxiv.org/abs/2005.14165",
+    "batchHint": "⚡ 3 concurrent · brief mode by default (saves tokens) · failed URLs won't interrupt others"
+  },
+  "pdf": {
+    "dropHint": "Click to upload or drag PDF here",
+    "dropHint2": "Max 10MB · Text-based PDF supported",
+    "selected": "Click to reselect",
+    "wrongType": "Only PDF files are supported",
+    "tooLarge": "PDF too large ({size} MB), max 10 MB supported"
+  },
+  "buttons": {
+    "generate": "⚡ Generate Knowledge Card",
+    "generateBatch": "⚡ Generate Batch",
+    "uploadPdf": "Drag & drop PDF or click to upload",
+    "copy": "Copy",
+    "copyMarkdown": "Copy Markdown",
+    "copyObsidian": "Copy Obsidian",
+    "copyMindmap": "Copy Mermaid",
+    "reset": "Reset",
+    "compare": "Compare",
+    "generating": "⏳ Generating...",
+    "loadExample": "📋 Load Example"
+  },
+  "errors": {
+    "noInputText": "Please enter paper/document content",
+    "noInputUrl": "Please enter a URL",
+    "noInputBatch": "Please enter multiple URLs (one per line)",
+    "noPdf": "Please upload a PDF file",
+    "urlFetchFailed": "URL fetch failed",
+    "urlTooShort": "URL fetched content too short ({len} chars). May be a JS-rendered page, try pasting content in Text mode.",
+    "sseFailed": "SSE connection failed: {status} {detail}",
+    "networkInterrupted": "Network request interrupted (page refresh or hot reload). Please retry in 1-2 seconds.",
+    "streamInterrupted": "Connection interrupted during generation. Please retry in 1-2 seconds.",
+    "generateFailed": "Generation failed",
+    "incompleteData": "Generation failed: incomplete data returned",
+    "requestFailed": "Request failed",
+    "pdfParseFailed": "PDF parse failed",
+    "copyFailed": "Copy failed: please select text manually",
+    "mermaidCdnFailed": "Mermaid CDN load failed",
+    "mermaidRenderFailed": "Mermaid render failed",
+    "mermaidSourceFailed": "⚠️ Mermaid source render failed (Knowledge Graph not affected): {error}",
+    "compareFailed": "Compare failed"
+  },
+  "progress": {
+    "stage1Label": "Document Loaded",
+    "stage1Desc": "Reading document/URL/PDF content",
+    "stage2Label": "Plan Generated",
+    "stage2Desc": "Planner LLM autonomously plans execution steps",
+    "stage3Label": "Concepts Extracted",
+    "stage3Desc": "Reader + Analyzer + Terminology in parallel",
+    "stage4Label": "Knowledge Card Built",
+    "stage4Desc": "KnowledgeBuilder assembles final card",
+    "stage5Label": "Reflection Loop",
+    "stage5Desc": "Reflection on results, additional Agent calls if needed",
+    "stage6Label": "Exports Ready",
+    "stage6Desc": "Generating Markdown / Obsidian / Knowledge Graph",
+    "done": "✓ Done",
+    "executing": "Agent Pipeline running",
+    "stageXofY": "Stage {current} / 6 · {seconds}s elapsed",
+    "totalTime": "Total {seconds}s",
+    "badgeDone": "DONE",
+    "badgeRunning": "RUNNING"
+  },
+  "uiMode": {
+    "simple": "Simple",
+    "advanced": "Advanced",
+    "simpleBtn": "📖 Simple",
+    "advancedBtn": "🔬 Advanced"
+  },
+  "pipeline": {
+    "title": "Agent Pipeline",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "autonomous": "Agent Pipeline · Autonomous Workflow",
+    "mcpTools": "MCP Tools · Model Context Protocol"
+  },
+  "agents": {
+    "planner": { "name": "Planner", "role": "LLM autonomous planning" },
+    "reader": { "name": "Reader", "role": "Reading comprehension" },
+    "analyzer": { "name": "Analyzer", "role": "Deep analysis" },
+    "terminology": { "name": "Terminology", "role": "Term classification" },
+    "kbBuilder": { "name": "KB Builder", "role": "Aggregate & build" },
+    "recommend": { "name": "Recommend", "role": "arXiv recommendations" },
+    "export": { "name": "Export", "role": "Multi-format export" }
+  },
+  "tools": {
+    "memory": { "name": "Memory", "desc": "Cross-session memory of read papers" },
+    "filesystem": { "name": "Filesystem", "desc": "Save .md / .json files" },
+    "arxiv": { "name": "Arxiv", "desc": "Search related academic papers" },
+    "webSearch": { "name": "Web Search", "desc": "DuckDuckGo web search" }
+  },
+  "cardTitles": {
+    "askAnything": "💬 Ask Anything",
+    "explainForAudience": "🎯 Explain for Audience",
+    "plugins": "🧩 Plugins",
+    "export": "📥 Export"
+  },
+  "exportTabs": {
+    "markdown": "Markdown",
+    "obsidian": "🔮 Obsidian",
+    "knowledgeGraph": "🧠 Knowledge Graph",
+    "compare": "🔄 Compare"
+  },
+  "export": {
+    "hintObsidian": "🔮 Obsidian double-link format: terms auto-wrapped with [[term]], includes YAML frontmatter. Forms a knowledge graph when imported to Obsidian.",
+    "hintGraph": "🧠 Knowledge Graph: collapsible knowledge graph. Shows main branches by default, click nodes to expand leaves. Mermaid source available at the bottom for Obsidian / mermaid.live.",
+    "preview": "▸ Preview",
+    "hidePreview": "▾ Hide Preview",
+    "copy": "📋 Copy",
+    "copied": "✓ Copied",
+    "download": "⬇️ Download",
+    "showMermaidSource": "▸ View Mermaid source (for Obsidian / mermaid.live)",
+    "hideMermaidSource": "▾ Hide Mermaid source"
+  },
+  "batchResults": {
+    "title": "⚡ Batch Results",
+    "stats": "{total} URLs · {success} succeeded · {failed} failed"
+  },
+  "footer": {
+    "version": "ResearchKit OS v0.9.0",
+    "description": "Powered by DeepSeek · AI Research Pipeline · Agent Workflow + MCP Tools + Reflection Loop · 3 Export Formats (MD / Obsidian / Knowledge Graph) · Built for OKX.AI Genesis Hackathon"
+  },
+  "knowledgeCard": "📖 Knowledge Card",
+  "fields": {
+    "authors": "Authors",
+    "field": "Field",
+    "year": "Year",
+    "difficulty": "Difficulty",
+    "readingTime": "Reading time",
+    "min": "min",
+    "takeaway": "🎯 Takeaway",
+    "whyItMatters": "💭 Why It Matters",
+    "whatSurprised": "✨ What Surprised Me",
+    "whoShouldRead": "👥 Who Should Read",
+    "summary": "📌 Summary",
+    "researchGoals": "🎯 Research Goals",
+    "innovation": "💡 Innovation / Key Contributions",
+    "methodology": "🔧 Methodology",
+    "experiments": "🧪 Experiments",
+    "results": "📊 Results",
+    "limitations": "⚠️ Limitations",
+    "futureWork": "🔮 Future Work",
+    "applications": "🚀 Applications",
+    "datasets": "📁 Datasets",
+    "keyTerms": "🔤 Key Terms",
+    "recommendations": "📚 Recommended Reading",
+    "references": "📚 References",
+    "structure": "📐 Structure",
+    "andOthers": "et al.",
+    "quality": "Quality",
+    "completeness": "Completeness",
+    "confidence": "Confidence",
+    "evidence": "Evidence",
+    "tags": "Tags",
+    "generatedBy": "Generated by ResearchKit OS — AI Research Operating System"
+  }
+}

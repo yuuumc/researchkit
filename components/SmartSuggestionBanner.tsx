@@ -24,6 +24,7 @@ import { useState } from 'react'
 import type { SmartSuggestion } from '@/lib/smart-suggestion'
 import { getSuggestionIcon, getSuggestionTitle } from '@/lib/smart-suggestion'
 import { btnPrimary, btnSecondary } from '@/lib/ui-styles'
+import { useI18n } from '@/components/I18nProvider'
 
 // ============================================================================
 // Props
@@ -44,6 +45,7 @@ export function SmartSuggestionBanner({
   onCompareNow,
   onDismiss,
 }: SmartSuggestionBannerProps) {
+  const { t } = useI18n()
   const [hovered, setHovered] = useState(false)
 
   if (!suggestion.bestMatch) return null
@@ -51,7 +53,7 @@ export function SmartSuggestionBanner({
   const { bestMatch, reasons, relationType, score } = suggestion
   const icon = getSuggestionIcon(relationType)
   const title = getSuggestionTitle(suggestion)
-  const time = fmtRelativeTime(bestMatch.timestamp)
+  const time = fmtRelativeTime(bestMatch.timestamp, t)
 
   // 次要 reasons（去掉第一个 — 第一个已在标题显示）
   const secondaryReasons = reasons.slice(1, 3)
@@ -84,7 +86,7 @@ export function SmartSuggestionBanner({
       {/* 内容 */}
       <div style={{ flex: 1, minWidth: '220px' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>
-          💡 Smart Suggestion · Score {score}
+          {t('agent.smartSuggestion.scoreLabel', { score })}
         </div>
         <div style={{ fontSize: '14px', fontWeight: 700, color: '#78350f', marginBottom: '4px' }}>
           {title}
@@ -114,11 +116,11 @@ export function SmartSuggestionBanner({
             fontWeight: 700,
           }}
         >
-          ⚡ Compare Now
+          {t('agent.smartSuggestion.compareNow')}
         </button>
         <button
           onClick={onDismiss}
-          aria-label="Dismiss suggestion"
+          aria-label={t('agent.smartSuggestion.dismiss')}
           style={{
             ...btnSecondary,
             padding: '6px 10px',
@@ -147,14 +149,16 @@ export function SmartSuggestionBanner({
 // 辅助
 // ============================================================================
 
-function fmtRelativeTime(ts: number): string {
+type TFn = (key: string, params?: Record<string, string | number>) => string
+
+function fmtRelativeTime(ts: number, t: TFn): string {
   const diff = Date.now() - ts
-  if (diff < 60_000) return '刚刚'
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}分钟前`
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}小时前`
+  if (diff < 60_000) return t('agent.smartSuggestion.relativeTime.justNow')
+  if (diff < 3600_000) return t('agent.smartSuggestion.relativeTime.minutesAgo', { n: Math.floor(diff / 60_000) })
+  if (diff < 86400_000) return t('agent.smartSuggestion.relativeTime.hoursAgo', { n: Math.floor(diff / 3600_000) })
   const days = Math.floor(diff / 86400_000)
-  if (days === 1) return '昨天'
-  if (days < 7) return `${days}天前`
-  if (days < 30) return `${Math.floor(days / 7)}周前`
-  return `${Math.floor(days / 30)}月前`
+  if (days === 1) return t('agent.smartSuggestion.relativeTime.yesterday')
+  if (days < 7) return t('agent.smartSuggestion.relativeTime.daysAgo', { n: days })
+  if (days < 30) return t('agent.smartSuggestion.relativeTime.weeksAgo', { n: Math.floor(days / 7) })
+  return t('agent.smartSuggestion.relativeTime.monthsAgo', { n: Math.floor(days / 30) })
 }

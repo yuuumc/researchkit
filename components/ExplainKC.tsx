@@ -32,6 +32,7 @@
 import { useState } from 'react'
 import type { KnowledgeCard } from '@/types/knowledge'
 import { btnPrimary } from '@/lib/ui-styles'
+import { useI18n } from '@/components/I18nProvider'
 
 // ============================================================================
 // 类型
@@ -65,20 +66,19 @@ export interface ExplainKCProps {
 }
 
 // ============================================================================
-// 受众配置
+// 受众配置 — label/desc 通过 i18n 在渲染时解析
 // ============================================================================
 
 const AUDIENCE_OPTIONS: Array<{
   id: Audience
-  label: string
+  localeKey: string
   icon: string
   color: string
-  desc: string
 }> = [
-  { id: 'high_school', label: '高中生', icon: '🎓', color: '#10b981', desc: '通俗类比，避免术语' },
-  { id: 'software_engineer', label: '工程师', icon: '👨‍💻', color: '#0ea5e9', desc: '实现细节，系统设计' },
-  { id: 'researcher', label: '研究员', icon: '🔬', color: '#8b5cf6', desc: '学术深度，对比贡献' },
-  { id: 'product_manager', label: '产品经理', icon: '💼', color: '#f59e0b', desc: '商业价值，应用场景' },
+  { id: 'high_school', localeKey: 'highschool', icon: '🎓', color: '#10b981' },
+  { id: 'software_engineer', localeKey: 'engineer', icon: '👨‍💻', color: '#0ea5e9' },
+  { id: 'researcher', localeKey: 'researcher', icon: '🔬', color: '#8b5cf6' },
+  { id: 'product_manager', localeKey: 'pm', icon: '💼', color: '#f59e0b' },
 ]
 
 // ============================================================================
@@ -86,12 +86,21 @@ const AUDIENCE_OPTIONS: Array<{
 // ============================================================================
 
 export function ExplainKC({ knowledgeCard }: ExplainKCProps) {
+  const { t } = useI18n()
   const [selectedAudience, setSelectedAudience] = useState<Audience | null>(null)
   const [explanation, setExplanation] = useState<Explanation | null>(null)
   const [activeAudience, setActiveAudience] = useState<{ label: string; icon: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [usage, setUsage] = useState<{ tokens: number; durationMs: number; model: string } | null>(null)
+
+  // 当前选中受众对应的本地化 label/desc
+  const audienceLabel = (id: Audience | null): string => {
+    if (!id) return ''
+    const opt = AUDIENCE_OPTIONS.find(o => o.id === id)
+    if (!opt) return ''
+    return t(`agent.explainKC.audienceOptions.${opt.localeKey}.label`)
+  }
 
   const handleGenerate = async (audience: Audience) => {
     if (loading) return
@@ -113,7 +122,7 @@ export function ExplainKC({ knowledgeCard }: ExplainKCProps) {
       const data: ExplainResponse = await resp.json()
 
       if (!data.success) {
-        setError(data.error || '生成失败')
+        setError(data.error || t('agent.explainKC.generateFailed'))
         return
       }
 
@@ -127,7 +136,7 @@ export function ExplainKC({ knowledgeCard }: ExplainKCProps) {
         })
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '网络错误')
+      setError(err instanceof Error ? err.message : t('agent.explainKC.networkError'))
     } finally {
       setLoading(false)
     }
@@ -160,10 +169,10 @@ export function ExplainKC({ knowledgeCard }: ExplainKCProps) {
           <span style={{ fontSize: '18px' }}>🎯</span>
           <div>
             <div style={{ fontSize: '13px', fontWeight: 700, color: '#92400e' }}>
-              Explain for Audience
+              {t('agent.explainKC.headerTitle')}
             </div>
             <div style={{ fontSize: '11px', color: '#b45309', marginTop: '2px' }}>
-              选择受众，让 LLM 重新解释这篇论文
+              {t('agent.explainKC.headerHint')}
             </div>
           </div>
         </div>
@@ -184,11 +193,13 @@ export function ExplainKC({ knowledgeCard }: ExplainKCProps) {
         {/* Audience selector */}
         <div style={{ marginBottom: '12px' }}>
           <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', fontWeight: 600 }}>
-            👥 选择目标受众
+            {t('agent.explainKC.selectAudience')}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
             {AUDIENCE_OPTIONS.map((opt) => {
               const isSelected = selectedAudience === opt.id
+              const label = t(`agent.explainKC.audienceOptions.${opt.localeKey}.label`)
+              const desc = t(`agent.explainKC.audienceOptions.${opt.localeKey}.desc`)
               return (
                 <button
                   key={opt.id}
@@ -220,12 +231,12 @@ export function ExplainKC({ knowledgeCard }: ExplainKCProps) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '18px' }}>{opt.icon}</span>
                     <span style={{ fontWeight: 700, color: isSelected ? opt.color : '#0f1729', fontSize: '13px' }}>
-                      {opt.label}
+                      {label}
                     </span>
                     {isSelected && <span style={{ marginLeft: 'auto', color: opt.color, fontSize: '14px' }}>✓</span>}
                   </div>
                   <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
-                    {opt.desc}
+                    {desc}
                   </div>
                 </button>
               )
@@ -251,7 +262,9 @@ export function ExplainKC({ knowledgeCard }: ExplainKCProps) {
               : undefined,
           }}
         >
-          {loading ? '⏳ 生成中...' : `🚀 为 ${selectedAudience ? AUDIENCE_OPTIONS.find(o => o.id === selectedAudience)?.label : ''} 重新解释`}
+          {loading
+            ? t('agent.explainKC.generating')
+            : t('agent.explainKC.regenerateBtn', { audience: audienceLabel(selectedAudience) })}
         </button>
 
         {/* Loading state */}
@@ -288,7 +301,7 @@ export function ExplainKC({ knowledgeCard }: ExplainKCProps) {
                   cursor: 'pointer',
                 }}
               >
-                重试
+                {t('agent.explainKC.retry')}
               </button>
             )}
           </div>
@@ -320,6 +333,7 @@ function ExplanationView({
   audienceLabel: string
   audienceIcon: string
 }) {
+  const { t } = useI18n()
   return (
     <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
       {/* Audience badge */}
@@ -339,7 +353,7 @@ function ExplanationView({
         }}
       >
         <span>{audienceIcon}</span>
-        <span>为「{audienceLabel}」解释</span>
+        <span>{t('agent.explainKC.forAudience', { audience: audienceLabel })}</span>
       </div>
 
       {/* Summary */}
@@ -353,7 +367,7 @@ function ExplanationView({
         }}
       >
         <div style={{ fontSize: '10px', color: '#7c3aed', fontWeight: 700, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          📝 One-Sentence Summary
+          {t('agent.explainKC.oneSentence')}
         </div>
         <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e1b4b', lineHeight: 1.5 }}>
           {explanation.summary}
@@ -364,7 +378,7 @@ function ExplanationView({
       {explanation.whyItMatters && (
         <SectionBlock
           icon="💡"
-          label="Why It Matters"
+          label={t('agent.explainKC.whyMatters')}
           color="#0ea5e9"
           bg="#f0f9ff"
           borderColor="#bae6fd"
@@ -379,7 +393,7 @@ function ExplanationView({
       {explanation.coreConcept && (
         <SectionBlock
           icon="🧠"
-          label="Core Concept"
+          label={t('agent.explainKC.coreConcept')}
           color="#8b5cf6"
           bg="#faf5ff"
           borderColor="#e9d5ff"
@@ -394,7 +408,7 @@ function ExplanationView({
       {explanation.actionable && (
         <SectionBlock
           icon="✅"
-          label="Actionable Insight"
+          label={t('agent.explainKC.actionable')}
           color="#10b981"
           bg="#ecfdf5"
           borderColor="#a7f3d0"
@@ -409,7 +423,7 @@ function ExplanationView({
       {explanation.questions && explanation.questions.length > 0 && (
         <div style={{ marginBottom: '10px' }}>
           <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 700, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            🤔 你应该追问
+            {t('agent.explainKC.shouldAsk')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {explanation.questions.map((q, i) => (
@@ -437,7 +451,7 @@ function ExplanationView({
       {/* Tags */}
       {explanation.tags && explanation.tags.length > 0 && (
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
-          {explanation.tags.map((t, i) => (
+          {explanation.tags.map((tag, i) => (
             <span
               key={i}
               style={{
@@ -449,7 +463,7 @@ function ExplanationView({
                 fontWeight: 600,
               }}
             >
-              #{t}
+              #{tag}
             </span>
           ))}
         </div>
@@ -503,6 +517,7 @@ function SectionBlock({
 // ============================================================================
 
 function LoadingSkeleton() {
+  const { t } = useI18n()
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
       <div
@@ -535,7 +550,7 @@ function LoadingSkeleton() {
         }}
       />
       <div style={{ textAlign: 'center', padding: '12px', fontSize: '11px', color: '#94a3b8' }}>
-        🤖 LLM 正在为该受众重新组织语言...
+        {t('agent.explainKC.loading')}
       </div>
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes shimmer {

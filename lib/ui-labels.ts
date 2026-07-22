@@ -1,9 +1,21 @@
 /**
  * UI 标签多语言映射
  *
- * v2.0 重构 — 从 app/page.tsx 抽出
- * 根据 locale 切换 UI 标签（中文论文用中文标签，英文论文用英文标签）
+ * v2.0 — 从 app/page.tsx 抽出
+ * v2.3 D38 — 重构为跟随 Application Language 而非 KC 输入语言
+ *
+ * 4 层语言架构:
+ * - KC 字段标签 → 跟随 Application Language (本文件管这层)
+ * - KC 内容     → 跟随 Output Language (在 user-preferences.ts)
+ * - Prompt      → 锁死 English
+ *
+ * 调用方:
+ * - 客户端:从 useI18n() hook 获取 resolvedLocale
+ * - 服务端:从 cookie 解析 ResolvedLocale
  */
+
+import { t } from './i18n'
+import type { ResolvedLocale } from './locale-types'
 
 export interface UiLabels {
   knowledgeCard: string
@@ -41,45 +53,63 @@ export interface UiLabels {
 }
 
 /**
- * 按语言切换 UI 标签
- * - zh-CN → 中文标签
- * - 其他 locale → 英文标签（统一 fallback）
- * - 兼容旧的 language 字段（'zh' 仍走中文路径）
+ * 按 Application Locale 获取 KC 字段标签
+ *
+ * v2.3 D38 改造:
+ * - 旧 `getLabels(kcLanguage, kcLocale)` 根据 KC 输入语言决定标签
+ *   导致"中文 UI + 英文论文 → 标签英文"
+ * - 新 `getKcFieldLabels(appLocale)` 跟随 Application Language
+ *   切 UI 语言 → KC 字段标签即时切换
+ *
+ * @param appLocale ResolvedLocale (不含 'auto')
+ */
+export function getKcFieldLabels(appLocale: ResolvedLocale): UiLabels {
+  return {
+    knowledgeCard: t('home.knowledgeCard', undefined, appLocale),
+    authors: t('home.fields.authors', undefined, appLocale),
+    field: t('home.fields.field', undefined, appLocale),
+    year: t('home.fields.year', undefined, appLocale),
+    difficulty: t('home.fields.difficulty', undefined, appLocale),
+    readingTime: t('home.fields.readingTime', undefined, appLocale),
+    min: t('home.fields.min', undefined, appLocale),
+    takeaway: t('home.fields.takeaway', undefined, appLocale),
+    whyItMatters: t('home.fields.whyItMatters', undefined, appLocale),
+    whatSurprised: t('home.fields.whatSurprised', undefined, appLocale),
+    whoShouldRead: t('home.fields.whoShouldRead', undefined, appLocale),
+    summary: t('home.fields.summary', undefined, appLocale),
+    researchGoals: t('home.fields.researchGoals', undefined, appLocale),
+    innovation: t('home.fields.innovation', undefined, appLocale),
+    methodology: t('home.fields.methodology', undefined, appLocale),
+    experiments: t('home.fields.experiments', undefined, appLocale),
+    results: t('home.fields.results', undefined, appLocale),
+    limitations: t('home.fields.limitations', undefined, appLocale),
+    futureWork: t('home.fields.futureWork', undefined, appLocale),
+    applications: t('home.fields.applications', undefined, appLocale),
+    datasets: t('home.fields.datasets', undefined, appLocale),
+    keyTerms: t('home.fields.keyTerms', undefined, appLocale),
+    recommendations: t('home.fields.recommendations', undefined, appLocale),
+    references: t('home.fields.references', undefined, appLocale),
+    structure: t('home.fields.structure', undefined, appLocale),
+    andOthers: t('home.fields.andOthers', undefined, appLocale),
+    quality: t('home.fields.quality', undefined, appLocale),
+    completeness: t('home.fields.completeness', undefined, appLocale),
+    confidence: t('home.fields.confidence', undefined, appLocale),
+    evidence: t('home.fields.evidence', undefined, appLocale),
+    tags: t('home.fields.tags', undefined, appLocale),
+    generatedBy: t('home.fields.generatedBy', undefined, appLocale),
+  }
+}
+
+/**
+ * @deprecated 改用 getKcFieldLabels(appLocale)
+ *
+ * 旧 API — 根据 KC 输入语言决定标签
+ * 保留是为了过渡期兼容(如有遗漏调用点),内部 fallback 到新 API
+ *
+ * @param language KC 输入语言 ('zh' / 'en' / undefined)
+ * @param locale   KC 输入 locale ('zh-CN' / 'en-US' / undefined)
  */
 export function getLabels(language?: string, locale?: string): UiLabels {
   const isZh = language === 'zh' || locale === 'zh-CN'
-  return {
-    knowledgeCard: isZh ? '📖 知识卡' : '📖 Knowledge Card',
-    authors: isZh ? '作者' : 'Authors',
-    field: isZh ? '领域' : 'Field',
-    year: isZh ? '年份' : 'Year',
-    difficulty: isZh ? '难度' : 'Difficulty',
-    readingTime: isZh ? '阅读时长' : 'Reading time',
-    min: isZh ? '分钟' : 'min',
-    takeaway: isZh ? '🎯 核心结论' : '🎯 Takeaway',
-    whyItMatters: isZh ? '💭 为什么重要' : '💭 Why It Matters',
-    whatSurprised: isZh ? '✨ 最令人意外' : '✨ What Surprised Me',
-    whoShouldRead: isZh ? '👥 谁应该读' : '👥 Who Should Read',
-    summary: isZh ? '📌 一句话摘要' : '📌 Summary',
-    researchGoals: isZh ? '🎯 研究目的' : '🎯 Research Goals',
-    innovation: isZh ? '💡 创新点 / 主要贡献' : '💡 Innovation / Key Contributions',
-    methodology: isZh ? '🔧 方法论' : '🔧 Methodology',
-    experiments: isZh ? '🧪 实验设置' : '🧪 Experiments',
-    results: isZh ? '📊 主要结果' : '📊 Results',
-    limitations: isZh ? '⚠️ 局限性' : '⚠️ Limitations',
-    futureWork: isZh ? '🔮 未来工作' : '🔮 Future Work',
-    applications: isZh ? '🚀 应用场景' : '🚀 Applications',
-    datasets: isZh ? '📁 数据集' : '📁 Datasets',
-    keyTerms: isZh ? '🔤 关键术语' : '🔤 Key Terms',
-    recommendations: isZh ? '📚 推荐阅读' : '📚 Recommended Reading',
-    references: isZh ? '📚 参考文献 / 推荐阅读' : '📚 References',
-    structure: isZh ? '📐 文章结构' : '📐 Structure',
-    andOthers: isZh ? '等' : 'et al.',
-    quality: isZh ? '质量评分' : 'Quality',
-    completeness: isZh ? '完整度' : 'Completeness',
-    confidence: isZh ? '置信度' : 'Confidence',
-    evidence: isZh ? '证据强度' : 'Evidence',
-    tags: isZh ? '标签' : 'Tags',
-    generatedBy: isZh ? '由 ResearchKit OS 生成 — AI 研究操作系统' : 'Generated by ResearchKit OS — AI Research Operating System',
-  }
+  return getKcFieldLabels(isZh ? 'zh-CN' : 'en-US')
 }

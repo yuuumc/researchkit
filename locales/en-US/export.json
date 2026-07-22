@@ -1,0 +1,32 @@
+{
+  "tabs": {
+    "markdown": "Markdown",
+    "obsidian": "Obsidian",
+    "mindmap": "Knowledge Graph",
+    "compare": "Compare"
+  },
+  "actions": {
+    "copyMarkdown": "Copy Markdown",
+    "copyObsidian": "Copy Obsidian",
+    "copyMermaid": "Copy Mermaid source",
+    "download": "Download",
+    "downloadMd": "Download .md",
+    "downloadObsidian": "Download .md (Obsidian)",
+    "downloadPng": "Download PNG"
+  },
+  "status": {
+    "copied": "✓ Copied",
+    "downloaded": "✓ Downloaded"
+  },
+  "onchain": {
+    "title": "⛓️ Onchain Export",
+    "broadcast": "Broadcast to X Layer",
+    "broadcasting": "Broadcasting...",
+    "success": "✓ Onchain",
+    "txHash": "Transaction hash",
+    "ipfsCid": "IPFS CID",
+    "gasEstimate": "Estimated gas",
+    "walletAddress": "Wallet address",
+    "viewOnOklink": "View on OKLink"
+  }
+}
