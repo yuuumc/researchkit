@@ -16,7 +16,31 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    const body = await request.json()
+    // D41 诊断增强：先拿 raw text 再手动 JSON.parse（同 SSE 端点）
+    const rawBody = await request.text()
+    let body: { content?: string; title?: string; source?: string }
+    try {
+      body = JSON.parse(rawBody)
+    } catch (parseErr) {
+      console.error('[multi-agent] JSON.parse 失败:', {
+        bodyLength: rawBody.length,
+        bodyPreview: rawBody.substring(0, 500),
+        contentType: request.headers.get('content-type'),
+        errMessage: parseErr instanceof Error ? parseErr.message : String(parseErr),
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          error: `请求体不是合法 JSON（${parseErr instanceof Error ? parseErr.message : 'parse error'}）`,
+          debug: {
+            contentType: request.headers.get('content-type'),
+            bodyLength: rawBody.length,
+            bodyPreview: rawBody.substring(0, 200),
+          },
+        },
+        { status: 400 }
+      )
+    }
     const content = body.content || ''
     const title = body.title
     const source = body.source || '用户输入'
@@ -102,10 +126,15 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Multi-Agent API 错误:', error)
+    const errMsg = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : '服务器内部错误',
+        error: `服务器内部错误：${errMsg}`,
+        debug: {
+          name: error instanceof Error ? error.name : 'Unknown',
+          stack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+        },
       },
       { status: 500 }
     )

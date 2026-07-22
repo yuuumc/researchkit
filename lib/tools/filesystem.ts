@@ -8,13 +8,24 @@
  * - read: 读取已保存的文件
  *
  * 持久化目录：./.researchkit-output/
+ *
+ * Vercel 适配（D41）：
+ * - Vercel Serverless 运行在只读 fs（/var/task/），不能写 process.cwd()
+ * - 检测 VERCEL env var，改用 /tmp/researchkit-output/ 作为存储目录
+ * - /tmp/ 在同一 serverless 实例内可读写（但不跨实例持久化），足够 demo 使用
  */
 
 import { promises as fs } from 'fs'
 import path from 'path'
 import { Tool } from './types'
 
-const OUTPUT_DIR = path.join(process.cwd(), '.researchkit-output')
+function getOutputDir(): string {
+  // Vercel serverless: /var/task/ 是只读的，改用 /tmp/
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    return '/tmp/researchkit-output'
+  }
+  return path.join(process.cwd(), '.researchkit-output')
+}
 
 async function ensureDir(dir: string): Promise<void> {
   try {
@@ -69,6 +80,7 @@ Use this tool to:
   async execute(input: Record<string, any>): Promise<any> {
     const start = Date.now()
     try {
+      const OUTPUT_DIR = getOutputDir()
       await ensureDir(OUTPUT_DIR)
 
       switch (input.action) {

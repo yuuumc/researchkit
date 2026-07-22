@@ -6,13 +6,22 @@
  *
  * 文件：.researchkit-data/kc-history.json
  * 容量：最近 10 篇（FIFO）
+ *
+ * Vercel 适配（D41）：/var/task/ 只读，改用 /tmp/
  */
 
 import { promises as fs } from 'fs'
 import path from 'path'
 import type { KnowledgeCard } from '@/types/knowledge'
 
-const DATA_DIR = path.join(process.cwd(), '.researchkit-data')
+function getDataDir(): string {
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    return '/tmp/researchkit-data'
+  }
+  return path.join(process.cwd(), '.researchkit-data')
+}
+
+const DATA_DIR = getDataDir()
 const KC_FILE = path.join(DATA_DIR, 'kc-history.json')
 const MAX_KCS = 10
 

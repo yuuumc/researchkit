@@ -21,7 +21,36 @@ export async function POST(request: NextRequest) {
   const encoder = new TextEncoder()
 
   try {
-    const body = await request.json()
+    // D41 诊断增强：先拿 raw text 再手动 JSON.parse
+    // 原因：直接 await request.json() 抛错时无法知道实际收到的 body 长什么样
+    // （比如 PowerShell curl 发了 {content:"..."} 不是合法 JSON，或被中间层篡改）
+    // 手动解析能在错误信息里带上 raw body，便于现场定位
+    const rawBody = await request.text()
+    let body: { content?: string; title?: string; source?: string }
+    try {
+      body = JSON.parse(rawBody)
+    } catch (parseErr) {
+      console.error('[multi-agent-stream] JSON.parse 失败:', {
+        bodyLength: rawBody.length,
+        bodyPreview: rawBody.substring(0, 500),
+        contentType: request.headers.get('content-type'),
+        errMessage: parseErr instanceof Error ? parseErr.message : String(parseErr),
+      })
+      return new Response(
+        `event: error\ndata: ${JSON.stringify({
+          error: `请求体不是合法 JSON（${parseErr instanceof Error ? parseErr.message : 'parse error'}）。收到的 body 前 200 字符：${rawBody.substring(0, 200)}`,
+          debug: {
+            contentType: request.headers.get('content-type'),
+            bodyLength: rawBody.length,
+            bodyPreview: rawBody.substring(0, 200),
+          },
+        })}\n\n`,
+        {
+          status: 400,
+          headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
+        }
+      )
+    }
     const content = body.content || ''
     const title = body.title
     const source = body.source || '用户输入'
@@ -256,8 +285,15 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('SSE endpoint 错误:', error)
+    const errMsg = error instanceof Error ? error.message : String(error)
     return new Response(
-      `event: error\ndata: ${JSON.stringify({ error: '服务器内部错误' })}\n\n`,
+      `event: error\ndata: ${JSON.stringify({
+        error: `服务器内部错误：${errMsg}`,
+        debug: {
+          name: error instanceof Error ? error.name : 'Unknown',
+          stack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+        },
+      })}\n\n`,
       {
         status: 500,
         headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },

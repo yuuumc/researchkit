@@ -6,13 +6,22 @@
  *
  * 文件：.researchkit-data/cost-history.json
  * 容量：最近 50 条（FIFO）
+ *
+ * Vercel 适配（D41）：/var/task/ 只读，改用 /tmp/
  */
 
 import { promises as fs } from 'fs'
 import path from 'path'
 import type { AgentUsageSummary, ChatUsage } from '@/lib/usage-collector'
 
-const DATA_DIR = path.join(process.cwd(), '.researchkit-data')
+function getDataDir(): string {
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    return '/tmp/researchkit-data'
+  }
+  return path.join(process.cwd(), '.researchkit-data')
+}
+
+const DATA_DIR = getDataDir()
 const COST_FILE = path.join(DATA_DIR, 'cost-history.json')
 const MAX_RUNS = 50
 
