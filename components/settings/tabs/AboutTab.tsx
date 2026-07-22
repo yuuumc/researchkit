@@ -5,31 +5,9 @@ import { useI18n } from '@/components/I18nProvider'
 /**
  * AboutTab — 关于页(D37 i18n 化)
  *
- * 显示版本信息 + 技术栈 + Roadmap
- * D37:全部文案走 i18n,Roadmap 反映 v2.3 i18n 进度
+ * 显示版本信息 + 技术栈
  * Agent 描述复用 settings.prompt.agentXXX 保持单一来源
  */
-
-type RoadmapRow = {
-  day: string
-  task: string
-  status: 'done' | 'next' | 'planned'
-}
-
-const ROADMAP: RoadmapRow[] = [
-  { day: 'D1-D7', task: 'v2.1 — LLMProvider + Settings + Prompt + Preset + Cost', status: 'done' },
-  { day: 'D8-D16', task: 'v2.2 — Compare / Memory / Chat / Explain / Plugin / Onchain / Demo', status: 'done' },
-  { day: 'D17-D21', task: 'v2.2.5 — Quality Release (Token / SSE / Mobile / Animations)', status: 'done' },
-  { day: 'D22', task: 'v2.2.6 — Stability Hotfix (Regression / Overflow)', status: 'done' },
-  { day: 'D22-D35', task: 'v2.3 — Onchain / Engineering Debt / Streaming / Plugins', status: 'planned' },
-  { day: 'D36-D40', task: 'v2.3 i18n — Infrastructure / Settings / Home / Auto Translate / Release', status: 'next' },
-]
-
-const STATUS_COLOR: Record<RoadmapRow['status'], string> = {
-  done: '#22c55e',
-  next: '#3b82f6',
-  planned: '#94a3b8',
-}
 
 export function AboutTab() {
   const { t } = useI18n()
@@ -74,7 +52,7 @@ export function AboutTab() {
             fontWeight: 600,
           }}
         >
-          {t('settings.about.versionBadge', { version: '2.3-dev (D37)' })}
+          {t('settings.about.versionBadge', { version: 'v2.3.1' })}
         </div>
       </div>
 
@@ -101,37 +79,8 @@ export function AboutTab() {
           <li><strong>{t('settings.about.techStorage')}</strong> — {t('settings.about.techStorageDesc')}</li>
         </ul>
       </Section>
-
-      <Section title={t('settings.about.roadmapTitle')}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-          <thead>
-            <tr style={{ background: '#f8fafc' }}>
-              <th style={cellStyle}>{t('settings.about.colDay')}</th>
-              <th style={cellStyle}>{t('settings.about.colTask')}</th>
-              <th style={cellStyle}>{t('settings.about.colStatus')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ROADMAP.map(row => (
-              <tr key={row.day}>
-                <td style={cellStyle}>{row.day}</td>
-                <td style={cellStyle}>{row.task}</td>
-                <td style={{ ...cellStyle, color: STATUS_COLOR[row.status] }}>
-                  {t(`settings.about.status${row.status.charAt(0).toUpperCase()}${row.status.slice(1)}`)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Section>
     </div>
   )
-}
-
-const cellStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  borderBottom: '1px solid #e2e8f2',
-  textAlign: 'left',
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
