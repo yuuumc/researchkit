@@ -1,0 +1,7 @@
+fix(home): form 包裹输入区，按钮改 type=submit 支持 Enter 提交
+
+之前生成按钮用 onClick 触发，浏览器驱动器坐标拦截导致无法点击。
+改为 form onSubmit 原生提交，按钮 type=submit，mode tabs/loadExample 加 type=button。
+附带收益：textarea 内按 Enter 也能提交（更好的 UX）。
+
+后端 SSE 流已通过 API 直接验证 100% 正常，此为前端交互改进。

@@ -106,7 +106,8 @@ export default function Home() {
     { id: 6, label: t('home.progress.stage6Label'), icon: '📤', desc: t('home.progress.stage6Desc') },
   ]
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     if (mode === 'pdf') {
       if (!pdfFile) {
         setError(t('home.errors.noPdf'))
@@ -1147,12 +1148,14 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
 
         {/* === Input Card — 紧接 Hero，第一屏即可见 === */}
         <div className="section-fade-in hero-fade-delay-4 input-card" style={{ background: 'white', borderRadius: '20px', padding: '28px', boxShadow: '0 4px 20px rgba(99, 102, 241, 0.08)', marginTop: '24px', marginBottom: '24px' }}>
+          {/* D-fix — 用 form 包裹 mode tabs + input + actions，让按钮 type=submit 走原生提交（避免坐标拦截 + Enter 提交） */}
+          <form onSubmit={handleSubmit}>
           {/* Mode tabs */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
-            <button key="text" onClick={() => { setMode('text'); setError('') }} style={tabStyle(mode === 'text')} className={mode === 'text' ? 'mode-tab-active' : ''}>{t('home.modeTabs.text')}</button>
-            <button key="url" onClick={() => { setMode('url'); setError('') }} style={tabStyle(mode === 'url')} className={mode === 'url' ? 'mode-tab-active' : ''}>{t('home.modeTabs.url')}</button>
-            <button key="pdf" onClick={() => { setMode('pdf'); setError('') }} style={tabStyle(mode === 'pdf')} className={mode === 'pdf' ? 'mode-tab-active' : ''}>{t('home.modeTabs.pdf')}</button>
-            <button key="batch" onClick={() => { setMode('batch'); setError('') }} style={tabStyle(mode === 'batch')} className={mode === 'batch' ? 'mode-tab-active' : ''}>{t('home.modeTabs.batch')}</button>
+            <button key="text" type="button" onClick={() => { setMode('text'); setError('') }} style={tabStyle(mode === 'text')} className={mode === 'text' ? 'mode-tab-active' : ''}>{t('home.modeTabs.text')}</button>
+            <button key="url" type="button" onClick={() => { setMode('url'); setError('') }} style={tabStyle(mode === 'url')} className={mode === 'url' ? 'mode-tab-active' : ''}>{t('home.modeTabs.url')}</button>
+            <button key="pdf" type="button" onClick={() => { setMode('pdf'); setError('') }} style={tabStyle(mode === 'pdf')} className={mode === 'pdf' ? 'mode-tab-active' : ''}>{t('home.modeTabs.pdf')}</button>
+            <button key="batch" type="button" onClick={() => { setMode('batch'); setError('') }} style={tabStyle(mode === 'batch')} className={mode === 'batch' ? 'mode-tab-active' : ''}>{t('home.modeTabs.batch')}</button>
           </div>
 
           {/* Input field */}
@@ -1162,6 +1165,13 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               onChange={(e) => setInput(e.target.value)}
               placeholder={t('home.placeholders.textLong')}
               style={inputStyle}
+              // Enter 直接提交（Shift+Enter 换行）— D-fix
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  ;(e.currentTarget.closest('form') as HTMLFormElement | null)?.requestSubmit()
+                }
+              }}
               onFocus={(e) => (e.target.style.borderColor = '#6366f1')}
               onBlur={(e) => (e.target.style.borderColor = '#e2e8f2')}
             />
@@ -1278,7 +1288,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           {/* Actions */}
           <div className="action-row" style={{ display: 'flex', gap: '12px', marginTop: '20px', alignItems: 'center' }}>
             <button
-              onClick={handleSubmit}
+              type="submit"
               disabled={loading}
               style={{
                 flex: 1, padding: '14px 24px',
@@ -1291,6 +1301,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               {loading ? t('home.buttons.generating') : t('home.buttons.generate')}
             </button>
             <button
+              type="button"
               onClick={loadExample}
               style={{
                 padding: '14px 20px', background: '#f1f5f9', color: '#5a6478',
@@ -1299,6 +1310,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               }}
             >{t('home.buttons.loadExample')}</button>
           </div>
+          </form>
 
           {/* 可视化生成进度面板 */}
           {progressStage > 0 && progressStage < 8 && (

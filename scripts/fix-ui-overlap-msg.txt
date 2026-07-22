@@ -1,0 +1,7 @@
+fix(ui): LiveThoughts 移左下角 + ScrollToTop 可拖拽 + Enter 提交
+
+- LiveThoughts 浮窗从右下角移到左下角，避免与 ScrollToTop 互相遮挡
+- ScrollToTop 加拖拽功能：mousedown + mousemove 移动位置，移动 < 4px 视为点击
+  （拖拽过不触发回顶，避免误操作；位置约束在视口内 + 16px 边距）
+- text 模式 textarea 加 onKeyDown：Enter 直接提交，Shift+Enter 换行
+  （之前 form 内 textarea 的 Enter 默认只换行，未触发提交）

@@ -1,0 +1,6 @@
+fix(version): 全局版本号升级 v0.9.0 → v2.3.0
+
+- footer i18n（zh-CN/en-US）：ResearchKit OS v0.9.0 → v2.3.0
+- /api/health：version 0.9.0 → 2.3.0
+- onchain-export 插件 meta.version：0.9.0-mvp → 2.3.0（经历 D22 双模式 + D31 权限/生命周期）
+- plugin-marketplace-server manifest 同步
