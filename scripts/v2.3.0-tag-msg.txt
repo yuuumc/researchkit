@@ -1,0 +1,13 @@
+ResearchKit OS v2.3.0 — Plugin System v2 + i18n + UI 打磨
+
+7 个 Phase / D22-D40 / 14 个 PR：
+
+Phase 1 (D22) — Onchain Export 双模式重构
+Phase 2 (D25-D26) — Engineering 债务（AgentTimeline 拆分 + ChatUsage 类型化）
+Phase 3 (D27-D29) — Streaming + 持久化（LiveThoughts + KC/Cost History API）
+Phase 4 (D30) — Smart Suggestion v2（LLM + heuristic fallback）
+Phase 5 (D31-D33) — Plugin System v2（manifest + 市场面板 + 批量执行队列）
+Phase 6 (D34-D35) — UI 打磨（ScrollToTop 可拖拽 + KC 自动滚动）
+Phase 7 (D36-D40) — i18n 完整国际化（4 层语言分离 + 6 namespace）
+
+详见 releases/v2.3.0-release-notes.md
