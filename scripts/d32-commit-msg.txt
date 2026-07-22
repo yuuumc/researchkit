@@ -1,0 +1,46 @@
+D32 — Plugin System v2 (2/3): 插件市场 manifest
+
+Phase 5 Day 2 / 3 — 在 D31 lifecycle/permissions 接口之上构建插件市场。
+
+## 新增
+
+### 1. 类型层 — types/plugin-manifest.ts
+- PluginManifest 接口（市场条目 schema）：id/name/description/version/author/icon/color/tags/category/requiresConfig/configSchema/homepage/permissions/installCount/rating/official/sizeKb/publishedAt
+- MarketplaceResponse / InstallRequest / InstallResponse 类型
+
+### 2. 服务端市场数据 — lib/persistence/plugin-marketplace-server.ts
+- BUILTIN_MANIFESTS（3 个内置插件 manifest：json-download / markdown-download / onchain-export）
+- COMMUNITY_MANIFESTS（4 个 mock 社区插件：notion-publish / obsidian-publish / arxiv-source / ipfs-pin）
+- getAllManifests() / findManifest(id) 查询函数
+
+### 3. API 路由
+- GET /api/plugins/marketplace — 返回全部市场 manifest（支持 ?id= 查询单个）
+- POST /api/plugins/install — 模拟安装（社区插件 100-500ms 延迟），返回 manifest
+
+### 4. 客户端封装 — lib/plugin-marketplace.ts
+- loadMarketplace() / installPlugin(id) — 调用 API
+- loadInstalledManifests() / uninstallManifest(id) / isManifestInstalled(id) — localStorage 持久化（key: researchkit:installed-manifests）
+
+### 5. UI — components/PluginPanel.tsx
+- 新增 import：PluginManifest 类型 + marketplace 函数
+- 在 OnchainHistory 后追加 <MarketplacePanel /> 组件
+- MarketplacePanel：可折叠卡片，lazy load 市场列表，install 按钮 + toast 反馈
+- MarketplaceCard：icon + name + version + official/community badge + category + rating + size + author + walletSignature 警示 + 安装按钮
+
+## 设计决策
+
+- manifest 与 plugin 实例分离：市场只展示元信息，安装时再下载实际插件代码（v2.3 mock 阶段直接复用内置实例）
+- localStorage 持久化已安装 manifest 列表（与 plugin-states 隔离，互不污染）
+- walletSignature=true 的社区插件（ipfs-pin）在卡片上加 ⚠️ 警示
+- 官方插件用 ✓ official 徽章，社区插件用 ☆ community 徽章
+
+## 验证
+
+- npx tsc --noEmit ✅
+- npm run build ✅
+- / 路由 41.4 kB / 128 kB First Load JS（与 D31 持平）
+- 新增 2 个 dynamic API 路由：/api/plugins/marketplace, /api/plugins/install
+
+## 依赖
+
+基于 D31 (feature/d31-plugin-system-v2-interfaces)，需先合并 PR #41。
