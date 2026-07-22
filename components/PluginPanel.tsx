@@ -29,7 +29,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { KnowledgeCard } from '@/types/knowledge'
-import type { ExportPlugin, ExportResult, PluginState, PluginConfig } from '@/types/plugin'
+import type { ExportPlugin, ExportResult, PluginState, PluginConfig, PluginPermissions } from '@/types/plugin'
 import { jsonDownloadPlugin, markdownDownloadPlugin } from '@/core/plugins/sample-plugins'
 import { onchainExportPlugin, RESEARCHKIT_REGISTRY_CONTRACT } from '@/core/plugins/onchain-export'
 import {
@@ -41,6 +41,7 @@ import {
 import { loadLedger, type OnchainRecord } from '@/lib/onchain-ledger'
 import { shortAddress } from '@/lib/onchain-utils'
 import { btnPrimary, btnSecondary } from '@/lib/ui-styles'
+import { pluginRegistry } from '@/core/plugins/registry'
 
 // ============================================================================
 // 类型
@@ -60,6 +61,14 @@ export interface PluginPanelProps {
 
 const BUILTIN_PLUGINS: ExportPlugin[] = [jsonDownloadPlugin, markdownDownloadPlugin, onchainExportPlugin]
 
+// D31 — 把内置插件注册到 registry（让 triggerLifecycle / listByCategory 能找到）
+// 仅注册一次（registry 内部去重）
+if (typeof window !== 'undefined') {
+  for (const p of BUILTIN_PLUGINS) {
+    pluginRegistry.register(p)
+  }
+}
+
 // ============================================================================
 // 主组件
 // ============================================================================
@@ -74,7 +83,27 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
     setStates(loadPluginStates())
   }, [])
 
-  const handleToggleEnabled = useCallback((pluginId: string, enabled: boolean) => {
+  const handleToggleEnabled = useCallback(async (pluginId: string, enabled: boolean) => {
+    // D31 — 触发 lifecycle 钩子（onEnable/onDisable）
+    // 失败时回滚 toggle 并显示错误
+    if (enabled) {
+      const result = await pluginRegistry.triggerLifecycle(pluginId, 'onEnable', {
+        config: loadPluginStates()[pluginId]?.config || {},
+      })
+      if (!result.success) {
+        const msg = result.error || result.message || 'onEnable 钩子失败'
+        setResults((r) => ({
+          ...r,
+          [pluginId]: { success: false, message: `生命周期钩子失败：${msg}`, error: msg },
+        }))
+        return  // 不更新 state，保持 disabled
+      }
+    } else {
+      // onDisable 钩子失败不阻塞（即使清理失败也允许禁用）
+      await pluginRegistry.triggerLifecycle(pluginId, 'onDisable', {
+        config: loadPluginStates()[pluginId]?.config || {},
+      })
+    }
     setPluginEnabled(pluginId, enabled)
     setStates((prev) => ({
       ...prev,
@@ -479,6 +508,9 @@ function PluginCard({
 }) {
   const meta = plugin.meta
   const isDisabled = !state.enabled || disabled
+  const [showDetails, setShowDetails] = useState(false)
+  const category = meta.category || 'export'
+  const perms = plugin.permissions
 
   return (
     <div
@@ -609,7 +641,86 @@ function PluginCard({
             {cap.type} · {cap.format}
           </span>
         ))}
+        {/* D31 — Category badge */}
+        <span
+          style={{
+            fontSize: '9px',
+            padding: '2px 6px',
+            background: category === 'export' ? '#dbeafe' : category === 'source' ? '#fef3c7' : '#fce7f3',
+            color: category === 'export' ? '#1e40af' : category === 'source' ? '#92400e' : '#9d174d',
+            borderRadius: '4px',
+            fontWeight: 600,
+            border: `1px solid ${category === 'export' ? '#bfdbfe' : category === 'source' ? '#fde68a' : '#fbcfe8'}`,
+          }}
+        >
+          {category}
+        </span>
+        {/* D31 — 权限摘要 badge（点击展开详情） */}
+        {perms && (
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            style={{
+              fontSize: '9px',
+              padding: '2px 6px',
+              background: showDetails ? '#fef2f2' : '#f8fafc',
+              color: '#475569',
+              borderRadius: '4px',
+              fontWeight: 500,
+              border: '1px solid #e2e8f0',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+            }}
+            title="查看插件权限声明"
+          >
+            🔒 perms
+            <span style={{ fontSize: '8px' }}>{showDetails ? '▾' : '▸'}</span>
+          </button>
+        )}
       </div>
+
+      {/* D31 — Permissions 详情面板（可折叠） */}
+      {showDetails && perms && (
+        <div
+          style={{
+            marginBottom: '10px',
+            padding: '8px 10px',
+            background: '#fef2f2',
+            borderRadius: '6px',
+            border: '1px solid #fecaca',
+            fontSize: '10px',
+            color: '#7f1d1d',
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '9px' }}>
+            🔐 权限声明
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', lineHeight: 1.5 }}>
+            <div>
+              <strong>KC 字段：</strong>{' '}
+              {perms.kcFields?.length ? (
+                perms.kcFields.includes('*') ? <span style={{ color: '#dc2626', fontWeight: 700 }}>全部（*）</span> : perms.kcFields.join(', ')
+              ) : '—'}
+            </div>
+            <div>
+              <strong>外部 API：</strong>{' '}
+              {perms.externalApis?.length ? perms.externalApis.join(', ') : '无'}
+            </div>
+            <div>
+              <strong>网络：</strong> {perms.network ? '✅ 需要' : '❌ 不需要'}
+            </div>
+            <div>
+              <strong>文件系统：</strong> {perms.filesystem ? '✅ 需要' : '❌ 不需要'}
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <strong>钱包签名：</strong>{' '}
+              {perms.walletSignature ? <span style={{ color: '#dc2626', fontWeight: 700 }}>⚠️ 需要（敏感操作）</span> : '❌ 不需要'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Config form (if requiredConfig) */}
       {meta.requiresConfig && meta.configSchema && meta.configSchema.length > 0 && state.enabled && (

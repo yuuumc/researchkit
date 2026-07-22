@@ -1,11 +1,16 @@
 /**
  * Plugin Registry — 单例注册表
  *
- * 设计：
+ * v2.2 设计：
  * - 单例模式，整个 app 共享一个 registry
  * - 注册时去重（按 plugin.meta.id）
  * - 支持启用/禁用（默认启用）
  * - 提供查询接口：list() / get(id) / getEnabled()
+ *
+ * v2.3 D31 扩展：
+ * - listByCategory(cat) — 按 category 过滤
+ * - triggerLifecycle(event, id, ctx) — 调用插件生命周期钩子
+ * - getPermissions(id) — 查询插件权限声明
  *
  * 用法：
  *   import { pluginRegistry } from '@/core/plugins/registry'
@@ -17,9 +22,18 @@
  *
  *   // UI 查询
  *   const plugins = pluginRegistry.list()
+ *   const exportPlugins = pluginRegistry.listByCategory('export')
  */
 
 import type { ExportPlugin } from '@/types/plugin'
+import type {
+  PluginCategory,
+  PluginLifecycle,
+  PluginLifecycleContext,
+  PluginLifecycleEvent,
+  PluginLifecycleResult,
+  PluginPermissions,
+} from '@/types/plugin'
 
 class PluginRegistry {
   private plugins = new Map<string, ExportPlugin>()
@@ -56,10 +70,60 @@ class PluginRegistry {
   }
 
   /**
+   * D31 — 按 category 过滤插件
+   *
+   * 未声明 category 的插件视为 'export'（v2.2 默认）
+   */
+  listByCategory(category: PluginCategory): ExportPlugin[] {
+    return this.list().filter(p => (p.meta.category || 'export') === category)
+  }
+
+  /**
    * 按 id 获取插件
    */
   get(id: string): ExportPlugin | undefined {
     return this.plugins.get(id)
+  }
+
+  /**
+   * D31 — 查询插件权限声明
+   */
+  getPermissions(id: string): PluginPermissions | undefined {
+    return this.plugins.get(id)?.permissions
+  }
+
+  /**
+   * D31 — 触发插件生命周期钩子
+   *
+   * 钩子未实现时返回 success=true（静默成功）
+   * 钩子抛异常时捕获并返回 success=false（不向调用方抛出）
+   *
+   * @returns 钩子结果；插件不存在或无钩子时返回 success=true
+   */
+  async triggerLifecycle(
+    id: string,
+    event: PluginLifecycleEvent,
+    ctx: PluginLifecycleContext
+  ): Promise<PluginLifecycleResult> {
+    const plugin = this.plugins.get(id)
+    if (!plugin) {
+      return { success: false, error: `Plugin "${id}" not found` }
+    }
+    const lifecycle: PluginLifecycle | undefined = plugin.lifecycle
+    if (!lifecycle) {
+      return { success: true, message: 'no lifecycle hooks' }
+    }
+    const hook = lifecycle[event]
+    if (!hook) {
+      return { success: true, message: `hook ${event} not implemented` }
+    }
+    try {
+      return await hook.call(lifecycle, ctx)
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      console.warn(`[plugin-registry] lifecycle ${event} for "${id}" failed:`, error)
+      return { success: false, error }
+    }
   }
 
   /**
