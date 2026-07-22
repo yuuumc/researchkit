@@ -24,6 +24,9 @@ import { loadKCHistory, type KCHistoryEntry } from '@/lib/kc-history'
 import type { KnowledgeCard } from '@/types/knowledge'
 import type { CompareResult } from '@/types/compare'
 import { btnPrimary, btnSecondary } from '@/lib/ui-styles'
+import { useI18n } from '@/components/I18nProvider'
+
+type TFn = (key: string, params?: Record<string, string | number>) => string
 
 // ============================================================================
 // Props
@@ -54,6 +57,7 @@ export interface CompareTabProps {
 // ============================================================================
 
 export function CompareTab({ currentKC, currentSource, preselectId, preselectTrigger }: CompareTabProps) {
+  const { t } = useI18n()
   const [history, setHistory] = useState<KCHistoryEntry[]>([])
   const [selectedId, setSelectedId] = useState<string>('')
   const [loading, setLoading] = useState(false)
@@ -62,8 +66,9 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
   const [expandedDim, setExpandedDim] = useState<number | null>(0) // 默认展开第一个维度
   const [lastPreselectId, setLastPreselectId] = useState<string | null>(null)
 
-  const refresh = useCallback(() => {
-    setHistory(loadKCHistory())
+  const refresh = useCallback(async () => {
+    // D29 — loadKCHistory 改为 async + fetch /api/history/kc
+    setHistory(await loadKCHistory())
   }, [])
 
   useEffect(() => {
@@ -102,16 +107,16 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
       })
       const data = await resp.json()
       if (!data.success) {
-        setError(data.error || '对比失败')
+        setError(data.error || t('agent.compare.failed'))
         return
       }
       setResult(data.result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '请求失败')
+      setError(err instanceof Error ? err.message : t('agent.compare.requestFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   const handleCompare = async () => {
     if (!currentKC || !selectedId) return
@@ -124,9 +129,10 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
   if (!currentKC && history.length === 0) {
     return (
       <EmptyState
-        title="还没有任何 Knowledge Card"
-        hint="先生成一篇论文/URL/PDF 的知识卡，再来这里对比。"
+        title={t('agent.compare.empty1Title')}
+        hint={t('agent.compare.empty1Hint')}
         onRefresh={refresh}
+        refreshLabel={t('agent.compare.refresh')}
       />
     )
   }
@@ -135,9 +141,10 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
   if (currentKC && history.length === 0) {
     return (
       <EmptyState
-        title="只有当前 1 篇 KC，无法对比"
-        hint="生成第二篇论文的知识卡后，再来这里对比两篇论文。"
+        title={t('agent.compare.empty2Title')}
+        hint={t('agent.compare.empty2Hint')}
         onRefresh={refresh}
+        refreshLabel={t('agent.compare.refresh')}
       />
     )
   }
@@ -164,16 +171,16 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
             marginBottom: '10px',
           }}
         >
-          🔄 Compare Papers
+          {t('agent.compare.header')}
         </div>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', fontSize: '13px', color: '#5a6478' }}>
-          <span style={{ color: '#0284c7', fontWeight: 700 }}>A (当前):</span>
+          <span style={{ color: '#0284c7', fontWeight: 700 }}>{t('agent.compare.aCurrent')}</span>
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {currentKC?.title} {currentKC?.year ? `(${currentKC.year})` : ''}
           </span>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '13px', color: '#7c3aed', fontWeight: 700 }}>B:</span>
+          <span style={{ fontSize: '13px', color: '#7c3aed', fontWeight: 700 }}>{t('agent.compare.b')}</span>
           <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
@@ -188,12 +195,12 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
               cursor: 'pointer',
             }}
           >
-            <option value="">— 选择历史 KC —</option>
+            <option value="">{t('agent.compare.selectHistory')}</option>
             {history
               .filter(e => e.title !== currentKC?.title) // 排除当前 KC（避免和自己对比）
               .map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.title} {e.year ? `(${e.year})` : ''} · {e.field || 'N/A'} · {fmtRelativeTime(e.timestamp)}
+                  {e.title} {e.year ? `(${e.year})` : ''} · {e.field || 'N/A'} · {fmtRelativeTime(e.timestamp, t)}
                 </option>
               ))}
           </select>
@@ -206,10 +213,10 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
               cursor: (!selectedId || loading) ? 'not-allowed' : 'pointer',
             }}
           >
-            {loading ? '🔄 对比中...' : '⚡ 开始对比'}
+            {loading ? t('agent.compare.comparing') : t('agent.compare.startCompare')}
           </button>
           <button onClick={refresh} style={{ ...btnSecondary, padding: '6px 12px', fontSize: '12px' }}>
-            🔄 刷新历史
+            {t('agent.compare.refresh')}
           </button>
         </div>
         {error && (
@@ -223,8 +230,8 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
       {loading && (
         <div style={{ padding: '40px', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
           <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔄</div>
-          <div style={{ fontSize: '14px', color: '#64748b' }}>正在调用 LLM 对比 6 个维度...</div>
-          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>通常需要 5-15 秒</div>
+          <div style={{ fontSize: '14px', color: '#64748b' }}>{t('agent.compare.loadingHint')}</div>
+          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{t('agent.compare.loadingHint2')}</div>
         </div>
       )}
 
@@ -243,7 +250,7 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
               <div>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>
-                  Overall Difference Score
+                  {t('agent.compare.overallScore')}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                   <span style={{ fontSize: '36px', fontWeight: 800, color: getScoreColor(result.overallScore) }}>
@@ -251,16 +258,16 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
                   </span>
                   <span style={{ fontSize: '14px', color: '#94a3b8' }}>/ 100</span>
                   <span style={{ fontSize: '12px', color: getScoreColor(result.overallScore), marginLeft: '8px', fontWeight: 600 }}>
-                    {getDiffLabel(result.overallScore)}
+                    {getDiffLabel(result.overallScore, t)}
                   </span>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>
-                  Recommended Reading Order
+                  {t('agent.compare.readingOrder')}
                 </div>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: '#7c3aed' }}>
-                  {getOrderLabel(result.recommendedOrder)}
+                  {getOrderLabel(result.recommendedOrder, t)}
                 </div>
                 {result.durationMs && (
                   <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
@@ -293,7 +300,7 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
             }}
           >
             <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
-              📊 6-Dimension Breakdown
+              {t('agent.compare.breakdown')}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {result.dimensions.map((dim, i) => {
@@ -342,11 +349,11 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
                       <div style={{ padding: '10px 12px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: '12px' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
                           <div>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#0284c7', marginBottom: '4px' }}>A · Paper</div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#0284c7', marginBottom: '4px' }}>{t('agent.compare.aPaper')}</div>
                             <div style={{ color: '#475569', lineHeight: 1.5 }}>{dim.valueA}</div>
                           </div>
                           <div>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#7c3aed', marginBottom: '4px' }}>B · Paper</div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#7c3aed', marginBottom: '4px' }}>{t('agent.compare.bPaper')}</div>
                             <div style={{ color: '#475569', lineHeight: 1.5 }}>{dim.valueB}</div>
                           </div>
                         </div>
@@ -371,6 +378,7 @@ export function CompareTab({ currentKC, currentSource, preselectId, preselectTri
 // ============================================================================
 
 function RadarChart({ dimensions }: { dimensions: CompareResult['dimensions'] }) {
+  const { t } = useI18n()
   const size = 320
   const center = size / 2
   const radius = 110
@@ -430,7 +438,7 @@ function RadarChart({ dimensions }: { dimensions: CompareResult['dimensions'] })
       }}
     >
       <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', alignSelf: 'flex-start' }}>
-        📡 Radar Chart (6 Dimensions)
+        {t('agent.compare.radar')}
       </div>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
         {/* 同心多边形网格 */}
@@ -513,11 +521,11 @@ function RadarChart({ dimensions }: { dimensions: CompareResult['dimensions'] })
       <div style={{ display: 'flex', gap: '16px', marginTop: '4px', fontSize: '11px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ width: '12px', height: '12px', background: 'rgba(2, 132, 199, 0.5)', border: '2px solid #0284c7', borderRadius: '2px' }} />
-          <span style={{ color: '#0284c7', fontWeight: 700 }}>A · 当前</span>
+          <span style={{ color: '#0284c7', fontWeight: 700 }}>{t('agent.compare.aCurrent2')}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ width: '12px', height: '12px', background: 'rgba(124, 58, 237, 0.5)', border: '2px solid #7c3aed', borderRadius: '2px' }} />
-          <span style={{ color: '#7c3aed', fontWeight: 700 }}>B · 历史</span>
+          <span style={{ color: '#7c3aed', fontWeight: 700 }}>{t('agent.compare.bHistory')}</span>
         </div>
       </div>
     </div>
@@ -528,7 +536,7 @@ function RadarChart({ dimensions }: { dimensions: CompareResult['dimensions'] })
 // Empty State
 // ============================================================================
 
-function EmptyState({ title, hint, onRefresh }: { title: string; hint: string; onRefresh: () => void }) {
+function EmptyState({ title, hint, onRefresh, refreshLabel }: { title: string; hint: string; onRefresh: () => void; refreshLabel: string }) {
   return (
     <div
       style={{
@@ -542,7 +550,7 @@ function EmptyState({ title, hint, onRefresh }: { title: string; hint: string; o
       <div style={{ fontSize: '40px', marginBottom: '12px' }}>📊</div>
       <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f1729', marginBottom: '6px' }}>{title}</div>
       <div style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6, maxWidth: '400px', margin: '0 auto' }}>{hint}</div>
-      <button onClick={onRefresh} style={{ ...btnPrimary, marginTop: '16px' }}>🔄 刷新历史</button>
+      <button onClick={onRefresh} style={{ ...btnPrimary, marginTop: '16px' }}>{refreshLabel}</button>
     </div>
   )
 }
@@ -551,12 +559,12 @@ function EmptyState({ title, hint, onRefresh }: { title: string; hint: string; o
 // 辅助
 // ============================================================================
 
-function fmtRelativeTime(ts: number): string {
+function fmtRelativeTime(ts: number, t: TFn): string {
   const diff = Date.now() - ts
-  if (diff < 60_000) return '刚刚'
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}分钟前`
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}小时前`
-  return `${Math.floor(diff / 86400_000)}天前`
+  if (diff < 60_000) return t('agent.smartSuggestion.relativeTime.justNow')
+  if (diff < 3600_000) return t('agent.smartSuggestion.relativeTime.minutesAgo', { n: Math.floor(diff / 60_000) })
+  if (diff < 86400_000) return t('agent.smartSuggestion.relativeTime.hoursAgo', { n: Math.floor(diff / 3600_000) })
+  return t('agent.smartSuggestion.relativeTime.daysAgo', { n: Math.floor(diff / 86400_000) })
 }
 
 function getScoreColor(score: number): string {
@@ -566,15 +574,15 @@ function getScoreColor(score: number): string {
   return '#16a34a'                   // 极低差异 = 绿
 }
 
-function getDiffLabel(score: number): string {
-  if (score >= 75) return 'Highly Different'
-  if (score >= 50) return 'Significantly Different'
-  if (score >= 25) return 'Moderately Different'
-  return 'Similar'
+function getDiffLabel(score: number, t: TFn): string {
+  if (score >= 75) return t('agent.compare.diffLabels.highly')
+  if (score >= 50) return t('agent.compare.diffLabels.significantly')
+  if (score >= 25) return t('agent.compare.diffLabels.moderately')
+  return t('agent.compare.diffLabels.similar')
 }
 
-function getOrderLabel(order: CompareResult['recommendedOrder']): string {
-  if (order === 'A_before_B') return '📖 A → B（先读 A）'
-  if (order === 'B_before_A') return '📖 B → A（先读 B）'
-  return '🔀 Parallel（无顺序要求）'
+function getOrderLabel(order: CompareResult['recommendedOrder'], t: TFn): string {
+  if (order === 'A_before_B') return t('agent.compare.orderLabels.aBeforeB')
+  if (order === 'B_before_A') return t('agent.compare.orderLabels.bBeforeA')
+  return t('agent.compare.orderLabels.parallel')
 }

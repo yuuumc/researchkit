@@ -7,7 +7,7 @@
 
 import type { AnalyzerField } from './agent'
 import type { KnowledgeCard } from './knowledge'
-import type { ChatUsage, AgentUsageSummary } from '@/lib/usage-collector'
+import type { ChatUsage, AgentUsageSummary } from '@/types/usage'
 
 // ============================================================================
 // Plan

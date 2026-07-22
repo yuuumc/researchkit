@@ -8,17 +8,27 @@ import { SmartSuggestionBanner } from '@/components/SmartSuggestionBanner'
 import { ChatWithKC } from '@/components/ChatWithKC'
 import { ExplainKC } from '@/components/ExplainKC'
 import { PluginPanel } from '@/components/PluginPanel'
+import { LiveThoughts, type LiveThought } from '@/components/LiveThoughts'
+import { LanguageDetectBanner } from '@/components/LanguageDetectBanner'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
-import { getLabels } from '@/lib/ui-labels'
+import { useI18n } from '@/components/I18nProvider'
+import { getKcFieldLabels } from '@/lib/ui-labels'
 import { appendCostRun } from '@/lib/cost-history'
 import { appendKCToHistory, loadKCHistory } from '@/lib/kc-history'
-import { computeSmartSuggestion, type SmartSuggestion } from '@/lib/smart-suggestion'
+import { computeSmartSuggestion as computeSmartSuggestionHeuristic, type SmartSuggestion } from '@/lib/smart-suggestion'
+import {
+  getUserPreferencesClient,
+  saveUserPreferencesClient,
+  type UserPreferences,
+} from '@/lib/user-preferences'
+import type { Locale } from '@/lib/locale'
 
 type InputMode = 'text' | 'url' | 'pdf' | 'batch'
 
 export default function Home() {
+  const { t, resolvedLocale } = useI18n()
   const [mode, setMode] = useState<InputMode>('text')
   const [input, setInput] = useState('')
   const [result, setResult] = useState<any>(null)
@@ -55,39 +65,59 @@ export default function Home() {
   // D9 — Compare tab 预选触发器（Smart Suggestion "Compare Now" 跳转用）
   const [comparePreselectId, setComparePreselectId] = useState<string | null>(null)
   const [comparePreselectTrigger, setComparePreselectTrigger] = useState(0)
+  // D28 — Live Thoughts token 流式（用 ref 累积 + throttle setState，避免每个 token 触发 re-render）
+  const [liveThoughts, setLiveThoughts] = useState<LiveThought[]>([])
+  const [liveThoughtsActive, setLiveThoughtsActive] = useState(false)
+  const liveThoughtsBufferRef = useRef<Map<string, string>>(new Map())
+  const liveThoughtsFlushTimerRef = useRef<number | null>(null)
+  // D39 — User Preferences (用于 LanguageDetectBanner 的 appLocale/outputLocale + 应用建议)
+  const [userPrefs, setUserPrefs] = useState<UserPreferences | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mindmapRef = useRef<HTMLDivElement>(null)
+
+  // D39 — 首次加载 UserPreferences(客户端 hydration 后)
+  useEffect(() => {
+    setUserPrefs(getUserPreferencesClient())
+  }, [])
+
+  // D39 — LanguageDetectBanner 应用建议:切换 outputLocale 并保存
+  const handleApplyLanguageSuggestion = (suggested: Locale) => {
+    const current = userPrefs || getUserPreferencesClient()
+    const updated: UserPreferences = { ...current, outputLocale: suggested }
+    saveUserPreferencesClient(updated)
+    setUserPrefs(updated)
+  }
 
   // 进度面板"已耗时"实时刷新：每秒强制 re-render
   useEffect(() => {
     if (progressStage === 0 || progressStage === 7) return
-    const interval = window.setInterval(() => setTick(t => t + 1), 1000)
+    const interval = window.setInterval(() => setTick(prev => prev + 1), 1000)
     return () => window.clearInterval(interval)
   }, [progressStage])
 
   // 进度阶段定义 — 与 coordinator.ts 实际执行流程一致
   const STAGES = [
-    { id: 1, label: 'Document Loaded', icon: '📄', desc: '读取文档/URL/PDF 内容' },
-    { id: 2, label: 'Plan Generated', icon: '🧠', desc: 'Planner LLM 自主规划执行步骤' },
-    { id: 3, label: 'Concepts Extracted', icon: '🔬', desc: 'Reader + Analyzer + Terminology 并行分析' },
-    { id: 4, label: 'Knowledge Card Built', icon: '🏗️', desc: 'KnowledgeBuilder 汇总成知识卡' },
-    { id: 5, label: 'Reflection Loop', icon: '🔁', desc: '反思结果，必要时补调 Agent' },
-    { id: 6, label: 'Exports Ready', icon: '📤', desc: '生成 Markdown / Obsidian / Knowledge Graph' },
+    { id: 1, label: t('home.progress.stage1Label'), icon: '📄', desc: t('home.progress.stage1Desc') },
+    { id: 2, label: t('home.progress.stage2Label'), icon: '🧠', desc: t('home.progress.stage2Desc') },
+    { id: 3, label: t('home.progress.stage3Label'), icon: '🔬', desc: t('home.progress.stage3Desc') },
+    { id: 4, label: t('home.progress.stage4Label'), icon: '🏗️', desc: t('home.progress.stage4Desc') },
+    { id: 5, label: t('home.progress.stage5Label'), icon: '🔁', desc: t('home.progress.stage5Desc') },
+    { id: 6, label: t('home.progress.stage6Label'), icon: '📤', desc: t('home.progress.stage6Desc') },
   ]
 
   const handleSubmit = async () => {
     if (mode === 'pdf') {
       if (!pdfFile) {
-        setError('请上传 PDF 文件')
+        setError(t('home.errors.noPdf'))
         return
       }
     } else if (mode === 'batch') {
       if (!input.trim()) {
-        setError('请输入多个 URL（每行一个）')
+        setError(t('home.errors.noInputBatch'))
         return
       }
     } else if (!input.trim()) {
-      setError(mode === 'url' ? '请输入 URL' : '请输入论文/文档内容')
+      setError(mode === 'url' ? t('home.errors.noInputUrl') : t('home.errors.noInputText'))
       return
     }
 
@@ -116,6 +146,14 @@ export default function Home() {
     setSmartSuggestion(null)
     setSuggestionDismissed(false)
     setComparePreselectId(null)
+    // D28 — 重置 Live Thoughts
+    setLiveThoughts([])
+    setLiveThoughtsActive(true)
+    liveThoughtsBufferRef.current = new Map()
+    if (liveThoughtsFlushTimerRef.current !== null) {
+      window.clearTimeout(liveThoughtsFlushTimerRef.current)
+      liveThoughtsFlushTimerRef.current = null
+    }
 
     // 启动可视化进度 — Stage 1 立即触发（Document Loaded）
     // 后续 Stage 2-7 由 SSE 实时推送（/api/research/multi-agent-stream）
@@ -145,7 +183,7 @@ export default function Home() {
         })
         const pdfData = await pdfResponse.json()
         if (!pdfData.success) {
-          setError(pdfData.error || 'PDF 解析失败')
+          setError(pdfData.error || t('home.errors.pdfParseFailed'))
           setProgressStage(0)
           return
         }
@@ -168,7 +206,7 @@ export default function Home() {
         })
         const data = await response.json()
         if (!data.success) {
-          setError(data.error || '生成失败')
+          setError(data.error || t('home.errors.generateFailed'))
           setProgressStage(0)
           return
         }
@@ -191,12 +229,12 @@ export default function Home() {
         })
         const fetchData = await fetchResponse.json()
         if (!fetchData.success) {
-          setError(fetchData.error || 'URL 抓取失败')
+          setError(fetchData.error || t('home.errors.urlFetchFailed'))
           setProgressStage(0)
           return
         }
         if (!fetchData.content || fetchData.content.length < 50) {
-          setError(`URL 抓取到的内容过短（${fetchData.content?.length || 0} 字符）。可能是 JS 渲染的页面，请改用文本模式粘贴内容。`)
+          setError(t('home.errors.urlTooShort', { len: fetchData.content?.length || 0 }))
           setProgressStage(0)
           return
         }
@@ -215,14 +253,14 @@ export default function Home() {
         // 网络层错误（如 ERR_ABORTED, ERR_CONNECTION_REFUSED）— 抛出友好消息给 catch 块
         const msg = String(fetchErr?.message || fetchErr)
         if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ABORTED')) {
-          throw new Error('网络请求被中断（可能是页面刷新或代码热更新）。请稍等 1-2 秒后重试。')
+          throw new Error(t('home.errors.networkInterrupted'))
         }
         throw fetchErr
       })
 
       if (!sseResponse.ok || !sseResponse.body) {
         const errText = await sseResponse.text()
-        setError(`SSE 连接失败: ${sseResponse.status} ${errText}`)
+        setError(t('home.errors.sseFailed', { status: sseResponse.status, detail: errText }))
         setProgressStage(0)
         return
       }
@@ -275,9 +313,23 @@ export default function Home() {
             } else if (eventName === 'result') {
               finalData = payload
             } else if (eventName === 'error') {
-              setError(payload.error || '生成失败')
+              setError(payload.error || t('home.errors.generateFailed'))
               setProgressStage(0)
               return
+            } else if (eventName === 'agent_token') {
+              // D28 — token 流式：累积到 ref，throttle 触发 setState
+              const { agent, delta } = payload as { agent: string; delta: string }
+              const buf = liveThoughtsBufferRef.current
+              buf.set(agent, (buf.get(agent) || '') + delta)
+              // 每 60ms flush 一次（避免每个 token 触发 re-render）
+              if (liveThoughtsFlushTimerRef.current === null) {
+                liveThoughtsFlushTimerRef.current = window.setTimeout(() => {
+                  liveThoughtsFlushTimerRef.current = null
+                  const arr: LiveThought[] = Array.from(liveThoughtsBufferRef.current.entries())
+                    .map(([agent, text]) => ({ agent, text }))
+                  setLiveThoughts(arr)
+                }, 60)
+              }
             }
           }
         }
@@ -285,7 +337,7 @@ export default function Home() {
         // 流读取过程中被中断（如 HMR 重新编译、页面刷新）
         const msg = String(streamErr instanceof Error ? streamErr.message : streamErr)
         if (msg.includes('aborted') || msg.includes('ABORTED') || msg.includes('network') || msg.includes('Failed to fetch')) {
-          throw new Error('生成过程中连接被中断。请稍等 1-2 秒后重试。')
+          throw new Error(t('home.errors.streamInterrupted'))
         }
         throw streamErr
       } finally {
@@ -293,7 +345,7 @@ export default function Home() {
       }
 
       if (!finalData || !finalData.success || !finalData.knowledge_card) {
-        setError(finalData?.error || '生成失败：返回数据不完整')
+        setError(finalData?.error || t('home.errors.incompleteData'))
         setProgressStage(0)
         return
       }
@@ -310,13 +362,13 @@ export default function Home() {
       setIterations(finalData.iterations || [])
       setTotalIterations(finalData.total_iterations || 0)
 
-      // D6 Cost Dashboard — 持久化到 localStorage（供 CostTab 读取）
+      // D6 Cost Dashboard — 持久化到 server-side（D29 改造）
       // 只在确实生成了知识卡 + 有 token 统计时记录（避免失败请求污染历史）
       const md = finalData.metadata || {}
       const perAgent = Array.isArray(md.per_agent_usage) ? md.per_agent_usage : []
       if (md.total_tokens > 0 && perAgent.length > 0 && finalData.knowledge_card) {
         try {
-          appendCostRun({
+          await appendCostRun({
             timestamp: Date.now(),
             title: String(finalData.knowledge_card.title || '').substring(0, 60),
             source: String(finalData.metadata?.source || actualSource || '用户输入'),
@@ -333,16 +385,17 @@ export default function Home() {
             model: perAgent[0]?.model || undefined,
           })
         } catch (err) {
-          // localStorage 写失败不影响主流程
+          // server-side 写失败不影响主流程
           console.warn('[cost-history] append failed:', err)
         }
       }
 
       // D8 Compare Papers — 把当前 KC 追加到历史（供 CompareTab 选另一篇对比）
+      // D29 — 改为 server-side 持久化
       // 只在确实生成了知识卡时记录（避免失败请求污染历史）
       if (finalData.knowledge_card) {
         try {
-          appendKCToHistory({
+          await appendKCToHistory({
             knowledgeCard: finalData.knowledge_card,
             source: String(actualSource || '用户输入'),
           })
@@ -350,16 +403,39 @@ export default function Home() {
           console.warn('[kc-history] append failed:', err)
         }
 
-        // D9 Memory v1 — 计算与历史 KC 的相似度，弹出 Smart Suggestion banner
+        // D9/D30 Smart Suggestion — 改用 LLM v2 判断（server-side API），失败 fallback 到 v1 启发式
         try {
-          const history = loadKCHistory()
+          const history = await loadKCHistory()
           // 排除刚加入的当前 KC（按 title+year 比较）
           const filteredHistory = history.filter(e => {
             const sameTitle = e.title === String(finalData.knowledge_card.title || '').substring(0, 80)
             const sameYear = e.year === finalData.knowledge_card.year
             return !(sameTitle && sameYear)
           })
-          const suggestion = computeSmartSuggestion(finalData.knowledge_card, filteredHistory)
+
+          let suggestion: SmartSuggestion | null = null
+          try {
+            // D30 — 优先调 LLM v2 API
+            const res = await fetch('/api/research/smart-suggestion', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                currentKC: finalData.knowledge_card,
+                history: filteredHistory,
+              }),
+            })
+            if (res.ok) {
+              suggestion = (await res.json()) as SmartSuggestion
+            }
+          } catch (llmErr) {
+            console.warn('[smart-suggestion] LLM API failed:', llmErr)
+          }
+
+          // Fallback：LLM 调用失败时用 v1 启发式
+          if (!suggestion) {
+            suggestion = computeSmartSuggestionHeuristic(finalData.knowledge_card, filteredHistory)
+          }
+
           if (suggestion.bestMatch) {
             setSmartSuggestion(suggestion)
             setSuggestionDismissed(false)
@@ -371,10 +447,19 @@ export default function Home() {
 
       finalizeProgress()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '请求失败')
+      setError(err instanceof Error ? err.message : t('home.errors.requestFailed'))
       setProgressStage(0)
     } finally {
       setLoading(false)
+      // D28 — 关闭 Live Thoughts 浮窗 active 状态（最后一批 token flush + 2.5s 后自动隐藏）
+      if (liveThoughtsFlushTimerRef.current !== null) {
+        window.clearTimeout(liveThoughtsFlushTimerRef.current)
+        liveThoughtsFlushTimerRef.current = null
+      }
+      const finalArr: LiveThought[] = Array.from(liveThoughtsBufferRef.current.entries())
+        .map(([agent, text]) => ({ agent, text }))
+      if (finalArr.length > 0) setLiveThoughts(finalArr)
+      setLiveThoughtsActive(false)
     }
   }
 
@@ -402,7 +487,7 @@ export default function Home() {
           navigator.clipboard.writeText(content).catch(() => {
             // 异步拒绝时回退
             if (!fallbackCopy()) {
-              setError('复制失败：请手动选择文本复制')
+              setError(t('home.errors.copyFailed'))
               setTimeout(() => setError(''), 3000)
             }
           })
@@ -454,7 +539,7 @@ export default function Home() {
             script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js'
             script.async = true
             script.onload = () => resolve()
-            script.onerror = () => reject(new Error('Mermaid CDN 加载失败'))
+            script.onerror = () => reject(new Error(t('home.errors.mermaidCdnFailed')))
             document.head.appendChild(script)
           })
         }
@@ -480,7 +565,7 @@ export default function Home() {
       } catch (err) {
         if (!cancelled) {
           setMindmapSvg(null)
-          setMindmapError(err instanceof Error ? err.message : 'Mermaid 渲染失败')
+          setMindmapError(err instanceof Error ? err.message : t('home.errors.mermaidRenderFailed'))
         }
       }
     }
@@ -915,6 +1000,31 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         @media (max-width: 768px) and (min-width: 641px) {
           .cap-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
+
+        /* === v2.2.6 hotfix: Smart Suggestion Banner 移动端响应式 === */
+        /* 原始 banner minWidth 220 + 按钮 140 + padding 32 = 392px，在 320px viewport 溢出 */
+        @media (max-width: 640px) {
+          .smart-suggestion-wrapper > div {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 8px !important;
+            padding: 12px !important;
+          }
+          .smart-suggestion-wrapper > div > div:nth-child(2) {
+            /* 内容区 */
+            min-width: 0 !important;
+          }
+          .smart-suggestion-wrapper > div > div:last-child {
+            /* 按钮区 */
+            width: 100% !important;
+            justify-content: stretch !important;
+          }
+          .smart-suggestion-wrapper > div > div:last-child > button {
+            flex: 1;
+            min-height: 44px;
+            padding: 10px 12px !important;
+          }
+        }
       `}} />
 
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 20px' }}>
@@ -1025,7 +1135,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
             position: 'relative',
             zIndex: 1,
           }}>
-            AI Research Agent · 论文/文档 → 结构化知识卡 + Knowledge Graph + 推荐阅读
+            {t('home.heroHint')}
           </p>
         </div>
 
@@ -1033,10 +1143,10 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         <div className="section-fade-in hero-fade-delay-4 input-card" style={{ background: 'white', borderRadius: '20px', padding: '28px', boxShadow: '0 4px 20px rgba(99, 102, 241, 0.08)', marginTop: '24px', marginBottom: '24px' }}>
           {/* Mode tabs */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
-            <button key="text" onClick={() => { setMode('text'); setError('') }} style={tabStyle(mode === 'text')} className={mode === 'text' ? 'mode-tab-active' : ''}>📝 文本</button>
-            <button key="url" onClick={() => { setMode('url'); setError('') }} style={tabStyle(mode === 'url')} className={mode === 'url' ? 'mode-tab-active' : ''}>🔗 URL</button>
-            <button key="pdf" onClick={() => { setMode('pdf'); setError('') }} style={tabStyle(mode === 'pdf')} className={mode === 'pdf' ? 'mode-tab-active' : ''}>📄 PDF</button>
-            <button key="batch" onClick={() => { setMode('batch'); setError('') }} style={tabStyle(mode === 'batch')} className={mode === 'batch' ? 'mode-tab-active' : ''}>⚡ 批量</button>
+            <button key="text" onClick={() => { setMode('text'); setError('') }} style={tabStyle(mode === 'text')} className={mode === 'text' ? 'mode-tab-active' : ''}>{t('home.modeTabs.text')}</button>
+            <button key="url" onClick={() => { setMode('url'); setError('') }} style={tabStyle(mode === 'url')} className={mode === 'url' ? 'mode-tab-active' : ''}>{t('home.modeTabs.url')}</button>
+            <button key="pdf" onClick={() => { setMode('pdf'); setError('') }} style={tabStyle(mode === 'pdf')} className={mode === 'pdf' ? 'mode-tab-active' : ''}>{t('home.modeTabs.pdf')}</button>
+            <button key="batch" onClick={() => { setMode('batch'); setError('') }} style={tabStyle(mode === 'batch')} className={mode === 'batch' ? 'mode-tab-active' : ''}>{t('home.modeTabs.batch')}</button>
           </div>
 
           {/* Input field */}
@@ -1044,7 +1154,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="粘贴论文摘要、技术文档或任意研究内容..."
+              placeholder={t('home.placeholders.textLong')}
               style={inputStyle}
               onFocus={(e) => (e.target.style.borderColor = '#6366f1')}
               onBlur={(e) => (e.target.style.borderColor = '#e2e8f2')}
@@ -1056,7 +1166,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               type="url"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="https://arxiv.org/abs/2301.00001 或任意网页链接"
+              placeholder={t('home.placeholders.urlLong')}
               style={{ ...inputStyle, minHeight: 'auto' }}
               onFocus={(e) => (e.target.style.borderColor = '#6366f1')}
               onBlur={(e) => (e.target.style.borderColor = '#e2e8f2')}
@@ -1068,13 +1178,13 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={'每行一个 URL，最多 10 个：\nhttps://arxiv.org/abs/1706.03762\nhttps://arxiv.org/abs/1810.04805\nhttps://arxiv.org/abs/2005.14165'}
+                placeholder={t('home.placeholders.batchLong')}
                 style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '13px' }}
                 onFocus={(e) => (e.target.style.borderColor = '#6366f1')}
                 onBlur={(e) => (e.target.style.borderColor = '#e2e8f2')}
               />
               <div style={{ marginTop: '8px', fontSize: '13px', color: '#94a3b8' }}>
-                ⚡ 3 并发处理 · 默认 brief 模式（节省 token）· 失败的 URL 不会中断其他
+                {t('home.placeholders.batchHint')}
               </div>
             </>
           )}
@@ -1089,12 +1199,12 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                 const file = e.dataTransfer.files[0]
                 if (!file) return
                 if (!(file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf')) {
-                  setError('只支持 PDF 文件')
+                  setError(t('home.pdf.wrongType'))
                   return
                 }
                 // 客户端预校验大小，避免大文件上传后才报错（服务端 10MB 上限）
                 if (file.size > 10 * 1024 * 1024) {
-                  setError(`PDF 文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），最大支持 10 MB`)
+                  setError(t('home.pdf.tooLarge', { size: (file.size / 1024 / 1024).toFixed(1) }))
                   return
                 }
                 setPdfFile(file)
@@ -1126,7 +1236,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                   const file = e.target.files?.[0]
                   if (!file) return
                   if (file.size > 10 * 1024 * 1024) {
-                    setError(`PDF 文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），最大支持 10 MB`)
+                    setError(t('home.pdf.tooLarge', { size: (file.size / 1024 / 1024).toFixed(1) }))
                     return
                   }
                   setPdfFile(file)
@@ -1137,16 +1247,26 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                 <>
                   <div style={{ fontSize: '32px', marginBottom: '8px' }}>✓</div>
                   <div style={{ fontWeight: 600, color: '#10b981', marginBottom: '4px' }}>{pdfFile.name}</div>
-                  <div style={{ fontSize: '13px', color: '#5a6478' }}>{(pdfFile.size / 1024).toFixed(1)} KB · 点击重新选择</div>
+                  <div style={{ fontSize: '13px', color: '#5a6478' }}>{(pdfFile.size / 1024).toFixed(1)} KB · {t('home.pdf.selected')}</div>
                 </>
               ) : (
                 <>
                   <div style={{ fontSize: '32px', marginBottom: '8px' }}>📄</div>
-                  <div style={{ fontWeight: 600, color: '#5a6478', marginBottom: '4px' }}>点击上传或拖拽 PDF 到这里</div>
-                  <div style={{ fontSize: '13px', color: '#94a3b8' }}>最大 10MB · 支持文字版 PDF</div>
+                  <div style={{ fontWeight: 600, color: '#5a6478', marginBottom: '4px' }}>{t('home.pdf.dropHint')}</div>
+                  <div style={{ fontSize: '13px', color: '#94a3b8' }}>{t('home.pdf.dropHint2')}</div>
                 </>
               )}
             </div>
+          )}
+
+          {/* D39 — Language Detect Banner(只在 text / url / batch 模式显示) */}
+          {mode !== 'pdf' && userPrefs && (
+            <LanguageDetectBanner
+              input={input}
+              appLocale={userPrefs.appLocale}
+              outputLocale={userPrefs.outputLocale}
+              onApplySuggestion={handleApplyLanguageSuggestion}
+            />
           )}
 
           {/* Actions */}
@@ -1162,7 +1282,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                 transition: 'transform 0.2s', transform: loading ? 'none' : 'scale(1)',
               }}
             >
-              {loading ? '⏳ 生成中...' : '✨ 生成知识卡'}
+              {loading ? t('home.buttons.generating') : t('home.buttons.generate')}
             </button>
             <button
               onClick={loadExample}
@@ -1171,7 +1291,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                 border: 'none', borderRadius: '12px', cursor: 'pointer',
                 fontSize: '14px', fontWeight: 600,
               }}
-            >📋 载入示例</button>
+            >{t('home.buttons.loadExample')}</button>
           </div>
 
           {/* 可视化生成进度面板 */}
@@ -1196,12 +1316,12 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                 }}>⚙️</div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
-                    {progressStage === 7 ? '✓ 完成' : 'Agent Pipeline 执行中'}
+                    {progressStage === 7 ? t('home.progress.done') : t('home.progress.executing')}
                   </div>
                   <div style={{ fontSize: '11px', color: '#94a3b8' }}>
                     {progressStage < 7
-                      ? `Stage ${progressStage} / 6 · 已耗时 ${Math.floor((Date.now() - progressStartedAt) / 1000)}s`
-                      : `总耗时 ${Math.floor((Date.now() - progressStartedAt) / 1000)}s`
+                      ? t('home.progress.stageXofY', { current: progressStage, seconds: Math.floor((Date.now() - progressStartedAt) / 1000) })
+                      : t('home.progress.totalTime', { seconds: Math.floor((Date.now() - progressStartedAt) / 1000) })
                     }
                   </div>
                 </div>
@@ -1292,10 +1412,10 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
 
                       {/* Status badge */}
                       {stageState === 'done' && (
-                        <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 700 }}>DONE</span>
+                        <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 700 }}>{t('home.progress.badgeDone')}</span>
                       )}
                       {stageState === 'active' && (
-                        <span style={{ fontSize: '10px', color: '#6366f1', fontWeight: 700, animation: 'pulse 1.5s ease-in-out infinite' }}>RUNNING</span>
+                        <span style={{ fontSize: '10px', color: '#6366f1', fontWeight: 700, animation: 'pulse 1.5s ease-in-out infinite' }}>{t('home.progress.badgeRunning')}</span>
                       )}
                     </div>
                   )
@@ -1326,18 +1446,18 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
             <span style={{ fontSize: '16px' }}>🧠</span>
             <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Agent Pipeline · Autonomous Workflow
+              {t('home.pipeline.autonomous')}
             </h3>
           </div>
 
           {[
-            { icon: '🧠', name: 'Planner', role: 'LLM 自主规划', color: '#6366f1' },
-            { icon: '📖', name: 'Reader', role: '阅读理解', color: '#06b6d4' },
-            { icon: '🔬', name: 'Analyzer', role: '深度分析', color: '#0891b2' },
-            { icon: '🔤', name: 'Terminology', role: '术语分类', color: '#0e7490' },
-            { icon: '🏗️', name: 'KB Builder', role: '汇总构建', color: '#7c3aed' },
-            { icon: '📚', name: 'Recommend', role: 'arXiv 推荐', color: '#8b5cf6' },
-            { icon: '📤', name: 'Export', role: '多格式导出', color: '#db2777' },
+            { icon: '🧠', name: t('home.agents.planner.name'), role: t('home.agents.planner.role'), color: '#6366f1' },
+            { icon: '📖', name: t('home.agents.reader.name'), role: t('home.agents.reader.role'), color: '#06b6d4' },
+            { icon: '🔬', name: t('home.agents.analyzer.name'), role: t('home.agents.analyzer.role'), color: '#0891b2' },
+            { icon: '🔤', name: t('home.agents.terminology.name'), role: t('home.agents.terminology.role'), color: '#0e7490' },
+            { icon: '🏗️', name: t('home.agents.kbBuilder.name'), role: t('home.agents.kbBuilder.role'), color: '#7c3aed' },
+            { icon: '📚', name: t('home.agents.recommend.name'), role: t('home.agents.recommend.role'), color: '#8b5cf6' },
+            { icon: '📤', name: t('home.agents.export.name'), role: t('home.agents.export.role'), color: '#db2777' },
           ].map((a, i) => (
             <div key={i} className="agent-card" style={{
               background: 'white',
@@ -1356,38 +1476,39 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
             <span style={{ fontSize: '16px' }}>🔧</span>
             <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#0891b2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              MCP Tools · Model Context Protocol
+              {t('home.pipeline.mcpTools')}
             </h3>
           </div>
 
           {[
-            { icon: '💾', name: 'Memory', desc: '跨会话记忆读过论文', color: '#0891b2' },
-            { icon: '📄', name: 'Filesystem', desc: '保存 .md / .json 文件', color: '#0e7490' },
-            { icon: '🔍', name: 'Arxiv', desc: '搜索相关学术论文', color: '#06b6d4' },
-            { icon: '🌐', name: 'Web Search', desc: 'DuckDuckGo 网络搜索', color: '#0891b2' },
-          ].map((t, i) => (
+            { icon: '💾', name: t('home.tools.memory.name'), desc: t('home.tools.memory.desc'), color: '#0891b2' },
+            { icon: '📄', name: t('home.tools.filesystem.name'), desc: t('home.tools.filesystem.desc'), color: '#0e7490' },
+            { icon: '🔍', name: t('home.tools.arxiv.name'), desc: t('home.tools.arxiv.desc'), color: '#06b6d4' },
+            { icon: '🌐', name: t('home.tools.webSearch.name'), desc: t('home.tools.webSearch.desc'), color: '#0891b2' },
+          ].map((tool, i) => (
             <div key={i} className="agent-card" style={{
               background: 'white',
               borderRadius: '12px',
               padding: '14px',
               boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-              borderLeft: `3px solid ${t.color}`,
+              borderLeft: `3px solid ${tool.color}`,
             }}>
-              <div style={{ fontSize: '18px', marginBottom: '4px' }}>{t.icon}</div>
-              <div style={{ fontSize: '12px', fontWeight: 800, color: '#0f172a' }}>{t.name}</div>
-              <div style={{ fontSize: '10px', color: '#5a6478', marginTop: '2px' }}>{t.desc}</div>
+              <div style={{ fontSize: '18px', marginBottom: '4px' }}>{tool.icon}</div>
+              <div style={{ fontSize: '12px', fontWeight: 800, color: '#0f172a' }}>{tool.name}</div>
+              <div style={{ fontSize: '10px', color: '#5a6478', marginTop: '2px' }}>{tool.desc}</div>
             </div>
           ))}
         </div>
 
         {/* D9 Memory v1 — Smart Suggestion Banner（result 顶部） */}
         {result && smartSuggestion && smartSuggestion.bestMatch && !suggestionDismissed && (
-          <SmartSuggestionBanner
+          <div className="smart-suggestion-wrapper">
+            <SmartSuggestionBanner
             suggestion={smartSuggestion}
             onCompareNow={() => {
               if (!smartSuggestion.bestMatch) return
               setComparePreselectId(smartSuggestion.bestMatch.id)
-              setComparePreselectTrigger(t => t + 1)
+              setComparePreselectTrigger(prev => prev + 1)
               setExportTab('compare')
               // 滚动到 Compare tab 区
               setTimeout(() => {
@@ -1396,12 +1517,13 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               }, 100)
             }}
             onDismiss={() => setSuggestionDismissed(true)}
-          />
+            />
+          </div>
         )}
 
         {/* Result */}
         {result && (() => {
-          const L = getLabels(result.language, result.locale)
+          const L = getKcFieldLabels(resolvedLocale)
           return (
           <div className="section-fade-in" key={`result-${result.title}-${result.year || ''}`}>
             <style dangerouslySetInnerHTML={{ __html: `@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }` }} />
@@ -1422,7 +1544,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                     fontSize: '13px',
                     transition: 'all 0.2s',
                   }}
-                >📖 Simple</button>
+                >{t('home.uiMode.simpleBtn')}</button>
                 <button
                   onClick={() => setUiMode('advanced')}
                   style={{
@@ -1436,7 +1558,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                     fontSize: '13px',
                     transition: 'all 0.2s',
                   }}
-                >🔬 Advanced</button>
+                >{t('home.uiMode.advancedBtn')}</button>
               </div>
             </div>
 
@@ -1473,7 +1595,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               {/* Meta chips */}
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
                 {result.authors?.length > 0 && (
-                  <Chip>✍️ {result.authors.slice(0, 3).join(', ')}{result.authors.length > 3 ? ' 等' : ''}</Chip>
+                  <Chip>✍️ {result.authors.slice(0, 3).join(', ')}{result.authors.length > 3 ? ` ${t('home.fields.andOthers')}` : ''}</Chip>
                 )}
                 {result.field && <Chip>🏷️ {result.field}</Chip>}
                 {result.year && <Chip>📅 {result.year}</Chip>}
@@ -1628,7 +1750,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
             {/* D10 Chat with Knowledge Card — 可折叠，默认展开 */}
             {result && (
               <div style={{ marginBottom: '16px' }}>
-                <Card title="💬 Ask Anything" color="#06b6d4" defaultOpen={false} index={13}>
+                <Card title={t('home.cardTitles.askAnything')} color="#06b6d4" defaultOpen={false} index={13}>
                   <div style={{ marginTop: '4px' }}>
                     <ChatWithKC knowledgeCard={result} />
                   </div>
@@ -1639,7 +1761,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
             {/* D11 Explain Agent — 为不同受众重新解释论文 */}
             {result && (
               <div style={{ marginBottom: '16px' }}>
-                <Card title="🎯 Explain for Audience" color="#f59e0b" defaultOpen={false} index={14}>
+                <Card title={t('home.cardTitles.explainForAudience')} color="#f59e0b" defaultOpen={false} index={14}>
                   <div style={{ marginTop: '4px' }}>
                     <ExplainKC knowledgeCard={result} />
                   </div>
@@ -1650,7 +1772,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
             {/* D12 Plugin System — 一键导出 KC 到第三方工具 */}
             {result && (
               <div style={{ marginBottom: '16px' }}>
-                <Card title="🧩 Plugins" color="#8b5cf6" defaultOpen={false} index={15}>
+                <Card title={t('home.cardTitles.plugins')} color="#8b5cf6" defaultOpen={false} index={15}>
                   <div style={{ marginTop: '4px' }}>
                     <PluginPanel knowledgeCard={result} />
                   </div>
@@ -1661,7 +1783,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
             {/* Export toolbar — 折叠式：默认只显示 3 按钮，点 Preview 才展开 */}
             {(markdown || obsidian || mindmap || result) && (
               <div id="export-section">
-              <Card title="📥 导出" color="#6366f1" defaultOpen={true} index={13}>
+              <Card title={t('home.cardTitles.export')} color="#6366f1" defaultOpen={true} index={13}>
                 {/* Format toggle — 4 tabs (Markdown / Obsidian / Knowledge Graph / Compare) */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
                   <div className="export-tabs" style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px' }}>
@@ -1673,7 +1795,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                         color: exportTab === 'markdown' ? '#6366f1' : '#5a6478',
                         fontWeight: 600, fontSize: '13px', boxShadow: exportTab === 'markdown' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                       }}
-                    >Markdown</button>
+                    >{t('home.exportTabs.markdown')}</button>
                     <button
                       onClick={() => { setExportTab('obsidian'); setMarkdownPreviewOpen(false) }}
                       style={{
@@ -1682,7 +1804,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                         color: exportTab === 'obsidian' ? '#8b5cf6' : '#5a6478',
                         fontWeight: 600, fontSize: '13px', boxShadow: exportTab === 'obsidian' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                       }}
-                    >🔮 Obsidian</button>
+                    >{t('home.exportTabs.obsidian')}</button>
                     <button
                       onClick={() => { setExportTab('mindmap'); setMarkdownPreviewOpen(false) }}
                       style={{
@@ -1691,7 +1813,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                         color: exportTab === 'mindmap' ? '#0891b2' : '#5a6478',
                         fontWeight: 600, fontSize: '13px', boxShadow: exportTab === 'mindmap' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                       }}
-                    >🧠 Knowledge Graph</button>
+                    >{t('home.exportTabs.knowledgeGraph')}</button>
                     <button
                       onClick={() => { setExportTab('compare'); setMarkdownPreviewOpen(false) }}
                       style={{
@@ -1700,7 +1822,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                         color: exportTab === 'compare' ? '#dc2626' : '#5a6478',
                         fontWeight: 600, fontSize: '13px', boxShadow: exportTab === 'compare' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                       }}
-                    >🔄 Compare</button>
+                    >{t('home.exportTabs.compare')}</button>
                   </div>
                 </div>
 
@@ -1717,14 +1839,14 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                 {/* Obsidian hint */}
                 {exportTab === 'obsidian' && (
                   <div style={{ marginBottom: '12px', padding: '10px 12px', background: '#f5f3ff', border: '1px solid #ddd6fe', color: '#6d28d9', borderRadius: '8px', fontSize: '13px' }}>
-                    🔮 Obsidian 双链格式：术语自动用 <code style={{ background: '#ede9fe', padding: '2px 6px', borderRadius: '4px' }}>[[term]]</code> 包裹，含 YAML frontmatter，导入 Obsidian 后可形成知识图谱。
+                    {t('home.export.hintObsidian')}
                   </div>
                 )}
 
                 {/* Knowledge Graph hint */}
                 {exportTab === 'mindmap' && (
                   <div style={{ marginBottom: '12px', padding: '10px 12px', background: '#ecfeff', border: '1px solid #a5f3fc', color: '#0e7490', borderRadius: '8px', fontSize: '13px' }}>
-                    🧠 Knowledge Graph：可折叠知识图谱。默认只展示主分支，点击节点展开叶子。底部可查看 Mermaid 源码用于 Obsidian / mermaid.live。
+                    {t('home.export.hintGraph')}
                   </div>
                 )}
 
@@ -1742,7 +1864,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                         color: markdownPreviewOpen ? '#5b21b6' : '#5a6478',
                       }}
                     >
-                      {markdownPreviewOpen ? '▾ 隐藏预览' : '▸ 预览'}
+                      {markdownPreviewOpen ? t('home.export.hidePreview') : t('home.export.preview')}
                     </button>
                   )}
                   <button
@@ -1750,13 +1872,13 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                     className={copied === (exportTab === 'markdown' ? 'md' : exportTab === 'obsidian' ? 'obsidian' : 'mindmap') ? 'copy-success' : ''}
                     style={btnSecondary}
                   >
-                    {copied === (exportTab === 'markdown' ? 'md' : exportTab === 'obsidian' ? 'obsidian' : 'mindmap') ? '✓ 已复制' : '📋 复制'}
+                    {copied === (exportTab === 'markdown' ? 'md' : exportTab === 'obsidian' ? 'obsidian' : 'mindmap') ? t('home.export.copied') : t('home.export.copy')}
                   </button>
                   <button
                     onClick={() => downloadMarkdown(exportTab === 'markdown' ? 'md' : exportTab === 'obsidian' ? 'obsidian' : 'mindmap')}
                     style={btnPrimary}
                   >
-                    ⬇️ 下载
+                    {t('home.export.download')}
                   </button>
                 </div>
                 )}
@@ -1795,7 +1917,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                           fontWeight: 600,
                         }}
                       >
-                        {showMermaidSource ? '▾ 隐藏 Mermaid 源码' : '▸ 查看 Mermaid 源码（用于 Obsidian / mermaid.live）'}
+                        {showMermaidSource ? t('home.export.hideMermaidSource') : t('home.export.showMermaidSource')}
                       </button>
                       {showMermaidSource && mindmap && (
                         <pre style={{ background: '#0f172a', color: '#67e8f9', padding: '12px', borderRadius: '8px', fontSize: '11px', overflow: 'auto', maxHeight: '240px', margin: '8px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -1805,7 +1927,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
                       {/* 兼容老错误提示 */}
                       {mindmapError && showMermaidSource && (
                         <div style={{ marginTop: '8px', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: '8px', fontSize: '12px' }}>
-                          ⚠️ Mermaid 源码渲染失败（不影响 Knowledge Graph）：{mindmapError}
+                          {t('home.errors.mermaidSourceFailed', { error: mindmapError })}
                         </div>
                       )}
                     </div>
@@ -1822,9 +1944,13 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         {batchResults.length > 0 && (
           <div className="section-fade-in" style={{ marginTop: '20px' }}>
             <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)', borderRadius: '16px', padding: '20px', color: 'white', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>⚡ 批量处理结果</h3>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>{t('home.batchResults.title')}</h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '14px', opacity: 0.9 }}>
-                共 {batchResults.length} 个 URL · 成功 {batchResults.filter(r => r.success).length} · 失败 {batchResults.filter(r => !r.success).length}
+                {t('home.batchResults.stats', {
+                  total: batchResults.length,
+                  success: batchResults.filter(r => r.success).length,
+                  failed: batchResults.filter(r => !r.success).length,
+                })}
               </p>
             </div>
             {batchResults.map((r, i) => (
@@ -1864,10 +1990,13 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
 
         {/* Footer */}
         <div style={{ textAlign: 'center', marginTop: '40px', padding: '20px', color: '#94a3b8', fontSize: '13px' }}>
-          <strong style={{ color: '#5a6478' }}>ResearchKit OS v0.9.0</strong> — AI Research Operating System<br />
-          <span style={{ fontSize: '12px' }}>Powered by DeepSeek · AI Research Pipeline · Agent Workflow + MCP Tools + Reflection Loop · 3 Export Formats (MD / Obsidian / Knowledge Graph) · Built for OKX.AI Genesis Hackathon</span>
+          <strong style={{ color: '#5a6478' }}>{t('home.footer.version')}</strong> — AI Research Operating System<br />
+          <span style={{ fontSize: '12px' }}>{t('home.footer.description')}</span>
         </div>
       </main>
+
+      {/* D28 — Live Thoughts 浮窗：实时展示 Planner / Reflection / Replan 的 token 流 */}
+      <LiveThoughts thoughts={liveThoughts} active={liveThoughtsActive} />
     </div>
   )
 }
