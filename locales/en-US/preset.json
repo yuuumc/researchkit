@@ -1,0 +1,22 @@
+{
+  "academic": {
+    "label": "Academic",
+    "description": "Academic researcher perspective — rigorous, methodology-focused, precise terminology"
+  },
+  "beginner": {
+    "label": "Beginner",
+    "description": "Beginner reader perspective — intuitive, analogy-driven, avoids jargon"
+  },
+  "developer": {
+    "label": "Developer",
+    "description": "Hands-on engineer perspective — implementation, reproducibility, pitfalls"
+  },
+  "researcher": {
+    "label": "Senior Researcher",
+    "description": "Senior researcher perspective — innovation, positioning, future directions"
+  },
+  "product_manager": {
+    "label": "Product Manager",
+    "description": "Product manager perspective — business value, use cases, ROI"
+  }
+}

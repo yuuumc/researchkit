@@ -31,6 +31,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerProvider } from '@/lib/server-provider'
 import { setCurrentAgent } from '@/lib/usage-collector'
+import { buildAutoTranslateDirective } from '@/lib/server-user-preferences'
 import type { ChatMessage } from '@/core/llm/provider'
 import type { KnowledgeCard } from '@/types/knowledge'
 
@@ -182,6 +183,9 @@ export async function POST(req: NextRequest) {
 // ============================================================================
 
 function buildExplainPrompt(kc: KnowledgeCard, cfg: AudienceConfig): ChatMessage[] {
+  // D39 — Auto Translate: 用户开启时追加 locale 指令(覆盖原 "跟随 KC 语言" 规则)
+  const autoTranslateDirective = buildAutoTranslateDirective()
+
   const system = `You are ResearchKit's Explain Agent. Your job: re-explain a Knowledge Card (KC) about a research paper for a specific audience.
 
 # Target Audience
@@ -208,7 +212,7 @@ Return STRICT JSON only (no markdown, no comments):
 - Match the audience's vocabulary: high school = analogies; engineer = code/systems; researcher = academic; PM = business.
 - Questions must be audience-specific (don't ask generic questions).
 - Be honest if the paper is too technical for the audience — say so in 'whyItMatters'.
-- All text should be in the same language as the KC's title (English KC → English explanation; Chinese KC → Chinese explanation).`
+- All text should be in the same language as the KC's title (English KC → English explanation; Chinese KC → Chinese explanation).${autoTranslateDirective}`
 
   const user = `# Knowledge Card
 ${formatKCForExplain(kc)}
