@@ -43,6 +43,11 @@ Thumbs.db
 .researchkit-output/
 .researchkit-data/
 
+# 回归测试报告产物（测试时生成，不应进仓库）
+scripts/reports/*.json
+scripts/reports/*.md
+!scripts/reports/.gitkeep
+
 # TypeScript 增量编译缓存
 *.tsbuildinfo
 

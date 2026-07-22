@@ -455,7 +455,8 @@ researchkit/
 | Endpoint | `https://researchkit-mu.vercel.app/api/research/multi-agent-stream` |
 | Network | X Layer |
 | Version | v2.3.0 (Plugin System v2 + i18n + UI 打磨, 2026-07-22) |
-| Onchain OS TX | `0x86b24fdac27bc16e8ea70f0207bedeba4bdf3a399e529074e0cc720e1edec55d` |
+| Onchain Mode | `mock (demo)` — 6 swappable interfaces stubbed, real SDK in D23/D24 roadmap |
+| Onchain OS TX | _mock_ (deterministic hash derived from KC content + wallet, never broadcast) |
 
 ---
 

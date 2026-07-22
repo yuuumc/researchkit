@@ -621,6 +621,13 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
               {shortAddress(RESEARCHKIT_REGISTRY_CONTRACT)}
             </code>
           </div>
+          <div>
+            <strong>Mode</strong>{' '}
+            <span style={{ background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 600 }}>
+              mock (demo)
+            </span>
+            <span style={{ fontSize: '9px', color: '#94a3b8', marginLeft: '4px' }}>— real SDK in D23/D24</span>
+          </div>
         </div>
       )}
     </div>

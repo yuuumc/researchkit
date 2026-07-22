@@ -37,7 +37,18 @@ export function getOnchainServices(mode: OnchainMode): OnchainServices {
  * 解析 PluginConfig 中的 mode
  * - 默认 'mock'
  * - 仅当 config.mode === 'real' 时才走真实实现
+ *
+ * P0-4 修复：real mode 尚未实现（6 接口全部 throw NotImplementedError），
+ * 当前强制 fallback 到 mock + console.warn，避免用户在 UI 选 real 后遇到"链上发布失败"泛泛错误。
+ * D23/D24 接入真实 SDK 后移除此 fallback。
  */
 export function resolveOnchainMode(config: Record<string, string | boolean>): OnchainMode {
-  return config.mode === 'real' ? 'real' : 'mock'
+  if (config.mode === 'real') {
+    if (typeof console !== 'undefined') {
+      console.warn('[onchain] real mode not yet implemented (D23/D24 roadmap), falling back to mock')
+    }
+    return 'mock'
+  }
+  return 'mock'
 }
+
