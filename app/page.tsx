@@ -8,6 +8,7 @@ import { SmartSuggestionBanner } from '@/components/SmartSuggestionBanner'
 import { ChatWithKC } from '@/components/ChatWithKC'
 import { ExplainKC } from '@/components/ExplainKC'
 import { PluginPanel } from '@/components/PluginPanel'
+import { ScrollToTop } from '@/components/ScrollToTop'
 import { LiveThoughts, type LiveThought } from '@/components/LiveThoughts'
 import { LanguageDetectBanner } from '@/components/LanguageDetectBanner'
 import { Card } from '@/components/ui/Card'
@@ -361,6 +362,11 @@ export default function Home() {
       setToolCalls(finalData.tool_calls || [])
       setIterations(finalData.iterations || [])
       setTotalIterations(finalData.total_iterations || 0)
+
+      // D34 — KC 生成完成后自动滚动到结果区（demo 友好）
+      setTimeout(() => {
+        document.getElementById('result-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 200)
 
       // D6 Cost Dashboard — 持久化到 server-side（D29 改造）
       // 只在确实生成了知识卡 + 有 token 统计时记录（避免失败请求污染历史）
@@ -1525,7 +1531,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         {result && (() => {
           const L = getKcFieldLabels(resolvedLocale)
           return (
-          <div className="section-fade-in" key={`result-${result.title}-${result.year || ''}`}>
+          <div id="result-section" className="section-fade-in" key={`result-${result.title}-${result.year || ''}`}>
             <style dangerouslySetInnerHTML={{ __html: `@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }` }} />
 
             {/* Simple / Advanced 切换 — 顶部固定 */}
@@ -1994,6 +2000,8 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           <span style={{ fontSize: '12px' }}>{t('home.footer.description')}</span>
         </div>
       </main>
+      {/* D34 — 浮动回到顶部按钮 */}
+      <ScrollToTop />
 
       {/* D28 — Live Thoughts 浮窗：实时展示 Planner / Reflection / Replan 的 token 流 */}
       <LiveThoughts thoughts={liveThoughts} active={liveThoughtsActive} />
