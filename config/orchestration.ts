@@ -22,11 +22,11 @@
  * 2 是 hackathon demo 的甜蜜点：1 次反思能修大部分明显错误，2 次收益递减。
  * 生产环境建议 3-4。
  *
- * Vercel 环境下降到 1：serverless function 60s timeout 限制，
- * MAX_ITERATIONS=2 时 pipeline 需要 60-90s 会超时被 kill。
+ * Vercel 环境下设为 0：完全关闭 Reflection，
+ * 因为 Vercel function 60s timeout 限制，即使 MAX_ITERATIONS=1 也会超时。
  * 本地开发保持 2（无 timeout 限制）。
  */
-export const MAX_ITERATIONS = process.env.VERCEL ? 1 : 2
+export const MAX_ITERATIONS = process.env.VERCEL ? 0 : 2
 
 /**
  * Replan 后 supplementary_steps 的最大执行数
@@ -36,7 +36,7 @@ export const MAX_ITERATIONS = process.env.VERCEL ? 1 : 2
  * 注意（P2-2）：当前依赖 Planner 返回的顺序就是重要性顺序，但 prompt 未强制要求。
  * v2.3.1 应在 prompts/planner.ts 显式要求"按重要性从高到低排序"。
  *
- * Vercel 环境下降到 1：配合 MAX_ITERATIONS=1，避免 supplementary steps 超时。
+ * Vercel 环境下降到 1：配合 MAX_ITERATIONS=0，避免 supplementary steps 超时。
  */
 export const MAX_SUPPLEMENTARY_STEPS = process.env.VERCEL ? 1 : 2
 
