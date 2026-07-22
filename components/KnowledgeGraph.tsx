@@ -547,11 +547,11 @@ export function buildKnowledgeGraph(card: any): KGNode[] {
       id: 'goals',
       label: 'Research Goals',
       icon: '🎯',
-      color: '#f59e0b',
+      color: '#3b82f6', // B1 语义色：info
       children: card.research_goals.slice(0, 3).map((g: string, i: number) => ({
         id: `goal-${i}`,
         label: truncate(g),
-        color: '#f59e0b',
+        color: '#3b82f6',
         children: [],
       })),
     })
@@ -564,11 +564,11 @@ export function buildKnowledgeGraph(card: any): KGNode[] {
       id: 'innovation',
       label: 'Core Ideas',
       icon: '💡',
-      color: '#ec4899',
+      color: '#6366f1', // B1 语义色：primary
       children: innovation.slice(0, 3).map((arg: string, i: number) => ({
         id: `innov-${i}`,
         label: truncate(arg),
-        color: '#ec4899',
+        color: '#6366f1',
         children: [],
       })),
     })
@@ -580,8 +580,8 @@ export function buildKnowledgeGraph(card: any): KGNode[] {
       id: 'methodology',
       label: 'Methodology',
       icon: '🔧',
-      color: '#0e7490',
-      children: [{ id: 'method-1', label: truncate(card.methodology, 100), color: '#0e7490', children: [] }],
+      color: '#0891b2', // B1 语义色：teal（与 metadata 紫区分）
+      children: [{ id: 'method-1', label: truncate(card.methodology, 100), color: '#0891b2', children: [] }],
     })
   }
 
@@ -591,11 +591,11 @@ export function buildKnowledgeGraph(card: any): KGNode[] {
       id: 'experiments',
       label: 'Experiments',
       icon: '🧪',
-      color: '#06b6d4',
+      color: '#f59e0b', // B1 语义色：warning
       children: card.experiments.slice(0, 3).map((e: string, i: number) => ({
         id: `exp-${i}`,
         label: truncate(e),
-        color: '#06b6d4',
+        color: '#f59e0b',
         children: [],
       })),
     })

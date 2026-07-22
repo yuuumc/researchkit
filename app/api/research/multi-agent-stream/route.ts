@@ -330,6 +330,8 @@ export async function POST(request: NextRequest) {
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no', // nginx 不缓冲
+        // B4 — 显式声明 chunked，避免某些代理/CDN 缓冲整个响应
+        'Transfer-Encoding': 'chunked',
       },
     })
   } catch (error) {

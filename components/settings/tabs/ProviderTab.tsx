@@ -26,7 +26,7 @@ export function ProviderTab() {
     defaultTemperature: 0.3,
   })
   const [loaded, setLoaded] = useState(false)
-  const [showApiKey, setShowApiKey] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [saved, setSaved] = useState(false)
@@ -114,6 +114,30 @@ export function ProviderTab() {
     setSaved(false)
   }
 
+  // C1 修复：API Key 永不明文显示，仅支持复制到剪贴板
+  const handleCopyApiKey = async () => {
+    if (!config.apiKey) return
+    try {
+      await navigator.clipboard.writeText(config.apiKey)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // fallback for older browsers
+      const textarea = document.createElement('textarea')
+      textarea.value = config.apiKey
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      try {
+        document.execCommand('copy')
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch {}
+      document.body.removeChild(textarea)
+    }
+  }
+
   const currentPreset = useMemo(() => {
     return PROVIDER_PRESETS.find(p => p.type === config.type) || PROVIDER_PRESETS[0]
   }, [config.type])
@@ -193,17 +217,24 @@ export function ProviderTab() {
       <Field label={t('settings.provider.apiKey')} hint={t('settings.provider.apiKeyHint')}>
         <div style={{ display: 'flex', gap: '8px' }}>
           <input
-            type={showApiKey ? 'text' : 'password'}
+            type="password"
             value={config.apiKey}
             onChange={e => handleFieldChange('apiKey', e.target.value)}
             placeholder="sk-..."
             style={{ ...inputStyle, minHeight: 'auto', padding: '10px 12px', flex: 1, fontFamily: 'monospace' }}
           />
           <button
-            onClick={() => setShowApiKey(!showApiKey)}
-            style={{ ...btnSecondary, padding: '10px 14px', flexShrink: 0 }}
+            onClick={handleCopyApiKey}
+            disabled={!config.apiKey}
+            style={{
+              ...btnSecondary,
+              padding: '10px 14px',
+              flexShrink: 0,
+              opacity: !config.apiKey ? 0.5 : 1,
+              cursor: !config.apiKey ? 'not-allowed' : 'pointer',
+            }}
           >
-            {showApiKey ? t('settings.provider.hide') : t('settings.provider.show')}
+            {copied ? t('settings.provider.copied') : t('settings.provider.copy')}
           </button>
         </div>
       </Field>

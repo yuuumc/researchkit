@@ -601,7 +601,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f6f8fc 0%, #e0e7ff 100%)', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#f6f8fc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
       {/* === Hero animations CSS === */}
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -651,7 +651,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           position: relative;
           width: 100%;
           height: 4px;
-          background: linear-gradient(90deg, #e0e7ff 0%, #c7d2fe 50%, #e0e7ff 100%);
+          background: #e0e7ff;
           border-radius: 2px;
           overflow: visible;
           margin: 16px 0;
@@ -1968,7 +1968,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         {/* Batch results — 独立于 result，批量模式不 set result，所以必须放外面 */}
         {batchResults.length > 0 && (
           <div className="section-fade-in" style={{ marginTop: '20px' }}>
-            <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)', borderRadius: '16px', padding: '20px', color: 'white', marginBottom: '16px' }}>
+            <div style={{ background: '#ef4444', borderRadius: '16px', padding: '20px', color: 'white', marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>{t('home.batchResults.title')}</h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '14px', opacity: 0.9 }}>
                 {t('home.batchResults.stats', {
