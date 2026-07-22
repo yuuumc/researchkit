@@ -149,19 +149,33 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-          const result = await coordinate({
-            content,
-            title,
-            source,
-            onStage: (stage) => {
-              send('stage', stage)
-            },
-            onAgentToken: (agent, delta) => {
-              // D28 — token 流式推送，buffer + 节流 flush
-              tokenBuffer.push({ agent, delta })
-              scheduleFlush()
-            },
+          // Vercel 超时保护：50s 内未完成则主动发 error 事件
+          // 留 10s 给 flush + close，避免 Vercel 60s hard kill 时 stream 被强关
+          const PIPELINE_TIMEOUT_MS = 50_000
+          let pipelineTimedOut = false
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              pipelineTimedOut = true
+              reject(new Error('TIMEOUT'))
+            }, PIPELINE_TIMEOUT_MS)
           })
+
+          const result = await Promise.race([
+            coordinate({
+              content,
+              title,
+              source,
+              onStage: (stage) => {
+                send('stage', stage)
+              },
+              onAgentToken: (agent, delta) => {
+                // D28 — token 流式推送，buffer + 节流 flush
+                tokenBuffer.push({ agent, delta })
+                scheduleFlush()
+              },
+            }),
+            timeoutPromise,
+          ])
 
           // ===== 完整性检查：检测所有 Agent 是否全部失败 =====
           // 如果 KB.title 是 Untitled 且 summary 为空 且 innovation 为空数组，
@@ -288,7 +302,15 @@ export async function POST(request: NextRequest) {
           // 最终阶段：Done
           send('stage', { id: 7, label: 'Done' })
         } catch (err) {
-          send('error', { error: err instanceof Error ? err.message : '服务器内部错误' })
+          // 超时保护：50s 内未完成，发友好错误消息
+          if (err instanceof Error && err.message === 'TIMEOUT') {
+            console.error('[multi-agent-stream] Pipeline 超时（50s），可能因输入过长或 LLM 响应慢')
+            send('error', {
+              error: '生成超时：pipeline 在 50 秒内未完成。请缩短输入内容后重试，或稍后再试。',
+            })
+          } else {
+            send('error', { error: err instanceof Error ? err.message : '服务器内部错误' })
+          }
         } finally {
           // D28 — 流结束前 flush 残留 token，避免最后一批 delta 丢失
           if (flushTimer !== null) {
