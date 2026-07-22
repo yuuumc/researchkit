@@ -1569,10 +1569,10 @@ function CommunityPluginCard({
 
   const handleMockExport = useCallback((manifest: PluginManifest) => {
     window.alert(
-      `⚠️ Mock 模式\n\n` +
-      `插件 "${manifest.name}" 的 manifest 已记录，` +
-      `但 v2.3 未加载真实代码。\n\n` +
-      `配置已保存到 localStorage，等 v2.4 沙箱化加载后即可真实执行。`
+      `⚠️ Mock 模式（未加载真实代码）\n\n` +
+      `插件 "${manifest.name}" 的 manifest 已记录到 localStorage，` +
+      `但当前 v2.3.1 未加载真实插件代码。\n\n` +
+      `配置已保存，等 v2.4 沙箱化加载后即可真实执行。`
     )
   }, [])
 

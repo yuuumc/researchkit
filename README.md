@@ -455,11 +455,12 @@ researchkit/
 │   ├── v2.2.5-release-notes.md
 │   ├── v2.2.6-release-notes.md
 │   ├── v2.3.0-release-notes.md
+│   ├── v2.3.1-release-notes.md
 │   ├── screenshots/                   # Versioned PNG screenshots
 │   └── demo-video/                    # ≤ 90s demo MP4 files
 ├── .env.local.example
 ├── start.bat                          # Windows launcher
-├── package.json                       # v2.3.0
+├── package.json                       # v2.3.1
 └── README.md
 ```
 
@@ -474,7 +475,7 @@ researchkit/
 | Service type | A2MCP (free, 0 USDT) |
 | Endpoint | `https://researchkit-mu.vercel.app/api/research/multi-agent-stream` |
 | Network | X Layer |
-| Version | v2.3.0 (Plugin System v2 + i18n + UI 打磨, 2026-07-22) |
+| Version | v2.3.1 (安全加固 + Vercel 部署修复 + 插件市场完善, 2026-07-22) |
 | Onchain Mode | `mock (demo)` — 6 swappable interfaces stubbed, real SDK in D23/D24 roadmap |
 | Onchain OS TX | _mock_ (deterministic hash derived from KC content + wallet, never broadcast) |
 
@@ -487,6 +488,8 @@ researchkit/
 | **Major (x.0)** | Architecture-level changes (new agent roles, new protocol) |
 | **Minor (1.x)** | New features in existing architecture (new export, new input mode, new subsystem) |
 | **Patch (1.0.x)** | Bug fixes, prompt tuning, UI polish, quality releases |
+
+**v2.3.1** is a Patch release — security hardening (API key never shown in plain, danger styling, double confirmation), Vercel deployment fixes (58s timeout guard, MAX_ITERATIONS=0 on Vercel), and plugin marketplace improvements (deduped community plugins, built-in shown as installed). See [release notes](./releases/v2.3.1-release-notes.md) for full details.
 
 **v2.3.0** is a Minor release — adds Plugin System v2 (marketplace + batch execution), full i18n (4-layer language separation), and UI polish (draggable ScrollToTop, LiveThoughts streaming, Enter-to-submit). See [release notes](./releases/v2.3.0-release-notes.md) for the 7-phase / 14-PR breakdown.
 

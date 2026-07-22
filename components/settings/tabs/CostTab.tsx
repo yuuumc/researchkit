@@ -64,6 +64,9 @@ export function CostTab() {
   const [runs, setRuns] = useState<CostRun[]>([])
   const [summary, setSummary] = useState<CostHistorySummary>(() => summarizeCostHistory([]))
   const [loaded, setLoaded] = useState(false)
+  // A3 降级版：列头排序
+  const [sortKey, setSortKey] = useState<'time' | 'tokens' | 'cost' | 'duration'>('time')
+  const [sortDesc, setSortDesc] = useState(true)
 
   const refresh = useCallback(async () => {
     // D29 — loadCostHistory 改为 async + fetch /api/history/cost
@@ -82,6 +85,60 @@ export function CostTab() {
     // D29 — clearCostHistory 改为 async
     await clearCostHistory()
     refresh()
+  }
+
+  // A3 降级版：CSV 导出
+  const handleExportCSV = () => {
+    const headers = ['Time', 'Title', 'Type', 'Complexity', 'Tokens', 'Cost (USD)', 'Duration (ms)', 'Model']
+    const rows = runs.map(r => [
+      new Date(r.timestamp).toISOString(),
+      `"${(r.title || '').replace(/"/g, '""')}"`,
+      r.inputType || '',
+      r.complexity || '',
+      r.totalUsage.totalTokens,
+      r.totalCostUsd.toFixed(6),
+      r.totalDurationMs,
+      r.model || '',
+    ].join(','))
+    const csv = [headers.join(','), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `researchkit-cost-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  // A3 降级版：排序后的 runs
+  const sortedRuns = [...runs].sort((a, b) => {
+    let cmp = 0
+    switch (sortKey) {
+      case 'time':
+        cmp = a.timestamp - b.timestamp
+        break
+      case 'tokens':
+        cmp = a.totalUsage.totalTokens - b.totalUsage.totalTokens
+        break
+      case 'cost':
+        cmp = a.totalCostUsd - b.totalCostUsd
+        break
+      case 'duration':
+        cmp = a.totalDurationMs - b.totalDurationMs
+        break
+    }
+    return sortDesc ? -cmp : cmp
+  })
+
+  const toggleSort = (key: 'time' | 'tokens' | 'cost' | 'duration') => {
+    if (sortKey === key) {
+      setSortDesc(prev => !prev)
+    } else {
+      setSortKey(key)
+      setSortDesc(true)
+    }
   }
 
   if (!loaded) {
@@ -121,6 +178,9 @@ export function CostTab() {
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
         <button onClick={refresh} style={{ ...btnSecondary, padding: '6px 12px', fontSize: '12px' }}>
           🔄 {t('settings.cost.refresh')}
+        </button>
+        <button onClick={handleExportCSV} style={{ ...btnSecondary, padding: '6px 12px', fontSize: '12px' }}>
+          📥 CSV
         </button>
         <button
           onClick={handleClear}
@@ -227,18 +287,26 @@ export function CostTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#f1f5f9' }}>
-                <Th>{t('settings.cost.colTime')}</Th>
+                <ThSortable onClick={() => toggleSort('time')} active={sortKey === 'time'} desc={sortDesc}>
+                  {t('settings.cost.colTime')}
+                </ThSortable>
                 <Th>{t('settings.cost.colTitle')}</Th>
                 <Th>{t('settings.cost.colType')}</Th>
                 <Th>{t('settings.cost.colComplexity')}</Th>
-                <Th align="right">{t('settings.cost.colTokens')}</Th>
-                <Th align="right">{t('settings.cost.colCost')}</Th>
-                <Th align="right">{t('settings.cost.colDuration')}</Th>
+                <ThSortable align="right" onClick={() => toggleSort('tokens')} active={sortKey === 'tokens'} desc={sortDesc}>
+                  {t('settings.cost.colTokens')}
+                </ThSortable>
+                <ThSortable align="right" onClick={() => toggleSort('cost')} active={sortKey === 'cost'} desc={sortDesc}>
+                  {t('settings.cost.colCost')}
+                </ThSortable>
+                <ThSortable align="right" onClick={() => toggleSort('duration')} active={sortKey === 'duration'} desc={sortDesc}>
+                  {t('settings.cost.colDuration')}
+                </ThSortable>
                 <Th>{t('settings.cost.colModel')}</Th>
               </tr>
             </thead>
             <tbody>
-              {runs.map((r, i) => (
+              {sortedRuns.map((r, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <Td style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtTime(r.timestamp, resolvedLocale)}</Td>
                   <Td style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -342,6 +410,43 @@ function Th({ children, align = 'left' }: { children: React.ReactNode; align?: '
       }}
     >
       {children}
+    </th>
+  )
+}
+
+function ThSortable({
+  children,
+  align = 'left',
+  onClick,
+  active,
+  desc,
+}: {
+  children: React.ReactNode
+  align?: 'left' | 'right'
+  onClick: () => void
+  active: boolean
+  desc: boolean
+}) {
+  return (
+    <th
+      onClick={onClick}
+      style={{
+        padding: '8px 10px',
+        textAlign: align,
+        fontSize: '11px',
+        fontWeight: 700,
+        color: active ? '#0f1729' : '#94a3b8',
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+        borderBottom: '1px solid #e2e8f0',
+        cursor: 'pointer',
+        userSelect: 'none',
+      }}
+    >
+      {children}
+      {active && (
+        <span style={{ marginLeft: '4px' }}>{desc ? '↓' : '↑'}</span>
+      )}
     </th>
   )
 }

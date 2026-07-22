@@ -182,7 +182,7 @@ export function PromptTab() {
             display: 'block',
             width: '100%',
             marginTop: '12px',
-            padding: '8px',
+            padding: '10px',
             background: activeCount === 0 ? '#f8fafc' : '#fee2e2',
             color: activeCount === 0 ? '#94a3b8' : '#dc2626',
             border: 'none',
@@ -190,6 +190,7 @@ export function PromptTab() {
             cursor: activeCount === 0 ? 'not-allowed' : 'pointer',
             fontSize: '12px',
             fontWeight: 600,
+            minHeight: '40px',
           }}
         >
           {t('settings.prompt.clearAll')}
@@ -289,7 +290,7 @@ export function PromptTab() {
 
         {/* 按钮组 */}
         <div style={{ display: 'flex', gap: '12px', marginTop: '28px', flexWrap: 'wrap' }}>
-          <button onClick={handleSave} style={btnPrimary}>
+          <button onClick={handleSave} style={{ ...btnPrimary, minHeight: '40px' }}>
             {t('settings.prompt.save')}
           </button>
           <button
@@ -299,6 +300,10 @@ export function PromptTab() {
               ...btnSecondary,
               opacity: extensions[selected] ? 1 : 0.5,
               cursor: extensions[selected] ? 'pointer' : 'not-allowed',
+              minHeight: '40px',
+              color: extensions[selected] ? '#dc2626' : undefined,
+              background: extensions[selected] ? '#fee2e2' : undefined,
+              borderColor: extensions[selected] ? '#fecaca' : undefined,
             }}
           >
             {t('settings.prompt.clearAgent')}

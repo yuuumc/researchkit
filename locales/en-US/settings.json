@@ -77,6 +77,8 @@
     "save": "💾 Save Configuration",
     "show": "👁 Show",
     "hide": "🙈 Hide",
+    "copy": "📋 Copy",
+    "copied": "✓ Copied",
     "errorApiKeyRequired": "Please enter API Key first",
     "errorFieldsRequired": "Please complete: Base URL / API Key / Model",
     "requestFailed": "Request failed"
