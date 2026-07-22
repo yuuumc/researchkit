@@ -8,6 +8,7 @@ import { SmartSuggestionBanner } from '@/components/SmartSuggestionBanner'
 import { ChatWithKC } from '@/components/ChatWithKC'
 import { ExplainKC } from '@/components/ExplainKC'
 import { PluginPanel } from '@/components/PluginPanel'
+import { ScrollToTop } from '@/components/ScrollToTop'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { btnPrimary, btnSecondary, tabStyle, inputStyle } from '@/lib/ui-styles'
@@ -309,6 +310,11 @@ export default function Home() {
       setToolCalls(finalData.tool_calls || [])
       setIterations(finalData.iterations || [])
       setTotalIterations(finalData.total_iterations || 0)
+
+      // D34 — KC 生成完成后自动滚动到结果区（demo 友好）
+      setTimeout(() => {
+        document.getElementById('result-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 200)
 
       // D6 Cost Dashboard — 持久化到 localStorage（供 CostTab 读取）
       // 只在确实生成了知识卡 + 有 token 统计时记录（避免失败请求污染历史）
@@ -1403,7 +1409,7 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
         {result && (() => {
           const L = getLabels(result.language, result.locale)
           return (
-          <div className="section-fade-in" key={`result-${result.title}-${result.year || ''}`}>
+          <div id="result-section" className="section-fade-in" key={`result-${result.title}-${result.year || ''}`}>
             <style dangerouslySetInnerHTML={{ __html: `@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }` }} />
 
             {/* Simple / Advanced 切换 — 顶部固定 */}
@@ -1868,6 +1874,8 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
           <span style={{ fontSize: '12px' }}>Powered by DeepSeek · AI Research Pipeline · Agent Workflow + MCP Tools + Reflection Loop · 3 Export Formats (MD / Obsidian / Knowledge Graph) · Built for OKX.AI Genesis Hackathon</span>
         </div>
       </main>
+      {/* D34 — 浮动回到顶部按钮 */}
+      <ScrollToTop />
     </div>
   )
 }
