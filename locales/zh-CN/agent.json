@@ -218,6 +218,7 @@
     "installed": "📦 {count} 个已安装",
     "requireKc": "⚠️ 请先生成 Knowledge Card 后再使用 Plugin 导出",
     "demoMode": "⚠️ <strong>Demo Mode</strong>：onchain-export 插件用 Web Crypto API 真实计算 SHA-256，并生成 EVM 兼容格式的 mock tx hash，但未实际广播到 X Layer mainnet。v2.3 将接入 OKX Agentic Wallet 完成真实签名与广播。",
+    "onchainConfirm": "即将把知识卡发布到链上 registry，确认继续？",
     "onchainHistory": "📜 Onchain History",
     "times": "{count} 次",
     "hide": "隐藏",

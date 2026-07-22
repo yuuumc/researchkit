@@ -19,6 +19,9 @@ import type { CoordinatorInput } from './coordinator'
 /**
  * 调用 PlannerAgent 生成 Plan
  *
+ * P1 改进：LLM 调用失败时指数退避重试（最多 2 次，1s → 2s），都失败再走 fallbackPlan。
+ * 这样能容忍 DeepSeek/OpenAI 的短暂限流（429）或网络抖动，避免直接降级到默认 pipeline。
+ *
  * @returns { plan, durationMs } — 即使 Planner 调用失败，也返回 fallbackPlan 而不抛错
  */
 export async function runPlanner(
@@ -43,15 +46,29 @@ export async function runPlanner(
   const start = Date.now()
   let plan: Plan | null = null
 
-  try {
-    // D6 Cost Dashboard — 标记当前 Agent name 为 'Planner'
-    setCurrentAgent('Planner')
-    const response = await PlannerAgent.handleMessage(plannerTask)
-    if (response.payload?.plan) {
-      plan = response.payload.plan as Plan
+  // P1 指数退避：1s → 2s，最多 2 次重试（共 3 次尝试）
+  const MAX_ATTEMPTS = 3
+  const BASE_DELAY_MS = 1000
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      setCurrentAgent('Planner')
+      const response = await PlannerAgent.handleMessage(plannerTask)
+      if (response.payload?.plan) {
+        plan = response.payload.plan as Plan
+      }
+      break // 成功，跳出重试循环
+    } catch (err) {
+      const isLastAttempt = attempt === MAX_ATTEMPTS
+      const msg = err instanceof Error ? err.message : String(err)
+      if (isLastAttempt) {
+        console.error(`[Planner] LLM 调用失败（已重试 ${MAX_ATTEMPTS} 次），走 fallbackPlan:`, msg)
+      } else {
+        const delayMs = BASE_DELAY_MS * Math.pow(2, attempt - 1) // 1s → 2s
+        console.warn(`[Planner] 第 ${attempt} 次调用失败，${delayMs}ms 后重试：${msg}`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
     }
-  } catch (err) {
-    console.error('[Planner] LLM 调用失败，走 fallbackPlan:', err instanceof Error ? err.message : err)
   }
 
   const durationMs = Date.now() - start

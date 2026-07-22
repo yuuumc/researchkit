@@ -240,13 +240,22 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
     if (!knowledgeCard) return
     if (executing || batchProgress.running) return
 
+    // P1-2 onchain 导出二次确认
+    // 防止误触 broadcast（即便当前是 mock 模式，未来切 real 时这层确认已是必须的）
+    if (plugin.meta.id === 'onchain-export') {
+      const ok = window.confirm(
+        t('agent.pluginPanel.onchainConfirm', { defaultValue: '即将把知识卡发布到链上 registry，确认继续？' })
+      )
+      if (!ok) return
+    }
+
     setExecuting(plugin.meta.id)
     try {
       await executePlugin(plugin)
     } finally {
       setExecuting(null)
     }
-  }, [knowledgeCard, executing, batchProgress.running, executePlugin])
+  }, [knowledgeCard, executing, batchProgress.running, executePlugin, t])
 
   // D33 — 批量串行执行选中插件
   const handleBatchExport = useCallback(async () => {

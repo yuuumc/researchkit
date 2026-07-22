@@ -218,6 +218,7 @@
     "installed": "📦 {count} installed",
     "requireKc": "⚠️ Please generate a Knowledge Card before using Plugin export",
     "demoMode": "⚠️ <strong>Demo Mode</strong>: the onchain-export plugin uses Web Crypto API to compute SHA-256 and generate EVM-compatible mock tx hashes, but does not actually broadcast to X Layer mainnet. v2.3 will integrate OKX Agentic Wallet for real signing and broadcasting.",
+    "onchainConfirm": "You are about to publish the Knowledge Card to the onchain registry. Continue?",
     "onchainHistory": "📜 Onchain History",
     "times": "{count} times",
     "hide": "Hide",
