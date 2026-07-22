@@ -8,11 +8,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateKnowledgeCard } from '@/lib/llm'
 import { parsePdf, exportToMarkdown, exportToObsidian, exportToMindmap } from '@/lib/parser'
+import { handleOptions } from '@/lib/cors'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
+    // P1-8 rate limit（PDF 解析最贵，10 分钟内最多 5 次）
+    const ip = getClientIp(request)
+    const rl = checkRateLimit(`pdf:${ip}`, { limit: 5, windowMs: 10 * 60_000 })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'PDF 上传过于频繁，请稍后再试' },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)) },
+        }
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const language = ((formData.get('language') as string) || 'zh') as 'zh' | 'en'
@@ -30,6 +45,22 @@ export async function POST(request: NextRequest) {
     if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
       return NextResponse.json(
         { success: false, error: '只支持 PDF 文件' },
+        { status: 400 }
+      )
+    }
+
+    // P1-6 magic bytes 校验：检查文件头是否为 PDF 签名 %PDF-
+    // 防止把 .exe / .html 等文件改名成 .pdf 上传
+    const headerBuffer = await file.slice(0, 5).arrayBuffer()
+    const header = new Uint8Array(headerBuffer)
+    const isPdf = header[0] === 0x25 && // %
+      header[1] === 0x50 && // P
+      header[2] === 0x44 && // D
+      header[3] === 0x46 && // F
+      header[4] === 0x2d    // -
+    if (!isPdf) {
+      return NextResponse.json(
+        { success: false, error: '文件内容不是有效 PDF（magic bytes 不匹配）' },
         { status: 400 }
       )
     }
@@ -116,13 +147,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  })
+export async function OPTIONS(request: NextRequest) {
+  return handleOptions(request)
 }

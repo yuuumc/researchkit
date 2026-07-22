@@ -7,7 +7,9 @@
  */
 
 import { NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { listTools } from '@/lib/tools/registry'
+import { handleOptions } from '@/lib/cors'
 
 export async function GET() {
   const tools = listTools()
@@ -20,13 +22,6 @@ export async function GET() {
   })
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  })
+export async function OPTIONS(request: NextRequest) {
+  return handleOptions(request)
 }

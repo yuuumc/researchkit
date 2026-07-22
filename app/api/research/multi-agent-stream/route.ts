@@ -13,12 +13,29 @@
 
 import { NextRequest } from 'next/server'
 import { coordinate } from '@/lib/coordinator'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder()
+
+  // P1-8 rate limit（LLM 调用最贵，1 分钟内最多 10 次）
+  const ip = getClientIp(request)
+  const rl = checkRateLimit(`kc:${ip}`, { limit: 10, windowMs: 60_000 })
+  if (!rl.allowed) {
+    return new Response(
+      `event: error\ndata: ${JSON.stringify({ error: '请求过于频繁，请稍后再试' })}\n\n`,
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+        },
+      }
+    )
+  }
 
   try {
     // D41 诊断增强：先拿 raw text 再手动 JSON.parse

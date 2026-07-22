@@ -9,11 +9,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateKnowledgeCard } from '@/lib/llm'
 import { parseContent, exportToMarkdown, exportToObsidian, exportToMindmap } from '@/lib/parser'
+import { handleOptions } from '@/lib/cors'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
+    // P1-8 rate limit
+    const ip = getClientIp(request)
+    const rl = checkRateLimit(`kc:${ip}`, { limit: 10, windowMs: 60_000 })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { success: false, error: '请求过于频繁，请稍后再试' },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)) },
+        }
+      )
+    }
     const body = await request.json()
 
     // 支持多种输入模式
@@ -118,13 +132,6 @@ export async function POST(request: NextRequest) {
 }
 
 // 处理 OPTIONS 请求（CORS 预检）
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  })
+export async function OPTIONS(request: NextRequest) {
+  return handleOptions(request)
 }

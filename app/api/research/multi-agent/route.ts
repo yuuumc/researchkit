@@ -11,11 +11,26 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { coordinate } from '@/lib/coordinator'
+import { handleOptions } from '@/lib/cors'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
+    // P1-8 rate limit（LLM 调用贵，1 分钟内最多 10 次）
+    const ip = getClientIp(request)
+    const rl = checkRateLimit(`kc:${ip}`, { limit: 10, windowMs: 60_000 })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { success: false, error: '请求过于频繁，请稍后再试' },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)) },
+        }
+      )
+    }
+
     // D41 诊断增强：先拿 raw text 再手动 JSON.parse（同 SSE 端点）
     const rawBody = await request.text()
     let body: { content?: string; title?: string; source?: string }
@@ -141,13 +156,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  })
+export async function OPTIONS(request: NextRequest) {
+  return handleOptions(request)
 }

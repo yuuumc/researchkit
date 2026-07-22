@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchFromUrl } from '@/lib/parser'
+import { handleOptions } from '@/lib/cors'
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,13 +50,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  })
+export async function OPTIONS(request: NextRequest) {
+  return handleOptions(request)
 }
