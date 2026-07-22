@@ -41,6 +41,9 @@ import {
 import { loadLedger, type OnchainRecord } from '@/lib/onchain-ledger'
 import { shortAddress } from '@/lib/onchain-utils'
 import { btnPrimary, btnSecondary } from '@/lib/ui-styles'
+import { useI18n } from '@/components/I18nProvider'
+
+type TFn = (key: string, params?: Record<string, string | number>) => string
 
 // ============================================================================
 // 类型
@@ -65,6 +68,7 @@ const BUILTIN_PLUGINS: ExportPlugin[] = [jsonDownloadPlugin, markdownDownloadPlu
 // ============================================================================
 
 export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
+  const { t } = useI18n()
   const [states, setStates] = useState<Record<string, PluginState>>({})
   const [executing, setExecuting] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, ExportResult>>({})
@@ -108,7 +112,7 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
         if (err) {
           const result: ExportResult = {
             success: false,
-            message: `预校验失败：${err}`,
+            message: t('agent.pluginPanel.precheckFailed', { error: err }),
             error: err,
           }
           setResults((r) => ({ ...r, [plugin.meta.id]: result }))
@@ -148,7 +152,7 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
     } catch (err) {
       const result: ExportResult = {
         success: false,
-        message: '执行异常',
+        message: t('agent.pluginPanel.execError'),
         error: err instanceof Error ? err.message : String(err),
       }
       setResults((r) => ({ ...r, [plugin.meta.id]: result }))
@@ -156,7 +160,7 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
     } finally {
       setExecuting(null)
     }
-  }, [knowledgeCard, executing, states])
+  }, [knowledgeCard, executing, states, t])
 
   return (
     <div
@@ -185,16 +189,16 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
           <span style={{ fontSize: '18px' }}>🧩</span>
           <div>
             <div style={{ fontSize: '13px', fontWeight: 700, color: '#581c87' }}>
-              Plugin Marketplace
+              {t('agent.pluginPanel.marketplace')}
             </div>
             <div style={{ fontSize: '11px', color: '#7c3aed', marginTop: '2px' }}>
-              一键导出 Knowledge Card 到第三方工具
+              {t('agent.pluginPanel.hint')}
             </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '6px', fontSize: '11px', color: '#7c3aed' }}>
           <span style={{ background: 'rgba(255,255,255,0.6)', padding: '2px 8px', borderRadius: '999px', fontWeight: 600 }}>
-            📦 {BUILTIN_PLUGINS.length} 个已安装
+            {t('agent.pluginPanel.installed', { count: BUILTIN_PLUGINS.length })}
           </span>
         </div>
       </div>
@@ -210,7 +214,7 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
               fontSize: '12px',
             }}
           >
-            ⚠️ 请先生成 Knowledge Card 后再使用 Plugin 导出
+            {t('agent.pluginPanel.requireKc')}
           </div>
         )}
 
@@ -247,11 +251,8 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
             color: '#9a3412',
             lineHeight: 1.5,
           }}
-        >
-          ⚠️ <strong>Demo Mode</strong>：onchain-export 插件用 Web Crypto API 真实计算 SHA-256，
-          并生成 EVM 兼容格式的 mock tx hash，但未实际广播到 X Layer mainnet。
-          v2.3 将接入 OKX Agentic Wallet 完成真实签名与广播。
-        </div>
+          dangerouslySetInnerHTML={{ __html: t('agent.pluginPanel.demoMode') }}
+        />
       </div>
     </div>
   )
@@ -268,6 +269,7 @@ function OnchainHistory({
   knowledgeCard: KnowledgeCard
   refreshTrigger: string | null
 }) {
+  const { t } = useI18n()
   const [records, setRecords] = useState<OnchainRecord[]>([])
   const [expanded, setExpanded] = useState(false)
 
@@ -308,7 +310,7 @@ function OnchainHistory({
         }}
       >
         <span>{expanded ? '▾' : '▸'}</span>
-        <span>📜 Onchain History</span>
+        <span>{t('agent.pluginPanel.onchainHistory')}</span>
         <span
           style={{
             marginLeft: 'auto',
@@ -319,7 +321,7 @@ function OnchainHistory({
             fontWeight: 600,
           }}
         >
-          {records.length} 次
+          {t('agent.pluginPanel.times', { count: records.length })}
         </span>
       </button>
 
@@ -335,6 +337,7 @@ function OnchainHistory({
 }
 
 function OnchainRecordItem({ record }: { record: OnchainRecord }) {
+  const { t } = useI18n()
   const [showDetails, setShowDetails] = useState(false)
 
   return (
@@ -358,7 +361,7 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
           · {record.chainName}
         </span>
         <span style={{ color: '#a16207', fontSize: '10px' }}>
-          · {formatRelativeTime(record.publishedAt)}
+          · {formatRelativeTime(record.publishedAt, t)}
         </span>
         <button
           onClick={() => setShowDetails(!showDetails)}
@@ -373,13 +376,13 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
             cursor: 'pointer',
           }}
         >
-          {showDetails ? '隐藏' : '详情'}
+          {showDetails ? t('agent.pluginPanel.hide') : t('agent.pluginPanel.details')}
         </button>
       </div>
 
       {/* Tx hash */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
-        <span style={{ color: '#64748b', fontSize: '10px', width: '60px' }}>Tx</span>
+        <span style={{ color: '#64748b', fontSize: '10px', width: '60px' }}>{t('agent.pluginPanel.txLabel')}</span>
         <code style={{ fontSize: '10px', color: '#0f1729', fontFamily: 'monospace', flex: 1 }}>
           0x{record.txHash.substring(0, 16)}...{record.txHash.substring(56)}
         </code>
@@ -395,8 +398,8 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
 
       {/* Block + Gas */}
       <div style={{ display: 'flex', gap: '12px', fontSize: '10px', color: '#64748b' }}>
-        <span>📦 Block #{record.blockNumber.toLocaleString()}</span>
-        <span>⛽ {record.gasUsed} OKB</span>
+        <span>{t('agent.pluginPanel.block', { n: record.blockNumber.toLocaleString() })}</span>
+        <span>{t('agent.pluginPanel.gasUsed', { gas: record.gasUsed })}</span>
         <span>👤 {shortAddress(record.walletAddress)}</span>
       </div>
 
@@ -414,13 +417,13 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
           }}
         >
           <div style={{ marginBottom: '4px' }}>
-            <strong>SHA-256:</strong>{' '}
+            <strong>{t('agent.pluginPanel.shaLabel')}</strong>{' '}
             <code style={{ fontSize: '9px', fontFamily: 'monospace', wordBreak: 'break-all' }}>
               {record.kcSha256}
             </code>
           </div>
           <div style={{ marginBottom: '4px' }}>
-            <strong>IPFS:</strong>{' '}
+            <strong>{t('agent.pluginPanel.ipfsLabel')}</strong>{' '}
             <a
               href={record.ipfsUrl}
               target="_blank"
@@ -431,7 +434,7 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
             </a>
           </div>
           <div>
-            <strong>Contract:</strong>{' '}
+            <strong>{t('agent.pluginPanel.contractLabel')}</strong>{' '}
             <code style={{ fontSize: '9px', fontFamily: 'monospace' }}>
               {shortAddress(RESEARCHKIT_REGISTRY_CONTRACT)}
             </code>
@@ -446,11 +449,11 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
 // 辅助
 // ============================================================================
 
-function formatRelativeTime(timestamp: number): string {
+function formatRelativeTime(timestamp: number, t: TFn): string {
   const diff = Date.now() - timestamp
-  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
+  if (diff < 60_000) return t('agent.pluginPanel.relativeTime.secondsAgo', { n: Math.floor(diff / 1000) })
+  if (diff < 3600_000) return t('agent.pluginPanel.relativeTime.minutesAgo', { n: Math.floor(diff / 60_000) })
+  if (diff < 86400_000) return t('agent.pluginPanel.relativeTime.hoursAgo', { n: Math.floor(diff / 3600_000) })
   return new Date(timestamp).toLocaleDateString()
 }
 
@@ -477,6 +480,7 @@ function PluginCard({
   onConfigChange: (key: string, value: string | boolean) => void
   onExport: () => void
 }) {
+  const { t } = useI18n()
   const meta = plugin.meta
   const isDisabled = !state.enabled || disabled
 
@@ -526,19 +530,19 @@ function PluginCard({
             >
               v{meta.version}
             </span>
-            {meta.tags.map((t) => (
+            {meta.tags.map((tag) => (
               <span
-                key={t}
+                key={tag}
                 style={{
                   fontSize: '9px',
                   padding: '1px 5px',
-                  background: t === 'official' ? '#dbeafe' : '#f3f4f6',
-                  color: t === 'official' ? '#1e40af' : '#475569',
+                  background: tag === 'official' ? '#dbeafe' : '#f3f4f6',
+                  color: tag === 'official' ? '#1e40af' : '#475569',
                   borderRadius: '3px',
                   fontWeight: 600,
                 }}
               >
-                {t}
+                {tag}
               </span>
             ))}
           </div>
@@ -615,7 +619,7 @@ function PluginCard({
       {meta.requiresConfig && meta.configSchema && meta.configSchema.length > 0 && state.enabled && (
         <div style={{ marginBottom: '10px', padding: '8px', background: '#f8fafc', borderRadius: '6px' }}>
           <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 700, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            ⚙️ 配置
+            {t('agent.pluginPanel.config')}
           </div>
           {meta.configSchema.map((field) => (
             <div key={field.key} style={{ marginBottom: '6px' }}>
@@ -667,7 +671,7 @@ function PluginCard({
           fontWeight: 700,
         }}
       >
-        {executing ? '⏳ 执行中...' : `🚀 ${meta.icon} 执行导出`}
+        {executing ? t('agent.pluginPanel.executing') : t('agent.pluginPanel.executeBtn', { icon: meta.icon })}
       </button>
 
       {/* Result */}
@@ -686,7 +690,7 @@ function PluginCard({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
             <span>{result.success ? '✅' : '❌'}</span>
-            <span style={{ fontWeight: 600 }}>{result.success ? '成功' : '失败'}</span>
+            <span style={{ fontWeight: 600 }}>{result.success ? t('agent.pluginPanel.successLabel') : t('agent.pluginPanel.failureLabel')}</span>
             {result.durationMs && (
               <span style={{ fontSize: '9px', color: '#94a3b8', marginLeft: 'auto' }}>
                 ⚡ {result.durationMs}ms
@@ -739,7 +743,7 @@ function PluginCard({
           <span>{state.lastResult.success ? '✅' : '❌'}</span>
           <span style={{ flex: 1 }}>{state.lastResult.message}</span>
           <span style={{ fontSize: '9px', color: '#94a3b8' }}>
-            {formatRelativeTime(state.lastExecutedAt)}
+            {formatRelativeTime(state.lastExecutedAt, t)}
           </span>
         </div>
       )}

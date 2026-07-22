@@ -8,20 +8,16 @@ import {
   saveUserConfigClient,
   clearUserConfigClient,
 } from '@/lib/user-config'
+import { useI18n } from '@/components/I18nProvider'
 import { btnPrimary, btnSecondary, inputStyle } from '@/lib/ui-styles'
 
 /**
- * ProviderTab — LLM Provider 配置
+ * ProviderTab — LLM Provider 配置(D37 i18n 化)
  *
- * 功能：
- * - 5 个预设 Provider 下拉选择
- * - 选预设后自动填 baseURL + 默认 model
- * - API Key 输入框（password 模式，可切换显示）
- * - "测试连接"按钮（调 /api/settings/test-provider）
- * - "保存"按钮（写 localStorage + cookie）
- * - "重置"按钮（清除用户配置，回到 .env.local）
+ * 主要文案走 i18n,保留少量英文术语(Base URL / API Key 等业界通用词)
  */
 export function ProviderTab() {
+  const { t } = useI18n()
   const [config, setConfig] = useState<ProviderConfig>({
     type: 'deepseek',
     baseURL: 'https://api.deepseek.com/v1',
@@ -36,7 +32,6 @@ export function ProviderTab() {
   const [saved, setSaved] = useState(false)
   const [usingEnv, setUsingEnv] = useState(true)
 
-  // 加载已保存的配置
   useEffect(() => {
     const saved = getUserConfigClient()
     if (saved) {
@@ -46,7 +41,6 @@ export function ProviderTab() {
     setLoaded(true)
   }, [])
 
-  // 选择预设时自动填 baseURL + model
   const handlePresetChange = (presetName: string) => {
     const preset = PROVIDER_PRESETS.find(p => p.name === presetName)
     if (!preset) return
@@ -68,7 +62,7 @@ export function ProviderTab() {
 
   const handleTest = async () => {
     if (!config.apiKey.trim()) {
-      setTestResult({ success: false, message: '请先填写 API Key' })
+      setTestResult({ success: false, message: t('settings.provider.errorApiKeyRequired') })
       return
     }
     setTesting(true)
@@ -82,12 +76,12 @@ export function ProviderTab() {
       const data = await resp.json()
       setTestResult({
         success: data.success === true,
-        message: data.success ? data.message : (data.error || '测试失败'),
+        message: data.success ? data.message : (data.error || t('settings.provider.testFail')),
       })
     } catch (err) {
       setTestResult({
         success: false,
-        message: `请求失败：${err instanceof Error ? err.message : 'unknown'}`,
+        message: `${t('settings.provider.requestFailed')}: ${err instanceof Error ? err.message : 'unknown'}`,
       })
     } finally {
       setTesting(false)
@@ -96,7 +90,7 @@ export function ProviderTab() {
 
   const handleSave = () => {
     if (!config.apiKey.trim() || !config.baseURL.trim() || !config.model.trim()) {
-      setTestResult({ success: false, message: '请填写完整：Base URL / API Key / Model' })
+      setTestResult({ success: false, message: t('settings.provider.errorFieldsRequired') })
       return
     }
     saveUserConfigClient(config)
@@ -106,9 +100,7 @@ export function ProviderTab() {
   }
 
   const handleReset = () => {
-    if (!confirm('确定要清除已保存的 Provider 配置吗？将回退到 .env.local 中的环境变量配置。')) {
-      return
-    }
+    if (!confirm(t('settings.provider.resetConfirm'))) return
     clearUserConfigClient()
     setConfig({
       type: 'deepseek',
@@ -127,7 +119,7 @@ export function ProviderTab() {
   }, [config.type])
 
   if (!loaded) {
-    return <div style={{ padding: '24px', color: '#64748b' }}>Loading...</div>
+    return <div style={{ padding: '24px', color: '#64748b' }}>{t('common.loading')}</div>
   }
 
   return (
@@ -139,7 +131,7 @@ export function ProviderTab() {
         padding: '28px',
       }}
     >
-      {/* 状态条：当前生效配置 */}
+      {/* 状态条 */}
       <div
         style={{
           padding: '12px 16px',
@@ -153,28 +145,22 @@ export function ProviderTab() {
       >
         {usingEnv ? (
           <>
-            ⚠️ <strong>当前使用 .env.local 环境变量配置</strong>
-            （Settings 页保存后会覆盖此配置）
+            ⚠️ <strong>{t('settings.provider.usingEnv')}</strong>
+            {t('settings.provider.usingEnvHint')}
           </>
         ) : (
           <>
-            ✅ <strong>当前使用 Settings 页保存的配置</strong>
-            （覆盖 .env.local）
+            ✅ <strong>{t('settings.provider.usingCustom')}</strong>
+            {t('settings.provider.usingCustomHint')}
           </>
         )}
       </div>
 
-      {/* 预设选择 */}
-      <Field label="Provider Preset" hint="选择预设后自动填 Base URL + 默认 Model">
+      <Field label={t('settings.provider.presetLabel')} hint={t('settings.provider.presetHint')}>
         <select
           value={currentPreset.name}
           onChange={e => handlePresetChange(e.target.value)}
-          style={{
-            ...inputStyle,
-            minHeight: 'auto',
-            padding: '10px 12px',
-            cursor: 'pointer',
-          }}
+          style={{ ...inputStyle, minHeight: 'auto', padding: '10px 12px', cursor: 'pointer' }}
         >
           {PROVIDER_PRESETS.map(preset => (
             <option key={preset.type} value={preset.name}>
@@ -189,13 +175,12 @@ export function ProviderTab() {
             rel="noopener noreferrer"
             style={{ fontSize: '12px', color: '#6366f1', textDecoration: 'none', marginTop: '6px', display: 'inline-block' }}
           >
-            → 获取 API Key
+            → {t('settings.provider.getApiKey')}
           </a>
         )}
       </Field>
 
-      {/* Base URL */}
-      <Field label="Base URL" hint="OpenAI Compatible API 的 endpoint">
+      <Field label={t('settings.provider.baseUrl')} hint={t('settings.provider.baseUrlHint')}>
         <input
           type="text"
           value={config.baseURL}
@@ -205,8 +190,7 @@ export function ProviderTab() {
         />
       </Field>
 
-      {/* API Key */}
-      <Field label="API Key" hint="保存在浏览器 localStorage 和 cookie 中，不会上传服务器">
+      <Field label={t('settings.provider.apiKey')} hint={t('settings.provider.apiKeyHint')}>
         <div style={{ display: 'flex', gap: '8px' }}>
           <input
             type={showApiKey ? 'text' : 'password'}
@@ -217,19 +201,14 @@ export function ProviderTab() {
           />
           <button
             onClick={() => setShowApiKey(!showApiKey)}
-            style={{
-              ...btnSecondary,
-              padding: '10px 14px',
-              flexShrink: 0,
-            }}
+            style={{ ...btnSecondary, padding: '10px 14px', flexShrink: 0 }}
           >
-            {showApiKey ? '🙈 隐藏' : '👁 显示'}
+            {showApiKey ? t('settings.provider.hide') : t('settings.provider.show')}
           </button>
         </div>
       </Field>
 
-      {/* Model */}
-      <Field label="Model" hint="模型名（需与 Provider 支持的模型一致）">
+      <Field label={t('settings.provider.model')} hint={t('settings.provider.modelHint')}>
         <input
           type="text"
           value={config.model}
@@ -239,19 +218,14 @@ export function ProviderTab() {
           style={{ ...inputStyle, minHeight: 'auto', padding: '10px 12px', fontFamily: 'monospace' }}
         />
         <datalist id="model-suggestions">
-          {currentPreset && (
-            <>
-              <option value={currentPreset.defaultModel} />
-            </>
-          )}
+          {currentPreset && <option value={currentPreset.defaultModel} />}
           {['gpt-4o', 'gpt-4o-mini', 'deepseek-v4-flash', 'deepseek-v4-pro', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant'].map(m => (
             <option key={m} value={m} />
           ))}
         </datalist>
       </Field>
 
-      {/* Temperature */}
-      <Field label="Default Temperature" hint={`低温度（0-0.5）输出稳定，高温度（0.7-1.5）更有创意。当前：${config.defaultTemperature ?? 0.3}`}>
+      <Field label={t('settings.provider.temperature')} hint={t('settings.provider.temperatureHint', { value: (config.defaultTemperature ?? 0.3).toFixed(1) })}>
         <input
           type="range"
           min={0}
@@ -268,32 +242,23 @@ export function ProviderTab() {
         <button
           onClick={handleTest}
           disabled={testing}
-          style={{
-            ...btnSecondary,
-            opacity: testing ? 0.6 : 1,
-            cursor: testing ? 'wait' : 'pointer',
-          }}
+          style={{ ...btnSecondary, opacity: testing ? 0.6 : 1, cursor: testing ? 'wait' : 'pointer' }}
         >
-          {testing ? '⏳ 测试中...' : '🔌 测试连接'}
+          {testing ? t('settings.provider.testing') : t('settings.provider.testConnection')}
         </button>
         <button onClick={handleSave} style={btnPrimary}>
-          💾 保存配置
+          {t('settings.provider.save')}
         </button>
         {!usingEnv && (
           <button
             onClick={handleReset}
-            style={{
-              ...btnSecondary,
-              color: '#dc2626',
-              background: '#fee2e2',
-            }}
+            style={{ ...btnSecondary, color: '#dc2626', background: '#fee2e2' }}
           >
-            🗑 重置为环境变量
+            {t('settings.provider.resetToEnv')}
           </button>
         )}
       </div>
 
-      {/* 测试结果 */}
       {testResult && (
         <div
           style={{
@@ -311,7 +276,6 @@ export function ProviderTab() {
         </div>
       )}
 
-      {/* 保存成功提示 */}
       {saved && (
         <div
           style={{
@@ -324,16 +288,13 @@ export function ProviderTab() {
             color: '#1e40af',
           }}
         >
-          ✅ 配置已保存，下次生成知识卡时生效
+          ✅ {t('settings.provider.savedDetail')}
         </div>
       )}
     </div>
   )
 }
 
-/**
- * 字段容器 — 标签 + 输入 + 提示
- */
 function Field({
   label,
   hint,
@@ -358,9 +319,7 @@ function Field({
       </label>
       {children}
       {hint && (
-        <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b' }}>
-          {hint}
-        </p>
+        <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b' }}>{hint}</p>
       )}
     </div>
   )

@@ -10,7 +10,7 @@
  * 4. 评委看到的是"活的"知识图谱，不是静态脑图
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 
 // 知识图谱节点（前端自用结构）
 export interface KGNode {
@@ -19,6 +19,28 @@ export interface KGNode {
   icon?: string
   color: string
   children: KGNode[]
+}
+
+/**
+ * D26 — DFS 找从根到目标节点的路径
+ *
+ * 返回路径上所有节点对象（包含根节点和目标节点本身）
+ * 若找不到则返回空数组
+ *
+ * @example
+ * ```ts
+ * findPath(tree, 'author-2') // [authorsNode, author-2Node]
+ * ```
+ */
+function findPath(nodes: KGNode[], targetId: string): KGNode[] {
+  for (const node of nodes) {
+    if (node.id === targetId) return [node]
+    if (node.children.length > 0) {
+      const subPath = findPath(node.children, targetId)
+      if (subPath.length > 0) return [node, ...subPath]
+    }
+  }
+  return []
 }
 
 interface KnowledgeGraphProps {
@@ -37,6 +59,15 @@ export default function KnowledgeGraph({
   const [buildProgress, setBuildProgress] = useState(0)
   const [revealCount, setRevealCount] = useState(0)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+
+  // D26 — hover 路径高亮
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null)
+  const hasHover = hoveredNode !== null
+  const pathNodes = useMemo(() => {
+    if (!hoveredNode) return []
+    return findPath(tree, hoveredNode)
+  }, [hoveredNode, tree])
+  const pathIds = useMemo(() => new Set(pathNodes.map(n => n.id)), [pathNodes])
 
   // 用 rootTitle 作为 build 的 key — 只有 rootTitle 变化时才重新跑 building 动画
   // 避免 inline 创建的 tree 数组引用每次 re-render 都变，导致 useEffect 无限重跑
@@ -235,22 +266,64 @@ export default function KnowledgeGraph({
           {rootTitle}
         </div>
         <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
-          点击分支节点展开 / 收起
+          点击分支节点展开 / 收起 · hover 节点查看路径
         </div>
+
+        {/* D26 — Path Trace 面包屑：hover 时显示从 root 到当前节点的路径 */}
+        {hasHover && pathNodes.length > 0 && (
+          <div style={{
+            marginTop: '10px',
+            padding: '8px 12px',
+            background: 'white',
+            border: `1px solid ${pathNodes[pathNodes.length - 1]?.color || '#c7d2fe'}`,
+            borderRadius: '8px',
+            fontSize: '11px',
+            color: '#475569',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            maxWidth: '100%',
+            boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)',
+          }}>
+            <span style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+              Path
+            </span>
+            <span style={{ color: '#94a3b8' }}>·</span>
+            <span style={{ color: '#6366f1', fontWeight: 700 }}>{rootTitle}</span>
+            {pathNodes.map((n, i) => (
+              <span key={n.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: '#cbd5e1' }}>›</span>
+                <span style={{ color: n.color, fontWeight: i === pathNodes.length - 1 ? 800 : 600 }}>
+                  {n.icon && <span>{n.icon}</span>}
+                  {n.label}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, monospace', fontSize: '13px' }}>
-        <div style={{
-          display: 'inline-block',
-          padding: '8px 16px',
-          background: 'linear-gradient(135deg, #6366f1 0%, #06b6d4 100%)',
-          color: 'white',
-          borderRadius: '8px',
-          fontWeight: 700,
-          fontSize: '14px',
-          boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-          marginBottom: '8px',
-        }}>
+        <div
+          onMouseEnter={() => setHoveredNode(null)}
+          style={{
+            display: 'inline-block',
+            padding: '8px 16px',
+            background: 'linear-gradient(135deg, #6366f1 0%, #06b6d4 100%)',
+            color: 'white',
+            borderRadius: '8px',
+            fontWeight: 700,
+            fontSize: '14px',
+            boxShadow: hasHover
+              ? '0 2px 6px rgba(99, 102, 241, 0.2)'
+              : '0 4px 12px rgba(99, 102, 241, 0.3)',
+            marginBottom: '8px',
+            opacity: hasHover ? 0.65 : 1,
+            transition: 'all 0.2s ease',
+          }}
+        >
           🎯 {rootTitle}
         </div>
 
@@ -263,6 +336,9 @@ export default function KnowledgeGraph({
             onToggle={toggleNode}
             visible={i < revealCount}
             delay={i * 0.05}
+            pathIds={pathIds}
+            hasHover={hasHover}
+            onHover={setHoveredNode}
           />
         ))}
       </div>
@@ -305,6 +381,9 @@ function TreeNode({
   onToggle,
   visible,
   delay = 0,
+  pathIds,
+  hasHover,
+  onHover,
 }: {
   node: KGNode
   depth: number
@@ -312,31 +391,40 @@ function TreeNode({
   onToggle: (id: string) => void
   visible: boolean
   delay?: number
+  pathIds: Set<string>
+  hasHover: boolean
+  onHover: (id: string | null) => void
 }) {
   const hasChildren = node.children.length > 0
   const isExpanded = expandedNodes.has(node.id)
   const indent = depth * 24
+  // D26 — 路径高亮状态
+  const isOnPath = pathIds.has(node.id)
+  // 有 hover 活动但本节点不在路径上 → 淡化
+  const isDimmed = hasHover && !isOnPath
 
   return (
     <div style={{
       marginLeft: `${indent}px`,
       marginTop: '4px',
-      opacity: visible ? 1 : 0,
+      opacity: visible ? (isDimmed ? 0.35 : 1) : 0,
       transform: visible ? 'translateX(0)' : 'translateX(-8px)',
-      transition: 'all 0.3s ease',
+      transition: 'all 0.25s ease',
       animation: visible ? `kg-slide-in 0.4s ease-out ${delay}s both` : 'none',
     }}>
       <div
         className="kg-branch-hover"
         onClick={() => hasChildren && onToggle(node.id)}
+        onMouseEnter={() => onHover(node.id)}
+        onMouseLeave={() => onHover(null)}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: '6px',
-          padding: '6px 12px',
+          padding: isOnPath ? '7px 14px' : '6px 12px',
           background: hasChildren
-            ? (isExpanded ? node.color : 'white')
-            : `${node.color}10`,
+            ? (isExpanded ? node.color : (isOnPath ? `${node.color}15` : 'white'))
+            : (isOnPath ? `${node.color}20` : `${node.color}10`),
           color: hasChildren
             ? (isExpanded ? 'white' : node.color)
             : '#5a6478',
@@ -344,9 +432,13 @@ function TreeNode({
           borderRadius: '6px',
           cursor: hasChildren ? 'pointer' : 'default',
           fontSize: '12px',
-          fontWeight: 600,
+          fontWeight: isOnPath ? 700 : 600,
           transition: 'all 0.2s ease',
           userSelect: 'none',
+          boxShadow: isOnPath
+            ? `0 0 0 2px ${node.color}40, 0 4px 12px ${node.color}30`
+            : 'none',
+          transform: isOnPath ? 'scale(1.03)' : 'scale(1)',
         }}
       >
         {hasChildren && (
@@ -385,6 +477,9 @@ function TreeNode({
               onToggle={onToggle}
               visible={true}
               delay={i * 0.04}
+              pathIds={pathIds}
+              hasHover={hasHover}
+              onHover={onHover}
             />
           ))}
         </div>

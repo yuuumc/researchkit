@@ -29,6 +29,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { KnowledgeCard } from '@/types/knowledge'
 import type { ChatMessage } from '@/core/llm/provider'
 import { btnPrimary } from '@/lib/ui-styles'
+import { useI18n } from '@/components/I18nProvider'
 
 // ============================================================================
 // 类型
@@ -55,6 +56,7 @@ export interface ChatWithKCProps {
 // ============================================================================
 
 export function ChatWithKC({ knowledgeCard }: ChatWithKCProps) {
+  const { t } = useI18n()
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -122,7 +124,7 @@ export function ChatWithKC({ knowledgeCard }: ChatWithKCProps) {
       if (!data.success) {
         const errMsg: DisplayMessage = {
           role: 'assistant',
-          content: `❌ ${data.error || '请求失败'}`,
+          content: t('agent.chatWithKC.requestFailed', { error: data.error || t('agent.chatWithKC.error') }),
           isError: true,
         }
         setMessages((m) => [...m, errMsg])
@@ -139,7 +141,7 @@ export function ChatWithKC({ knowledgeCard }: ChatWithKCProps) {
 
       // 累计 token / cost
       if (data.usage) {
-        setTotalTokens((t) => t + (data.usage.totalTokens || 0))
+        setTotalTokens((prev) => prev + (data.usage.totalTokens || 0))
       }
       if (data.usage && data.model) {
         // 简单 cost 估算（按 deepseek/openai 常见价格 ~ $1/M token 平均）
@@ -150,7 +152,7 @@ export function ChatWithKC({ knowledgeCard }: ChatWithKCProps) {
     } catch (err) {
       const errMsg: DisplayMessage = {
         role: 'assistant',
-        content: `❌ 网络错误：${err instanceof Error ? err.message : '请求失败'}`,
+        content: t('agent.chatWithKC.networkError', { error: err instanceof Error ? err.message : t('agent.chatWithKC.error') }),
         isError: true,
       }
       setMessages((m) => [...m, errMsg])
@@ -167,7 +169,7 @@ export function ChatWithKC({ knowledgeCard }: ChatWithKCProps) {
   }
 
   // 基于 KC 字段动态生成建议问题
-  const suggestions = generateSuggestions(knowledgeCard)
+  const suggestions = generateSuggestions(knowledgeCard, t)
 
   return (
     <div
@@ -199,10 +201,10 @@ export function ChatWithKC({ knowledgeCard }: ChatWithKCProps) {
           <span style={{ fontSize: '18px' }}>💬</span>
           <div>
             <div style={{ fontSize: '13px', fontWeight: 700, color: '#0c4a6e' }}>
-              Ask Anything
+              {t('agent.chatWithKC.headerTitle')}
             </div>
             <div style={{ fontSize: '11px', color: '#0e7490', marginTop: '2px' }}>
-              基于当前 Knowledge Card 追问 LLM
+              {t('agent.chatWithKC.headerHint')}
             </div>
           </div>
         </div>
@@ -261,7 +263,7 @@ export function ChatWithKC({ knowledgeCard }: ChatWithKCProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`向 LLM 提问关于 "${truncate(knowledgeCard.title, 40)}" 的问题...`}
+            placeholder={t('agent.chatWithKC.placeholderWith', { title: truncate(knowledgeCard.title, 40) })}
             rows={1}
             style={{
               flex: 1,
@@ -295,11 +297,11 @@ export function ChatWithKC({ knowledgeCard }: ChatWithKCProps) {
               flexShrink: 0,
             }}
           >
-            {loading ? '💬...' : '发送'}
+            {loading ? t('agent.chatWithKC.sendBtnLoading') : t('agent.chatWithKC.sendBtn')}
           </button>
         </div>
         <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '6px', textAlign: 'right' }}>
-          Enter 发送 · Shift+Enter 换行
+          {t('agent.chatWithKC.sendHint')}
         </div>
       </div>
     </div>
@@ -372,6 +374,7 @@ function MessageBubble({ message }: { message: DisplayMessage }) {
 // ============================================================================
 
 function LoadingBubble() {
+  const { t } = useI18n()
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-start', animation: 'fadeIn 0.3s ease-out' }}>
       <div
@@ -390,7 +393,7 @@ function LoadingBubble() {
         <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#0284c7', borderRadius: '50%', animation: 'dotPulse 1.2s ease-in-out infinite' }} />
         <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#0284c7', borderRadius: '50%', animation: 'dotPulse 1.2s ease-in-out 0.2s infinite' }} />
         <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#0284c7', borderRadius: '50%', animation: 'dotPulse 1.2s ease-in-out 0.4s infinite' }} />
-        <span style={{ marginLeft: '4px', fontSize: '11px' }}>LLM 思考中...</span>
+        <span style={{ marginLeft: '4px', fontSize: '11px' }}>{t('agent.chatWithKC.thinkingDots')}</span>
       </div>
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes dotPulse {
@@ -407,14 +410,15 @@ function LoadingBubble() {
 // ============================================================================
 
 function EmptyState({ suggestions, onPick }: { suggestions: string[]; onPick: (q: string) => void }) {
+  const { t } = useI18n()
   return (
     <div style={{ textAlign: 'center', padding: '20px 16px' }}>
       <div style={{ fontSize: '28px', marginBottom: '8px' }}>💭</div>
       <div style={{ fontSize: '13px', color: '#475569', fontWeight: 600, marginBottom: '4px' }}>
-        Ask anything about this paper
+        {t('agent.chatWithKC.emptyTitle')}
       </div>
       <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '16px', lineHeight: 1.5 }}>
-        LLM 已读取完整 Knowledge Card，可以追问任何细节
+        {t('agent.chatWithKC.emptyHint')}
       </div>
       {suggestions.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'stretch' }}>
@@ -561,41 +565,43 @@ function parseInline(text: string): Array<{ type: 'text' | 'bold' | 'code'; text
 // 建议问题生成（基于 KC 字段）
 // ============================================================================
 
-function generateSuggestions(kc: KnowledgeCard): string[] {
+type TFn = (key: string, params?: Record<string, string | number>) => string
+
+function generateSuggestions(kc: KnowledgeCard, t: TFn): string[] {
   const suggestions: string[] = []
 
   if (kc.methodology) {
-    suggestions.push(`这篇论文的 method 是什么？用通俗语言解释`)
+    suggestions.push(t('agent.chatWithKC.suggestions.method'))
   }
   if (kc.innovation && kc.innovation.length > 0) {
-    suggestions.push(`这篇论文的核心创新点是什么？`)
+    suggestions.push(t('agent.chatWithKC.suggestions.innovation'))
   }
   if (kc.limitations && kc.limitations.length > 0) {
-    suggestions.push(`这篇论文有哪些局限性？怎么改进？`)
+    suggestions.push(t('agent.chatWithKC.suggestions.limitations'))
   }
   if (kc.key_terms && kc.key_terms.length > 0) {
     const term = kc.key_terms[0].term
-    suggestions.push(`什么是 "${term}"？为什么重要？`)
+    suggestions.push(t('agent.chatWithKC.suggestions.keyTerm', { term }))
   }
   if (kc.future_work && kc.future_work.length > 0) {
-    suggestions.push(`作者提到的未来工作是什么？`)
+    suggestions.push(t('agent.chatWithKC.suggestions.futureWork'))
   }
   if (kc.applications && kc.applications.length > 0) {
-    suggestions.push(`这篇论文有什么实际应用场景？`)
+    suggestions.push(t('agent.chatWithKC.suggestions.applications'))
   }
   if (kc.takeaway) {
-    suggestions.push(`用一句话总结这篇论文`)
+    suggestions.push(t('agent.chatWithKC.suggestions.takeaway'))
   }
   if (kc.difficulty === 'Advanced') {
-    suggestions.push(`作为一个初学者，我应该先掌握什么前置知识？`)
+    suggestions.push(t('agent.chatWithKC.suggestions.advancedDifficulty'))
   }
 
   // 默认建议
   if (suggestions.length === 0) {
-    suggestions.push(`用一句话总结这篇论文的核心贡献`)
-    suggestions.push(`这篇论文有什么实际应用场景？`)
-    suggestions.push(`如果我要复现这篇论文，关键步骤是什么？`)
-    suggestions.push(`这篇论文和当前领域其他工作相比有什么独特之处？`)
+    suggestions.push(t('agent.chatWithKC.suggestions.default1'))
+    suggestions.push(t('agent.chatWithKC.suggestions.default2'))
+    suggestions.push(t('agent.chatWithKC.suggestions.default3'))
+    suggestions.push(t('agent.chatWithKC.suggestions.default4'))
   }
 
   return suggestions.slice(0, 4)

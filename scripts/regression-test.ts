@@ -43,6 +43,8 @@ interface TestCaseResult {
   title: string
   locale: string
   field: string
+  /** D40 — i18n: 本次运行的目标 Application Language（与 outputLocale 同步） */
+  appLocale?: 'zh-CN' | 'en-US'
   success: boolean
   durationMs: number
   totalTokens?: number
@@ -65,6 +67,9 @@ interface RegressionReport {
   totalCases: number
   successCount: number
   failureCount: number
+  /** D40 — i18n: 分项成功率 */
+  zhCnSuccess?: { success: number; total: number }
+  enUsSuccess?: { success: number; total: number }
   averageDurationMs: number
   averageTokens?: number
   averageCostUsd?: number
@@ -82,6 +87,22 @@ const API_KEY = process.env.RESEARCHKIT_API_KEY || ''
 const PROVIDER = process.env.RESEARCHKIT_PROVIDER || 'deepseek'
 const MODEL = process.env.RESEARCHKIT_MODEL || 'deepseek-chat'
 const RATE_LIMIT_MS = 2000  // 每篇间隔 2s，避免 LLM 限流
+
+/**
+ * D40 — i18n: 每篇 fixture 跑两次（appLocale + outputLocale 同步切到目标 locale）
+ *
+ * 设计:
+ * - appLocale = outputLocale = targetLocale
+ *   - 确保 KC 主管线语言切换生效（outputLocale 控制）
+ *   - 同时覆盖 Application Language 切换路径（appLocale 控制）
+ * - autoTranslate=true，让 Explain/Chat/Compare 也跟随
+ * - promptLanguage 永远锁死 'en-US'（不影响主 KC 管线）
+ *
+ * 可通过环境变量 RESEARCHKIT_TARGET_LOCALES 覆盖（逗号分隔），如 "zh-CN" 单跑一次
+ */
+const TARGET_LOCALES: Array<'zh-CN' | 'en-US'> = (process.env.RESEARCHKIT_TARGET_LOCALES
+  ? process.env.RESEARCHKIT_TARGET_LOCALES.split(',').map(s => s.trim()).filter(Boolean)
+  : ['zh-CN', 'en-US']) as Array<'zh-CN' | 'en-US'>
 
 const PROJECT_ROOT = process.cwd()
 const FIXTURES_DIR = path.join(PROJECT_ROOT, 'fixtures', 'papers')
@@ -126,7 +147,7 @@ interface SSEEvent {
   data: any
 }
 
-async function callResearchPipeline(abstract: string, locale: string, fixtureId: string, fixtureTitle: string, fixtureAuthors: string[], fixtureYear: number): Promise<{
+async function callResearchPipeline(abstract: string, fixtureId: string, fixtureTitle: string, fixtureAuthors: string[], fixtureYear: number, targetLocale: 'zh-CN' | 'en-US'): Promise<{
   success: boolean
   durationMs: number
   totalTokens?: number
@@ -151,6 +172,21 @@ async function callResearchPipeline(abstract: string, locale: string, fixtureId:
   // Node.js 没有 btoa/escape，用 Buffer 实现 btoa(unescape(encodeURIComponent(json)))
   const base64 = Buffer.from(configJson, 'utf-8').toString('base64')
   const userConfigCookie = `researchkit-provider=${base64}`
+
+  // D40 — i18n: 通过 cookie 注入 UserPreferences
+  // appLocale = outputLocale = targetLocale，确保主 KC 管线语言切换 + UI 切换都覆盖
+  // autoTranslate=true，让 Explain/Chat/Compare 也跟随 appLocale
+  const prefsJson = JSON.stringify({
+    preset: 'academic',
+    appLocale: targetLocale,
+    outputLocale: targetLocale,
+    autoTranslate: true,
+    promptLanguage: 'en-US',
+    updatedAt: Date.now(),
+  })
+  const prefsBase64 = Buffer.from(prefsJson, 'utf-8').toString('base64')
+  const userPrefsCookie = `researchkit-user-preferences=${prefsBase64}`
+
   // 把 fixture metadata 注入 content 头部，让 Analyzer 能正确提取 authors/year
   // 模拟真实场景：用户粘贴论文时通常包含 title + authors + abstract
   const metadataHeader = `Title: ${fixtureTitle}
@@ -160,7 +196,7 @@ Year: ${fixtureYear}
 ${abstract}`
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Cookie': userConfigCookie,
+    'Cookie': `${userConfigCookie}; ${userPrefsCookie}`,
   }
 
   try {
@@ -264,7 +300,7 @@ interface QualityCheck {
   warnings: string[]
 }
 
-function validateKc(kc: any, fixture: PaperFixture): QualityCheck {
+function validateKc(kc: any, fixture: PaperFixture, expectedOutputLocale: 'zh-CN' | 'en-US'): QualityCheck {
   const errors: string[] = []
   const warnings: string[] = []
 
@@ -277,14 +313,11 @@ function validateKc(kc: any, fixture: PaperFixture): QualityCheck {
   }
 
   // title 一致性（容错：fixture.title 可能比 kc.title 长，但应包含关键词）
-  if (kc.title && fixture.title) {
-    const fixtureTitleLower = fixture.title.toLowerCase()
-    const kcTitleLower = String(kc.title).toLowerCase()
-    const keywords = fixtureTitleLower.split(/[\s:,\-—]+/).filter(w => w.length > 3)
-    const matched = keywords.some(kw => kcTitleLower.includes(kw))
-    if (!matched) {
-      warnings.push(`Title mismatch: fixture="${fixture.title.substring(0, 50)}...", kc="${String(kc.title).substring(0, 50)}..."`)
-    }
+  // 注意：outputLocale=en-US 时 KC.title 应是英文（即使 fixture 是中文论文）
+  //       outputLocale=zh-CN 时 KC.title 应是中文（即使 fixture 是英文论文）
+  //       → 此处不做精确关键词匹配，只做"长度合理"的粗校验
+  if (kc.title && String(kc.title).length < 5) {
+    warnings.push(`KC title too short: ${String(kc.title).length} chars`)
   }
 
   // year 一致性
@@ -292,23 +325,25 @@ function validateKc(kc: any, fixture: PaperFixture): QualityCheck {
     warnings.push(`Year mismatch: fixture=${fixture.year}, kc=${kc.year}`)
   }
 
-  // locale 检查
-  if (fixture.locale === 'en-US') {
-    const summary = String(kc.summary || '')
-    const chineseCharRatio = (summary.match(/[\u4e00-\u9fa5]/g) || []).length / (summary.length || 1)
+  // D40 — i18n: locale 校验按 expectedOutputLocale（而非 fixture.locale）
+  // 因为 KC 输出语言现在由 outputLocale 决定，不再跟随源语言
+  const summary = String(kc.summary || '')
+  const chineseCharRatio = (summary.match(/[\u4e00-\u9fa5]/g) || []).length / (summary.length || 1)
+  if (expectedOutputLocale === 'en-US') {
     if (chineseCharRatio > 0.1) {
-      warnings.push(`English paper but KC summary contains ${(chineseCharRatio * 100).toFixed(1)}% Chinese chars`)
+      warnings.push(`Expected en-US output but KC summary contains ${(chineseCharRatio * 100).toFixed(1)}% Chinese chars`)
     }
-  } else if (fixture.locale === 'zh-CN') {
-    const summary = String(kc.summary || '')
-    const chineseCharRatio = (summary.match(/[\u4e00-\u9fa5]/g) || []).length / (summary.length || 1)
+  } else if (expectedOutputLocale === 'zh-CN') {
     if (chineseCharRatio < 0.3) {
-      warnings.push(`Chinese paper but KC summary contains only ${(chineseCharRatio * 100).toFixed(1)}% Chinese chars`)
+      warnings.push(`Expected zh-CN output but KC summary contains only ${(chineseCharRatio * 100).toFixed(1)}% Chinese chars`)
     }
   }
 
   // summary 长度
-  if (kc.summary && String(kc.summary).length < 50) {
+  // D19 Reader prompt 要求 "One-sentence factual summary (subject + verb + object, no fluff)"
+  // 一句话事实摘要通常 30-80 chars 都正常，原阈值 50 过严会误报 zh-002 等概念简洁的论文
+  // v2.2.6 hotfix: 阈值降到 30 — 真正异常短的 summary 才警告
+  if (kc.summary && String(kc.summary).length < 30) {
     warnings.push(`Summary too short: ${String(kc.summary).length} chars`)
   }
 
@@ -319,16 +354,19 @@ function validateKc(kc: any, fixture: PaperFixture): QualityCheck {
 // 主流程
 // ============================================================================
 
-async function runSingleCase(fixture: PaperFixture): Promise<TestCaseResult> {
-  log(`▶ ${fixture.id} [${fixture.locale}] ${fixture.title.substring(0, 40)}...`)
+async function runSingleCase(fixture: PaperFixture, targetLocale: 'zh-CN' | 'en-US'): Promise<TestCaseResult> {
+  // D40 — fixtureId 后缀化（如 en-001#zh-CN）以避免报告里撞 ID
+  const caseId = `${fixture.id}#${targetLocale}`
+  log(`▶ ${caseId} [${fixture.locale}] ${fixture.title.substring(0, 40)}...`)
 
-  const result = await callResearchPipeline(fixture.abstract, fixture.locale, fixture.id, fixture.title, fixture.authors, fixture.year)
+  const result = await callResearchPipeline(fixture.abstract, fixture.id, fixture.title, fixture.authors, fixture.year, targetLocale)
 
   const caseResult: TestCaseResult = {
-    fixtureId: fixture.id,
+    fixtureId: caseId,
     title: fixture.title,
     locale: fixture.locale,
     field: fixture.field,
+    appLocale: targetLocale,
     success: result.success,
     durationMs: result.durationMs,
     totalTokens: result.totalTokens,
@@ -340,7 +378,7 @@ async function runSingleCase(fixture: PaperFixture): Promise<TestCaseResult> {
     caseResult.kcField = result.kc.field
     caseResult.kcYear = result.kc.year
 
-    const quality = validateKc(result.kc, fixture)
+    const quality = validateKc(result.kc, fixture, targetLocale)
     if (quality.errors.length > 0) {
       caseResult.errors = quality.errors
       // 质量错误也算失败
@@ -376,6 +414,15 @@ function generateMarkdownReport(report: RegressionReport): string {
   lines.push(`| Success | ${report.successCount} |`)
   lines.push(`| Failure | ${report.failureCount} |`)
   lines.push(`| Success Rate | ${(report.successCount / report.totalCases * 100).toFixed(1)}% |`)
+  // D40 — i18n 分项成功率
+  if (report.zhCnSuccess) {
+    const rate = (report.zhCnSuccess.success / report.zhCnSuccess.total * 100).toFixed(1)
+    lines.push(`| zh-CN Success | ${report.zhCnSuccess.success} / ${report.zhCnSuccess.total} (${rate}%) |`)
+  }
+  if (report.enUsSuccess) {
+    const rate = (report.enUsSuccess.success / report.enUsSuccess.total * 100).toFixed(1)
+    lines.push(`| en-US Success | ${report.enUsSuccess.success} / ${report.enUsSuccess.total} (${rate}%) |`)
+  }
   lines.push(`| Avg Duration | ${(report.averageDurationMs / 1000).toFixed(1)}s |`)
   if (report.averageTokens !== undefined) {
     lines.push(`| Avg Tokens | ${Math.round(report.averageTokens)} |`)
@@ -392,15 +439,17 @@ function generateMarkdownReport(report: RegressionReport): string {
   lines.push('')
   lines.push('## Results')
   lines.push('')
-  lines.push('| ID | Locale | Field | Title | Duration | Tokens | Cost | Status |')
-  lines.push('|---|---|---|---|---|---|---|---|')
+  // D40 — i18n: 表头加 AppLocale 列；原 Locale 列改名为 Source（表示源论文语言）
+  lines.push('| ID | AppLocale | Source | Field | Title | Duration | Tokens | Cost | Status |')
+  lines.push('|---|---|---|---|---|---|---|---|---|')
   for (const r of report.results) {
     const status = r.success ? '✅' : '❌'
     const tokens = r.totalTokens ?? '-'
     const cost = r.totalCostUsd !== undefined ? `$${r.totalCostUsd.toFixed(4)}` : '-'
     const duration = `${(r.durationMs / 1000).toFixed(1)}s`
     const title = r.title.substring(0, 30) + (r.title.length > 30 ? '...' : '')
-    lines.push(`| ${r.fixtureId} | ${r.locale} | ${r.field} | ${title} | ${duration} | ${tokens} | ${cost} | ${status} |`)
+    const appLocale = r.appLocale || '-'
+    lines.push(`| ${r.fixtureId} | ${appLocale} | ${r.locale} | ${r.field} | ${title} | ${duration} | ${tokens} | ${cost} | ${status} |`)
   }
   lines.push('')
 
@@ -438,9 +487,10 @@ function generateMarkdownReport(report: RegressionReport): string {
 }
 
 async function main() {
-  log(`ResearchKit OS v2.2.5 — Regression Test Runner`)
+  log(`ResearchKit OS v2.3-i18n — Regression Test Runner`)
   log(`Base URL: ${BASE_URL}`)
   log(`Provider: ${PROVIDER} / ${MODEL}`)
+  log(`Target locales: ${TARGET_LOCALES.join(', ')}`)
 
   if (!API_KEY) {
     console.error('ERROR: RESEARCHKIT_API_KEY environment variable is required')
@@ -461,15 +511,22 @@ async function main() {
   const startedAt = new Date().toISOString()
   const startMs = Date.now()
 
-  // 跑测试
+  // 跑测试 — D40: 外层 fixture × 内层 targetLocale
   const results: TestCaseResult[] = []
+  const totalCases = fixtures.length * TARGET_LOCALES.length
+  let caseIdx = 0
   for (let i = 0; i < fixtures.length; i++) {
     const fixture = fixtures[i]
-    const result = await runSingleCase(fixture)
-    results.push(result)
-    if (i < fixtures.length - 1) {
-      log(`  ⏳ rate limit ${RATE_LIMIT_MS}ms...`)
-      await sleep(RATE_LIMIT_MS)
+    for (const targetLocale of TARGET_LOCALES) {
+      caseIdx++
+      log(`[${caseIdx}/${totalCases}] fixture=${fixture.id} target=${targetLocale}`)
+      const result = await runSingleCase(fixture, targetLocale)
+      results.push(result)
+      // rate limit（最后一个 case 不等）
+      if (caseIdx < totalCases) {
+        log(`  ⏳ rate limit ${RATE_LIMIT_MS}ms...`)
+        await sleep(RATE_LIMIT_MS)
+      }
     }
   }
 
@@ -483,6 +540,18 @@ async function main() {
   const totalTokens = tokenResults.reduce((sum, r) => sum + (r.totalTokens || 0), 0)
   const totalCostUsd = costResults.reduce((sum, r) => sum + (r.totalCostUsd || 0), 0)
 
+  // D40 — i18n: 分项成功率
+  const zhCnResults = results.filter(r => r.appLocale === 'zh-CN')
+  const enUsResults = results.filter(r => r.appLocale === 'en-US')
+  const zhCnSuccess = zhCnResults.length > 0 ? {
+    success: zhCnResults.filter(r => r.success).length,
+    total: zhCnResults.length,
+  } : undefined
+  const enUsSuccess = enUsResults.length > 0 ? {
+    success: enUsResults.filter(r => r.success).length,
+    total: enUsResults.length,
+  } : undefined
+
   const report: RegressionReport = {
     runId,
     startedAt,
@@ -494,6 +563,8 @@ async function main() {
     totalCases: results.length,
     successCount,
     failureCount: results.length - successCount,
+    zhCnSuccess,
+    enUsSuccess,
     averageDurationMs: results.reduce((sum, r) => sum + r.durationMs, 0) / results.length,
     averageTokens: tokenResults.length > 0 ? totalTokens / tokenResults.length : undefined,
     averageCostUsd: costResults.length > 0 ? totalCostUsd / costResults.length : undefined,
@@ -514,6 +585,12 @@ async function main() {
   log(`  Run ID:        ${runId}`)
   log(`  Total:         ${report.totalCases}`)
   log(`  Success:       ${successCount} / ${report.totalCases} (${(successCount / report.totalCases * 100).toFixed(1)}%)`)
+  if (zhCnSuccess) {
+    log(`  zh-CN:         ${zhCnSuccess.success} / ${zhCnSuccess.total} (${(zhCnSuccess.success / zhCnSuccess.total * 100).toFixed(1)}%)`)
+  }
+  if (enUsSuccess) {
+    log(`  en-US:         ${enUsSuccess.success} / ${enUsSuccess.total} (${(enUsSuccess.success / enUsSuccess.total * 100).toFixed(1)}%)`)
+  }
   log(`  Avg Duration:  ${(report.averageDurationMs / 1000).toFixed(1)}s`)
   if (report.averageTokens !== undefined) {
     log(`  Avg Tokens:    ${Math.round(report.averageTokens)}`)
