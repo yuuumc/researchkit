@@ -12,7 +12,7 @@
  * - 字段精简：只存 Dashboard 展示需要的字段，不存完整 knowledge card
  */
 
-import type { AgentUsageSummary, ChatUsage } from '@/lib/usage-collector'
+import type { AgentUsageSummary, ChatUsage } from '@/types/usage'
 
 const STORAGE_KEY = 'researchkit:cost-history'
 const MAX_RUNS = 50
