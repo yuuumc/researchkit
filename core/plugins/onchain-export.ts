@@ -97,7 +97,10 @@ export const onchainExportPlugin: ExportPlugin = {
   // D31 — 权限声明：需要钱包地址 + 调用 X Layer RPC + 写入本地 ledger
   permissions: {
     kcFields: ['title', 'summary', 'authors', 'field', 'year'],
-    externalApis: ['xlayer.okx.com', 'api.ipfs.com'],
+    // P2-6 修复：URL 改为真实 host
+    // - xlayerrpc.okx.com 是 X Layer mainnet RPC（lib/onchain-utils.ts:165 也用这个）
+    // - api.pinata.cloud / api.web3.storage 是主流 IPFS pinning 服务
+    externalApis: ['xlayerrpc.okx.com', 'api.pinata.cloud', 'api.web3.storage'],
     network: true,
     filesystem: true,
     walletSignature: true,

@@ -13,6 +13,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { coordinate } from '@/lib/coordinator'
 import { handleOptions } from '@/lib/cors'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+// D43 — magic numbers 集中到 config/orchestration.ts
+import {
+  MIN_CONTENT_LENGTH,
+  MAX_CONTENT_LENGTH,
+  RATE_LIMIT_KC,
+} from '@/config/orchestration'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -20,7 +26,7 @@ export async function POST(request: NextRequest) {
   try {
     // P1-8 rate limit（LLM 调用贵，1 分钟内最多 10 次）
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`kc:${ip}`, { limit: 10, windowMs: 60_000 })
+    const rl = checkRateLimit(`kc:${ip}`, RATE_LIMIT_KC)
     if (!rl.allowed) {
       return NextResponse.json(
         { success: false, error: '请求过于频繁，请稍后再试' },
@@ -60,16 +66,16 @@ export async function POST(request: NextRequest) {
     const title = body.title
     const source = body.source || '用户输入'
 
-    if (!content || content.length < 50) {
+    if (!content || content.length < MIN_CONTENT_LENGTH) {
       return NextResponse.json(
-        { success: false, error: '内容过短，请提供至少 50 字符' },
+        { success: false, error: `内容过短，请提供至少 ${MIN_CONTENT_LENGTH} 字符` },
         { status: 400 }
       )
     }
 
-    if (content.length > 50000) {
+    if (content.length > MAX_CONTENT_LENGTH) {
       return NextResponse.json(
-        { success: false, error: '内容过长，最大支持 50000 字符' },
+        { success: false, error: `内容过长，最大支持 ${MAX_CONTENT_LENGTH} 字符` },
         { status: 400 }
       )
     }

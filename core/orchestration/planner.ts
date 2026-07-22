@@ -15,6 +15,8 @@ import type { Plan } from '@/types'
 import type { Locale } from '@/lib/locale'
 import { setCurrentAgent } from '@/lib/usage-collector'
 import type { CoordinatorInput } from './coordinator'
+// D43 — magic numbers 集中到 config/orchestration.ts
+import { PLANNER_MAX_ATTEMPTS, PLANNER_BASE_DELAY_MS } from '@/config/orchestration'
 
 /**
  * 调用 PlannerAgent 生成 Plan
@@ -47,8 +49,9 @@ export async function runPlanner(
   let plan: Plan | null = null
 
   // P1 指数退避：1s → 2s，最多 2 次重试（共 3 次尝试）
-  const MAX_ATTEMPTS = 3
-  const BASE_DELAY_MS = 1000
+  // D43 — 常量从 config/orchestration 引入
+  const MAX_ATTEMPTS = PLANNER_MAX_ATTEMPTS
+  const BASE_DELAY_MS = PLANNER_BASE_DELAY_MS
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {

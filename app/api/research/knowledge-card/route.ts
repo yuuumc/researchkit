@@ -11,6 +11,8 @@ import { generateKnowledgeCard } from '@/lib/llm'
 import { parseContent, exportToMarkdown, exportToObsidian, exportToMindmap } from '@/lib/parser'
 import { handleOptions } from '@/lib/cors'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+// D43 — magic numbers 集中到 config/orchestration.ts
+import { RATE_LIMIT_KC } from '@/config/orchestration'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -18,7 +20,7 @@ export async function POST(request: NextRequest) {
   try {
     // P1-8 rate limit
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`kc:${ip}`, { limit: 10, windowMs: 60_000 })
+    const rl = checkRateLimit(`kc:${ip}`, RATE_LIMIT_KC)
     if (!rl.allowed) {
       return NextResponse.json(
         { success: false, error: '请求过于频繁，请稍后再试' },

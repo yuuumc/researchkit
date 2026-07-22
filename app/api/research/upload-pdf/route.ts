@@ -10,14 +10,16 @@ import { generateKnowledgeCard } from '@/lib/llm'
 import { parsePdf, exportToMarkdown, exportToObsidian, exportToMindmap } from '@/lib/parser'
 import { handleOptions } from '@/lib/cors'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+// D43 — magic numbers 集中到 config/orchestration.ts
+import { MAX_PDF_SIZE_BYTES, RATE_LIMIT_PDF } from '@/config/orchestration'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    // P1-8 rate limit（PDF 解析最贵，10 分钟内最多 5 次）
+    // P1-8 rate limit（PDF 解析最贵）
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`pdf:${ip}`, { limit: 5, windowMs: 10 * 60_000 })
+    const rl = checkRateLimit(`pdf:${ip}`, RATE_LIMIT_PDF)
     if (!rl.allowed) {
       return NextResponse.json(
         { success: false, error: 'PDF 上传过于频繁，请稍后再试' },
@@ -65,8 +67,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 验证文件大小（10MB 上限）
-    if (file.size > 10 * 1024 * 1024) {
+    // 验证文件大小（MAX_PDF_SIZE_BYTES 上限）
+    if (file.size > MAX_PDF_SIZE_BYTES) {
       return NextResponse.json(
         { success: false, error: '文件过大，最大支持 10MB' },
         { status: 400 }

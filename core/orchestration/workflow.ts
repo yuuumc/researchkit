@@ -24,11 +24,17 @@ import type {
 import type { CoordinatorStage } from './coordinator'
 import type { CoordinatorInput } from './coordinator'
 import type { Locale } from '@/lib/locale'
+// D43 — magic numbers 集中到 config/orchestration.ts
+import {
+  MAX_ITERATIONS as CONFIG_MAX_ITERATIONS,
+  MAX_SUPPLEMENTARY_STEPS as CONFIG_MAX_SUPPLEMENTARY_STEPS,
+} from '@/config/orchestration'
 
 /**
  * 最多反思 2 轮（避免成本爆炸）
+ * @deprecated D43 — 改从 @/config/orchestration 引用
  */
-export const MAX_ITERATIONS = 2
+export const MAX_ITERATIONS = CONFIG_MAX_ITERATIONS
 
 /**
  * 反思循环的输出
@@ -161,10 +167,10 @@ export async function runReflectionLoop(
     // D19 Token 优化：截断 supplementary_steps 到最多 MAX_SUPPLEMENTARY_STEPS 个
     // 原因：Replan prompt 允许最多 3 个，但 3 个 agent 重跑成本高（每个 ~2000 tokens）
     // 截断策略：保留 Replan 返回顺序的前 N 个（Replan 通常按重要性排序）
-    const MAX_SUPPLEMENTARY_STEPS = 2
-    const truncatedSteps = replanResult.supplementary_steps.slice(0, MAX_SUPPLEMENTARY_STEPS)
+    // D43 — 改从 config/orchestration 引用
+    const truncatedSteps = replanResult.supplementary_steps.slice(0, CONFIG_MAX_SUPPLEMENTARY_STEPS)
     if (truncatedSteps.length < replanResult.supplementary_steps.length) {
-      console.warn(`[workflow] D19 token optimization: truncated supplementary steps from ${replanResult.supplementary_steps.length} to ${MAX_SUPPLEMENTARY_STEPS}`)
+      console.warn(`[workflow] D19 token optimization: truncated supplementary steps from ${replanResult.supplementary_steps.length} to ${CONFIG_MAX_SUPPLEMENTARY_STEPS}`)
     }
     const supplementaryPlan: Plan = {
       ...plan,

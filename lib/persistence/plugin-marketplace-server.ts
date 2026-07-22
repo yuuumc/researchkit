@@ -79,7 +79,8 @@ export const BUILTIN_MANIFESTS: PluginManifest[] = [
     official: true,
     permissions: {
       kcFields: ['title', 'summary', 'authors', 'field', 'year'],
-      externalApis: ['xlayer.okx.com', 'api.ipfs.com'],
+      // P2-6 修复：URL 改为真实 host（与 onchain-export.ts 一致）
+      externalApis: ['xlayerrpc.okx.com', 'api.pinata.cloud', 'api.web3.storage'],
       network: true,
       filesystem: true,
       walletSignature: true,

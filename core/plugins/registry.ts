@@ -149,21 +149,6 @@ class PluginRegistry {
  */
 export const pluginRegistry = new PluginRegistry()
 
-/**
- * 初始化所有内置插件 — 在 app 启动时调用一次
- *
- * v2.2 内置：
- * - json-download: 下载 KC 的 JSON
- * - markdown-download: 下载 KC 的 Markdown
- *
- * v2.3 扩展：
- * - onchain-export: 发布到 X Layer 链上（D13）
- * - notion-publish: 发布到 Notion（社区插件）
- */
-export function initBuiltinPlugins(): void {
-  // 延迟 import 避免循环依赖
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { jsonDownloadPlugin, markdownDownloadPlugin } = require('./sample-plugins')
-  pluginRegistry.register(jsonDownloadPlugin)
-  pluginRegistry.register(markdownDownloadPlugin)
-}
+// P2-7 — initBuiltinPlugins 是 dead code，已删除。
+// 实际注册走 components/PluginPanel.tsx:77 的 pluginRegistry.register(p)，
+// 避免两条注册路径不一致导致 server-side 跑导出逻辑时插件不在 registry。

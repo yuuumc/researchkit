@@ -10,14 +10,19 @@ import { generateKnowledgeCard } from '@/lib/llm'
 import { fetchFromUrl, exportToMarkdown, exportToObsidian } from '@/lib/parser'
 import { handleOptions } from '@/lib/cors'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+// D43 — magic numbers 集中到 config/orchestration.ts
+import { RATE_LIMIT_BATCH } from '@/config/orchestration'
 
+// TODO P2-8: 此 legacy endpoint 仍直接调 lib/llm.ts，绕过 cost dashboard 的 token 归因。
+// v2.4 应改为走 coordinate()，或在 lib/llm.ts 入口包 beginCollection()/endCollection()。
+// 详见 docs/v2.3.0-code-review-2026-07-22.md P2-8
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    // P1-8 rate limit（batch 模式更贵，10 分钟内最多 3 次）
+    // P1-8 rate limit（batch 模式最贵）
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`batch:${ip}`, { limit: 3, windowMs: 10 * 60_000 })
+    const rl = checkRateLimit(`batch:${ip}`, RATE_LIMIT_BATCH)
     if (!rl.allowed) {
       return NextResponse.json(
         { success: false, error: '批量请求过于频繁，请稍后再试' },

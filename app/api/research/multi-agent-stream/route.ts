@@ -14,6 +14,13 @@
 import { NextRequest } from 'next/server'
 import { coordinate } from '@/lib/coordinator'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+// D43 — magic numbers 集中到 config/orchestration.ts
+import {
+  TOKEN_FLUSH_INTERVAL_MS,
+  MIN_CONTENT_LENGTH,
+  MAX_CONTENT_LENGTH,
+  RATE_LIMIT_KC,
+} from '@/config/orchestration'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,7 +30,7 @@ export async function POST(request: NextRequest) {
 
   // P1-8 rate limit（LLM 调用最贵，1 分钟内最多 10 次）
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`kc:${ip}`, { limit: 10, windowMs: 60_000 })
+  const rl = checkRateLimit(`kc:${ip}`, RATE_LIMIT_KC)
   if (!rl.allowed) {
     return new Response(
       `event: error\ndata: ${JSON.stringify({ error: '请求过于频繁，请稍后再试' })}\n\n`,
@@ -72,9 +79,9 @@ export async function POST(request: NextRequest) {
     const title = body.title
     const source = body.source || '用户输入'
 
-    if (!content || content.length < 50) {
+    if (!content || content.length < MIN_CONTENT_LENGTH) {
       return new Response(
-        `event: error\ndata: ${JSON.stringify({ error: '内容过短，请提供至少 50 字符' })}\n\n`,
+        `event: error\ndata: ${JSON.stringify({ error: `内容过短，请提供至少 ${MIN_CONTENT_LENGTH} 字符` })}\n\n`,
         {
           status: 400,
           headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
@@ -82,9 +89,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (content.length > 50000) {
+    if (content.length > MAX_CONTENT_LENGTH) {
       return new Response(
-        `event: error\ndata: ${JSON.stringify({ error: '内容过长，最大支持 50000 字符' })}\n\n`,
+        `event: error\ndata: ${JSON.stringify({ error: `内容过长，最大支持 ${MAX_CONTENT_LENGTH} 字符` })}\n\n`,
         {
           status: 400,
           headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
@@ -115,10 +122,10 @@ export async function POST(request: NextRequest) {
         // D28 — token 流式推送的节流 buffer
         // 原因：每个 delta 都触发 controller.enqueue 在 token 密集时（如代码块）
         // 会导致前端 EventSource 事件循环压力过大，可能掉帧
-        // 策略：buffer 累积 delta，每 ~30ms flush 一次
+        // 策略：buffer 累积 delta，每 TOKEN_FLUSH_INTERVAL_MS flush 一次
+        // D43 — 常量从 config/orchestration 引入
         let tokenBuffer: { agent: string; delta: string }[] = []
         let flushTimer: NodeJS.Timeout | null = null
-        const TOKEN_FLUSH_INTERVAL_MS = 30
         const flushTokenBuffer = () => {
           flushTimer = null
           if (tokenBuffer.length === 0) return

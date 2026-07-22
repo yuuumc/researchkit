@@ -329,6 +329,9 @@ export async function runSingleAgent(
  *
  * 未来 v2.1：调用方直接传 AgentContext，删除此函数
  */
+// TODO P2-4: payloadToContext 是 v1 遗留，v2.3.1 应改造 runSingleAgent 直接接收 AgentContext，
+// 删除此函数。当前唯一调用方是 workflow.ts 的反思循环 KB 重建。
+// 详见 docs/v2.3.0-code-review-2026-07-22.md P2-4
 function payloadToContext(payload: Record<string, any>, _agentName: string): AgentContext {
   const sourceLocale: Locale = payload.source_locale || 'en-US'
   const targetLocale: Locale = payload.target_locale || sourceLocale
