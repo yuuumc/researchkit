@@ -4,20 +4,20 @@
 > chat with it, compare it, explain it, anchor it onchain.
 > Built for **OKX AI Genesis Hackathon** — ASP #6853 on [OKX.AI](https://www.okx.ai/agents/6853).
 
-![version](https://img.shields.io/badge/version-v2.3.0-blue)
+![version](https://img.shields.io/badge/version-v2.3.1-blue)
 ![status](https://img.shields.io/badge/status-live-brightgreen)
 ![i18n](https://img.shields.io/badge/i18n-zh--CN%20%2F%20en--US-orange)
 ![tests](https://img.shields.io/badge/regression-10%2F10-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 🌐 **Live demo**: https://researchkit-mu.vercel.app
-📦 **Latest release**: [v2.3.0 — Plugin System v2 + i18n + UI 打磨](https://github.com/yuuumc/researchkit/releases/tag/v2.3.0)
+📦 **Latest release**: [v2.3.1 — 安全加固 + Vercel 部署修复 + 插件市场完善](https://github.com/yuuumc/researchkit/releases/tag/v2.3.1)
 
-📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.3.0 Release Notes](./releases/v2.3.0-release-notes.md) · [Branching](./docs/BRANCHING.md)
+📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.3.1 Release Notes](./releases/v2.3.1-release-notes.md) · [Branching](./docs/BRANCHING.md)
 
 ---
 
-## Quick Stats (v2.3.0)
+## Quick Stats (v2.3.1)
 
 | Metric | Value |
 |---|---|
@@ -58,11 +58,31 @@ Paste any paper, document, or URL → a team of 6 AI agents reads, analyzes, and
 - 🧪 **Prompt Playground** — 4 presets + temperature / maxTokens / responseFormat controls
 - 🌐 **Full i18n (D36-D40)** — 4-layer language separation architecture + LanguageDetectBanner
 
+### v2.3.1 Highlights
+
+#### 安全加固（P0 + P1）
+- **onchain mode 安全 fallback**：`resolveOnchainMode()` 强制 fallback real → mock，避免未实现接口崩溃
+- **CORS 白名单**：`lib/cors.ts` 三层策略（same-origin / localhost / `*.vercel.app` / 环境变量）
+- **PDF magic bytes 校验**：检查 `%PDF-` 文件头，防止 .exe/.html 改名上传
+- **Rate limit**：内存 Map 计数（KC 10/min、PDF 5/10min、Batch 3/10min）
+- **onchain 导出二次确认**：`window.confirm` 防误触链上 broadcast
+- **Planner 指数退避**：LLM 调用失败 1s → 2s 重试，最多 3 次
+
+#### Vercel 部署修复
+- 只读 fs 重定向到 `/tmp/`（4 个持久化模块）
+- JSON parse 诊断增强（HTTP 400 + 完整请求体片段）
+
+#### 插件市场完善
+- 替换重复社区插件：obsidian-publish → anki-cards；ipfs-pin → github-gist
+- 兑现 mock 安装承诺：已安装社区插件现在出现在主面板（CommunityPluginCard）
+- 内置插件显示"✓ 已安装"不可点
+- 安装按钮文案明示 mock 模式
+
 ### v2.3.0 Highlights
 
 #### Plugin System v2 (D31-D33)
 - `PluginManifest` schema — market entry with id / name / version / author / icon / tags / category / configSchema / permissions / installCount / rating
-- **Plugin Marketplace** — 3 built-in (json-download / markdown-download / onchain-export) + 4 community mock (notion-publish / obsidian-publish / arxiv-source / ipfs-pin)
+- **Plugin Marketplace** — 3 built-in (json-download / markdown-download / onchain-export) + 4 community mock (notion-publish / anki-cards / arxiv-source / github-gist)
 - **Batch Execution Queue** — BatchToolbar with select all / clear / run all + SVG progress bar (serial execution + success/fail summary)
 - **Lifecycle hooks** — `onEnable` / `onDisable` / `onUninstall` (with permissions declaration)
 - **PluginRegistry** — singleton with `triggerLifecycle()` + `listByCategory()`

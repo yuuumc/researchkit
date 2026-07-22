@@ -11,7 +11,7 @@ export async function GET() {
   return NextResponse.json({
     success: true,
     service: 'ResearchKit',
-    version: '2.3.0',
+    version: '2.3.1',
     timestamp: new Date().toISOString(),
     architecture: 'multi-agent-mcp-reflection-loop',
     agents: [
