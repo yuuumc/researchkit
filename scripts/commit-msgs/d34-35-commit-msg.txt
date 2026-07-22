@@ -1,0 +1,41 @@
+D34-D35 — UI 打磨: ScrollToTop + 自动滚动 + 滚动进度环
+
+Phase 6 收尾 — v2.3 路线图最后的功能性 PR。
+
+## 新增
+
+### 1. ScrollToTop 组件 — components/ScrollToTop.tsx
+- 浮动"回到顶部"按钮（fixed 定位，右下角）
+- 页面滚动超过 400px 时浮现（fade + slide up 动画）
+- 外圈 SVG 进度环：实时显示页面滚动百分比（渐变 indigo→cyan）
+- 点击平滑滚动到顶部（behavior: 'smooth'）
+- 玻璃态深色背景 + backdrop-filter blur
+- hover 时抬升 + 发光 + 背景变 indigo
+- 监听 scroll + resize 事件，passive: true
+
+### 2. KC 生成完成后自动滚动到结果区
+- page.tsx handleSubmit 中，setResult 后 setTimeout(200ms) 自动 scrollIntoView
+- 结果区 div 加 id="result-section"
+- demo 友好：评委点提交后页面自动滚到结果，无需手动滚动
+
+### 3. ScrollToTop 组件集成到 page.tsx
+- 最外层 div 内 </main> 后加 <ScrollToTop />
+
+## 设计决策
+
+- 进度环用 SVG stroke-dashoffset 实现（比 CSS conic-gradient 兼容性更好）
+- SHOW_THRESHOLD=400：避免页面刚加载就显示按钮
+- 自动滚动延迟 200ms：确保 React 完成 DOM 更新后再触发 scrollIntoView
+- 按钮尺寸 48px：符合移动端最小触控区域（44px）+ 留余量
+- 滚动事件用 passive: true：不阻塞主线程
+
+## 验证
+
+- npx tsc --noEmit ✅
+- npm run build ✅
+- / 路由 43.7 kB / 131 kB First Load JS（+0.8 kB vs D33，ScrollToTop 组件 + 自动滚动）
+- 无新增 API 路由（纯前端组件）
+
+## 依赖
+
+基于 D33 (feature/d33-batch-execution-queue)，需先合并 PR #43。

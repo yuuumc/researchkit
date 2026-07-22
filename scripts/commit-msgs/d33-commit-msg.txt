@@ -1,0 +1,52 @@
+D33 — Plugin System v2 (3/3): 批量执行队列
+
+Phase 5 Day 3 / 3 — 在 D32 市场之上加批量勾选 + 串行执行 + 进度可视化。
+
+## 新增
+
+### 1. 批量模式 toggle（Header）
+- PluginPanel 右上角加"⚡ 批量模式"按钮，点击切换批量模式
+- 切换时清空选择 + 重置进度状态
+
+### 2. BatchToolbar 组件（批量模式时显示在卡片网格顶部）
+- 顶部行：🎯 批量执行队列 + "N / M 选中" badge + 全选/清空/执行全部按钮
+- 进度条（执行中或完成时显示）：
+  - 进度文字：⏳ N / M — 正在执行 <插件名> / ✅ 完成 — 成功 X / 失败 Y
+  - 横向进度条：渐变填充（紫色执行中 / 绿色完成 / 绿→红部分失败）
+  - 实时百分比
+
+### 3. PluginCard 批量模式适配
+- 新增 props：selectionMode / selected / onToggleSelect / batchRunning / isCurrentInBatch
+- selectionMode=true 时，卡片头部左侧出现 checkbox（禁用/未启用时灰显不可点）
+- 选中时卡片边框变紫色
+- isCurrentInBatch 时卡片背景变蓝 + 边框蓝色高亮 + 底部显示"⏳ 批量执行中..."
+- 批量模式下隐藏单个"执行导出"按钮（避免误操作）
+
+### 4. executePlugin 共用函数
+- 从 handleExport 抽取核心执行逻辑为独立 useCallback
+- handleExport 和 handleBatchExport 共用，避免逻辑重复
+- 返回 ExportResult，由调用方控制 setExecuting
+
+### 5. handleBatchExport 串行队列
+- 按 selectedIds 顺序串行执行
+- 每个执行完更新 batchProgress（current / currentPluginId / successes / failures）
+- 全部完成后标记 done=true，进度条满格
+
+## 设计决策
+
+- 串行而非并行：插件可能竞争浏览器下载队列 + onchain-export 有网络延迟，串行更稳定可预测
+- onchain-export 不在全选范围：需要钱包配置，默认不勾选（用户可手动单独勾选）
+- 批量执行中禁用 checkbox 和选择按钮，防止中途修改队列
+- 进度条颜色：执行中紫色渐变，完成绿色，部分失败绿→红渐变（视觉区分）
+- 单次执行和批量执行互斥：handleExport 检查 batchProgress.running
+
+## 验证
+
+- npx tsc --noEmit ✅
+- npm run build ✅
+- / 路由 42.9 kB / 130 kB First Load JS（+1.5 kB vs D32，BatchToolbar + PluginCard 适配）
+- 无新增 API 路由（纯前端逻辑）
+
+## 依赖
+
+基于 D32 (feature/d32-plugin-marketplace-manifest)，需先合并 PR #42。
