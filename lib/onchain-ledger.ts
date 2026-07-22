@@ -107,6 +107,14 @@ export function findByKcHash(kcSha256: string): OnchainRecord | undefined {
 }
 
 /**
+ * 统计某 wallet 已发布的 KC 数（D22 mock nonce 用）
+ */
+export function countByWallet(walletAddress: string): number {
+  const ledger = loadLedger()
+  return ledger.filter(r => r.walletAddress === walletAddress).length
+}
+
+/**
  * 清空 ledger（设置页用）
  */
 export function clearLedger(): void {

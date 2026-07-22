@@ -16,7 +16,7 @@
  * 迁移说明：v2.2 之前的 localStorage 数据不会自动迁移到 server-side
  */
 
-import type { AgentUsageSummary, ChatUsage } from '@/lib/usage-collector'
+import type { AgentUsageSummary, ChatUsage } from '@/types/usage'
 
 const API_URL = '/api/history/cost'
 

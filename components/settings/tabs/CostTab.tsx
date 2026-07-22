@@ -1,20 +1,9 @@
 'use client'
 
 /**
- * CostTab — Cost & Token Dashboard（D6 实现）
+ * CostTab — Cost & Token Dashboard(D6 实现 + D37 i18n 化)
  *
- * 从 localStorage 读 'researchkit:cost-history'（由 app/page.tsx 每次生成知识卡时写入）
- *
- * 三个区块：
- * 1. Summary Cards — Total Runs / Total Tokens / Total Cost / Avg Cost/Run
- * 2. Per-Agent Breakdown — 按 Agent 聚合的 token / cost / calls 表格 + 横向 bar
- * 3. Recent Runs Table — 最近 50 次 Pipeline 运行记录
- *
- * 操作：
- * - Refresh — 重新读 localStorage
- * - Clear — 清空历史
- *
- * 历史为空时显示 Empty State + 提示用户跑一次 Pipeline
+ * D37:主要文案走 i18n,Summary card labels 走 i18n(用户偏好)
  */
 
 import { useState, useEffect, useCallback } from 'react'
@@ -25,9 +14,10 @@ import {
   type CostRun,
   type CostHistorySummary,
 } from '@/lib/cost-history'
+import { useI18n } from '@/components/I18nProvider'
 import { btnPrimary, btnSecondary } from '@/lib/ui-styles'
 
-// Agent 配色（与 AgentTimeline 保持一致）
+// Agent 配色(与 AgentTimeline 保持一致)
 const AGENT_COLORS: Record<string, string> = {
   Reader: '#06b6d4',
   Analyzer: '#0891b2',
@@ -63,14 +53,14 @@ function fmtDuration(ms: number): string {
   return `${ms}ms`
 }
 
-function fmtTime(ts: number): string {
+function fmtTime(ts: number, locale: string): string {
   const d = new Date(ts)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function CostTab() {
-  // 初始化为空 summary（避免 null 检查 — runs.length === 0 时早返回 Empty State）
+  const { t, resolvedLocale } = useI18n()
   const [runs, setRuns] = useState<CostRun[]>([])
   const [summary, setSummary] = useState<CostHistorySummary>(() => summarizeCostHistory([]))
   const [loaded, setLoaded] = useState(false)
@@ -88,14 +78,14 @@ export function CostTab() {
   }, [refresh])
 
   const handleClear = async () => {
-    if (!confirm('确定要清空所有历史记录吗？此操作不可撤销。')) return
+    if (!confirm(t('settings.cost.clearConfirm'))) return
     // D29 — clearCostHistory 改为 async
     await clearCostHistory()
     refresh()
   }
 
   if (!loaded) {
-    return <div style={{ padding: '20px', color: '#94a3b8', textAlign: 'center' }}>加载中...</div>
+    return <div style={{ padding: '20px', color: '#94a3b8', textAlign: 'center' }}>{t('common.loading')}</div>
   }
 
   if (runs.length === 0) {
@@ -111,15 +101,13 @@ export function CostTab() {
       >
         <div style={{ fontSize: '48px', marginBottom: '12px' }}>📊</div>
         <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f1729', marginBottom: '6px' }}>
-          暂无历史数据
+          {t('settings.cost.emptyTitle')}
         </div>
         <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.6, maxWidth: '400px', margin: '0 auto' }}>
-          每次生成知识卡时，Cost Dashboard 会自动记录 Token 用量和成本估算。
-          <br />
-          跑一次 Pipeline 试试，结果会出现在这里。
+          {t('settings.cost.emptyHint')}
         </div>
         <button onClick={refresh} style={{ ...btnPrimary, marginTop: '16px' }}>
-          🔄 刷新
+          🔄 {t('settings.cost.refresh')}
         </button>
       </div>
     )
@@ -132,7 +120,7 @@ export function CostTab() {
       {/* 操作栏 */}
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
         <button onClick={refresh} style={{ ...btnSecondary, padding: '6px 12px', fontSize: '12px' }}>
-          🔄 刷新
+          🔄 {t('settings.cost.refresh')}
         </button>
         <button
           onClick={handleClear}
@@ -144,33 +132,26 @@ export function CostTab() {
             background: '#fef2f2',
           }}
         >
-          🗑️ 清空
+          🗑️ {t('settings.cost.clear')}
         </button>
       </div>
 
-      {/* ============== 1. Summary Cards ============== */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '12px',
-        }}
-      >
-        <SummaryCard icon="🔄" label="Total Runs" value={`${summary.totalRuns}`} hint={`累计 ${fmtDuration(summary.totalDurationMs)}`} />
-        <SummaryCard icon="🪙" label="Total Tokens" value={fmtTokens(summary.totalTokens)} hint={`Prompt + Completion`} />
-        <SummaryCard icon="💰" label="Total Cost" value={fmtCost(summary.totalCostUsd)} hint={`USD 估算`} accent="#047857" />
-        <SummaryCard icon="📊" label="Avg Cost/Run" value={fmtCost(summary.avgCostPerRun)} hint={`单次 Pipeline 平均`} />
+      {/* 1. Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+        <SummaryCard icon="🔄" label={t('settings.cost.totalRuns')} value={`${summary.totalRuns}`} hint={`${t('settings.cost.accumulated')} ${fmtDuration(summary.totalDurationMs)}`} />
+        <SummaryCard icon="🪙" label={t('settings.cost.totalTokens')} value={fmtTokens(summary.totalTokens)} hint={`Prompt + Completion`} />
+        <SummaryCard icon="💰" label={t('settings.cost.totalCost')} value={fmtCost(summary.totalCostUsd)} hint={t('settings.cost.usdEstimate')} accent="#047857" />
+        <SummaryCard icon="📊" label={t('settings.cost.avgCostRun')} value={fmtCost(summary.avgCostPerRun)} hint={t('settings.cost.avgRunHint')} />
       </div>
 
-      {/* ============== 2. Per-Agent Breakdown ============== */}
-      <Section title="Per-Agent Breakdown" icon="🧩">
+      {/* 2. Per-Agent Breakdown */}
+      <Section title={t('settings.cost.perAgentBreakdown')} icon="🧩">
         {summary.perAgent.length === 0 ? (
           <div style={{ padding: '16px', color: '#94a3b8', textAlign: 'center', fontSize: '12px' }}>
-            无 Agent 数据
+            {t('settings.cost.noAgentData')}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {/* 表头 */}
             <div
               style={{
                 display: 'grid',
@@ -185,7 +166,7 @@ export function CostTab() {
               }}
             >
               <span>Agent</span>
-              <span>Token Distribution</span>
+              <span>{t('settings.cost.tokenDistribution')}</span>
               <span style={{ textAlign: 'right' }}>Tokens</span>
               <span style={{ textAlign: 'right' }}>Cost</span>
               <span style={{ textAlign: 'right' }}>Calls</span>
@@ -240,28 +221,28 @@ export function CostTab() {
         )}
       </Section>
 
-      {/* ============== 3. Recent Runs Table ============== */}
-      <Section title={`Recent Runs (${runs.length})`} icon="🕒">
+      {/* 3. Recent Runs Table */}
+      <Section title={`${t('settings.cost.recentRuns')} (${runs.length})`} icon="🕒">
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#f1f5f9' }}>
-                <Th>Time</Th>
-                <Th>Title</Th>
-                <Th>Type</Th>
-                <Th>Complexity</Th>
-                <Th align="right">Tokens</Th>
-                <Th align="right">Cost</Th>
-                <Th align="right">Duration</Th>
-                <Th>Model</Th>
+                <Th>{t('settings.cost.colTime')}</Th>
+                <Th>{t('settings.cost.colTitle')}</Th>
+                <Th>{t('settings.cost.colType')}</Th>
+                <Th>{t('settings.cost.colComplexity')}</Th>
+                <Th align="right">{t('settings.cost.colTokens')}</Th>
+                <Th align="right">{t('settings.cost.colCost')}</Th>
+                <Th align="right">{t('settings.cost.colDuration')}</Th>
+                <Th>{t('settings.cost.colModel')}</Th>
               </tr>
             </thead>
             <tbody>
               {runs.map((r, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <Td style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtTime(r.timestamp)}</Td>
+                  <Td style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtTime(r.timestamp, resolvedLocale)}</Td>
                   <Td style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {r.title || '(untitled)'}
+                    {r.title || t('settings.cost.untitled')}
                   </Td>
                   <Td>
                     <span style={{ padding: '2px 6px', background: '#e0e7ff', color: '#4f46e5', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
@@ -294,10 +275,6 @@ export function CostTab() {
     </div>
   )
 }
-
-// ============================================================================
-// 内部小组件
-// ============================================================================
 
 function SummaryCard({
   icon,
@@ -378,7 +355,5 @@ function Td({
   align?: 'left' | 'right'
   style?: React.CSSProperties
 }) {
-  return (
-    <td style={{ padding: '10px', textAlign: align, ...style }}>{children}</td>
-  )
+  return <td style={{ padding: '10px', textAlign: align, ...style }}>{children}</td>
 }

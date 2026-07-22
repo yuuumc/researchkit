@@ -4,9 +4,11 @@
  *
  * 用 Server-Sent Events 实时推送进度：
  * 1. coordinator 的 onStage 回调 → 推送 stage 事件
- * 2. coordinator 完成 → 推送 result 事件（完整结果）+ 关闭连接
+ * 2. coordinator 的 onAgentToken 回调 → 推送 agent_token 事件（D28 token 级流式）
+ * 3. coordinator 完成 → 推送 result 事件（完整结果）+ 关闭连接
  *
- * 前端用 EventSource 订阅，进度面板与真实后端执行严格同步
+ * 前端用 EventSource 订阅，进度面板与真实后端执行严格同步；
+ * Live Thoughts 浮窗组件接收 agent_token 事件，逐 token 渲染 AI 思考过程
  */
 
 import { NextRequest } from 'next/server'
@@ -64,6 +66,32 @@ export async function POST(request: NextRequest) {
         // 让出事件循环，让 HTTP 层把 ping 事件 flush 到网络
         await new Promise(resolve => setTimeout(resolve, 0))
 
+        // D28 — token 流式推送的节流 buffer
+        // 原因：每个 delta 都触发 controller.enqueue 在 token 密集时（如代码块）
+        // 会导致前端 EventSource 事件循环压力过大，可能掉帧
+        // 策略：buffer 累积 delta，每 ~30ms flush 一次
+        let tokenBuffer: { agent: string; delta: string }[] = []
+        let flushTimer: NodeJS.Timeout | null = null
+        const TOKEN_FLUSH_INTERVAL_MS = 30
+        const flushTokenBuffer = () => {
+          flushTimer = null
+          if (tokenBuffer.length === 0) return
+          // 合并同 agent 的 delta，减少 SSE event 数量
+          const merged = new Map<string, string>()
+          for (const { agent, delta } of tokenBuffer) {
+            merged.set(agent, (merged.get(agent) || '') + delta)
+          }
+          for (const [agent, delta] of Array.from(merged)) {
+            send('agent_token', { agent, delta, ts: Date.now() })
+          }
+          tokenBuffer = []
+        }
+        const scheduleFlush = () => {
+          if (flushTimer === null) {
+            flushTimer = setTimeout(flushTokenBuffer, TOKEN_FLUSH_INTERVAL_MS)
+          }
+        }
+
         try {
           const result = await coordinate({
             content,
@@ -71,6 +99,11 @@ export async function POST(request: NextRequest) {
             source,
             onStage: (stage) => {
               send('stage', stage)
+            },
+            onAgentToken: (agent, delta) => {
+              // D28 — token 流式推送，buffer + 节流 flush
+              tokenBuffer.push({ agent, delta })
+              scheduleFlush()
             },
           })
 
@@ -201,6 +234,12 @@ export async function POST(request: NextRequest) {
         } catch (err) {
           send('error', { error: err instanceof Error ? err.message : '服务器内部错误' })
         } finally {
+          // D28 — 流结束前 flush 残留 token，避免最后一批 delta 丢失
+          if (flushTimer !== null) {
+            clearTimeout(flushTimer)
+            flushTimer = null
+          }
+          flushTokenBuffer()
           // 用 try/catch 保护 close()，避免流已关闭时抛 TypeError（allAgentsFailed 提前 return 的场景）
           try { controller.close() } catch {}
         }
