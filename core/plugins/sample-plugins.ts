@@ -8,7 +8,10 @@
  * 这两个插件无需用户配置（requiresConfig=false），无副作用（download 类型），
  * 适合作为新插件作者的参考实现。
  *
- * v2.3 扩展：onchain-export / notion-publish / obsidian-publish
+ * v2.3 D31 扩展：
+ * - 加 category='export'（默认）
+ * - 加 permissions（声明只读 KC 字段 + 无外部网络）
+ * - 加 lifecycle onInstall/onUninstall 钩子（demo 用，记录 console 日志）
  */
 
 import type {
@@ -33,6 +36,8 @@ export const jsonDownloadPlugin: ExportPlugin = {
     color: '#0ea5e9',
     tags: ['official', 'download'],
     requiresConfig: false,
+    // D31 — 类别与权限声明
+    category: 'export',
   },
 
   capabilities: [
@@ -43,6 +48,26 @@ export const jsonDownloadPlugin: ExportPlugin = {
       description: '下载 Knowledge Card 的完整 JSON 表示（包含 metadata）',
     },
   ],
+
+  // D31 — 权限声明：本地序列化，只读全部 KC 字段，无网络
+  permissions: {
+    kcFields: ['*'],  // 序列化导出，需要全部字段
+    network: false,
+    filesystem: false,
+    walletSignature: false,
+  },
+
+  // D31 — 生命周期钩子（demo：仅 console 记录）
+  lifecycle: {
+    async onInstall() {
+      console.info('[json-download] installed')
+      return { success: true, message: 'JSON 下载插件已安装' }
+    },
+    async onUninstall() {
+      console.info('[json-download] uninstalled')
+      return { success: true }
+    },
+  },
 
   validate(kc: KnowledgeCard): string | null {
     if (!kc?.title) return 'Knowledge Card 缺少 title 字段'
@@ -103,6 +128,8 @@ export const markdownDownloadPlugin: ExportPlugin = {
     color: '#10b981',
     tags: ['official', 'download'],
     requiresConfig: false,
+    // D31 — 类别与权限声明
+    category: 'export',
   },
 
   capabilities: [
@@ -113,6 +140,26 @@ export const markdownDownloadPlugin: ExportPlugin = {
       description: '下载 Knowledge Card 的 Markdown 表示（适合导入 Obsidian / Notion）',
     },
   ],
+
+  // D31 — 权限声明：本地序列化，只读全部 KC 字段（含 key_terms 用于 ### 小节）
+  permissions: {
+    kcFields: ['*'],
+    network: false,
+    filesystem: false,
+    walletSignature: false,
+  },
+
+  // D31 — 生命周期钩子（demo）
+  lifecycle: {
+    async onInstall() {
+      console.info('[markdown-download] installed')
+      return { success: true, message: 'Markdown 下载插件已安装' }
+    },
+    async onUninstall() {
+      console.info('[markdown-download] uninstalled')
+      return { success: true }
+    },
+  },
 
   validate(kc: KnowledgeCard): string | null {
     if (!kc?.title) return 'Knowledge Card 缺少 title 字段'

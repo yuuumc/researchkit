@@ -29,7 +29,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { KnowledgeCard } from '@/types/knowledge'
-import type { ExportPlugin, ExportResult, PluginState, PluginConfig } from '@/types/plugin'
+import type { ExportPlugin, ExportResult, PluginState, PluginConfig, PluginPermissions } from '@/types/plugin'
+import type { PluginManifest } from '@/types/plugin-manifest'
 import { jsonDownloadPlugin, markdownDownloadPlugin } from '@/core/plugins/sample-plugins'
 import { onchainExportPlugin, RESEARCHKIT_REGISTRY_CONTRACT } from '@/core/plugins/onchain-export'
 import {
@@ -41,6 +42,15 @@ import {
 import { loadLedger, type OnchainRecord } from '@/lib/onchain-ledger'
 import { shortAddress } from '@/lib/onchain-utils'
 import { btnPrimary, btnSecondary } from '@/lib/ui-styles'
+import { pluginRegistry } from '@/core/plugins/registry'
+import {
+  loadMarketplace,
+  installPlugin,
+  loadInstalledManifests,
+} from '@/lib/plugin-marketplace'
+import { useI18n } from '@/components/I18nProvider'
+
+type TFn = (key: string, params?: Record<string, string | number>) => string
 
 // ============================================================================
 // 类型
@@ -60,21 +70,87 @@ export interface PluginPanelProps {
 
 const BUILTIN_PLUGINS: ExportPlugin[] = [jsonDownloadPlugin, markdownDownloadPlugin, onchainExportPlugin]
 
+// D31 — 把内置插件注册到 registry（让 triggerLifecycle / listByCategory 能找到）
+// 仅注册一次（registry 内部去重）
+if (typeof window !== 'undefined') {
+  for (const p of BUILTIN_PLUGINS) {
+    pluginRegistry.register(p)
+  }
+}
+
 // ============================================================================
 // 主组件
 // ============================================================================
 
 export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
+  const { t } = useI18n()
   const [states, setStates] = useState<Record<string, PluginState>>({})
   const [executing, setExecuting] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, ExportResult>>({})
+
+  // D33 — 批量执行队列
+  const [batchMode, setBatchMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchProgress, setBatchProgress] = useState<{
+    running: boolean
+    total: number
+    current: number          // 当前是第几个（1-indexed）
+    currentPluginId: string | null
+    successes: number
+    failures: number
+    done: boolean            // 本轮已完成（用于显示汇总）
+  }>({ running: false, total: 0, current: 0, currentPluginId: null, successes: 0, failures: 0, done: false })
 
   // 初次加载从 localStorage 恢复
   useEffect(() => {
     setStates(loadPluginStates())
   }, [])
 
-  const handleToggleEnabled = useCallback((pluginId: string, enabled: boolean) => {
+  // D33 — 切换批量模式时清空选择
+  const handleToggleBatchMode = useCallback((on: boolean) => {
+    setBatchMode(on)
+    setSelectedIds(new Set())
+    setBatchProgress({ running: false, total: 0, current: 0, currentPluginId: null, successes: 0, failures: 0, done: false })
+  }, [])
+
+  const handleToggleSelect = useCallback((pluginId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(pluginId)) next.delete(pluginId)
+      else next.add(pluginId)
+      return next
+    })
+  }, [])
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(BUILTIN_PLUGINS.filter(p => p.meta.id !== 'onchain-export').map(p => p.meta.id)))
+  }, [])
+
+  const handleUnselectAll = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
+
+  const handleToggleEnabled = useCallback(async (pluginId: string, enabled: boolean) => {
+    // D31 — 触发 lifecycle 钩子（onEnable/onDisable）
+    // 失败时回滚 toggle 并显示错误
+    if (enabled) {
+      const result = await pluginRegistry.triggerLifecycle(pluginId, 'onEnable', {
+        config: loadPluginStates()[pluginId]?.config || {},
+      })
+      if (!result.success) {
+        const msg = result.error || result.message || 'onEnable 钩子失败'
+        setResults((r) => ({
+          ...r,
+          [pluginId]: { success: false, message: `生命周期钩子失败：${msg}`, error: msg },
+        }))
+        return  // 不更新 state，保持 disabled
+      }
+    } else {
+      // onDisable 钩子失败不阻塞（即使清理失败也允许禁用）
+      await pluginRegistry.triggerLifecycle(pluginId, 'onDisable', {
+        config: loadPluginStates()[pluginId]?.config || {},
+      })
+    }
     setPluginEnabled(pluginId, enabled)
     setStates((prev) => ({
       ...prev,
@@ -95,11 +171,12 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
     }))
   }, [states])
 
-  const handleExport = useCallback(async (plugin: ExportPlugin) => {
-    if (!knowledgeCard) return
-    if (executing) return
-
-    setExecuting(plugin.meta.id)
+  // D33 — 抽取共用执行逻辑（单次 + 批量复用）
+  // 返回 ExportResult，由调用方控制 setExecuting
+  const executePlugin = useCallback(async (plugin: ExportPlugin): Promise<ExportResult> => {
+    if (!knowledgeCard) {
+      return { success: false, message: '无 Knowledge Card', error: 'NO_KC' }
+    }
 
     try {
       // 预校验
@@ -108,7 +185,7 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
         if (err) {
           const result: ExportResult = {
             success: false,
-            message: `预校验失败：${err}`,
+            message: t('agent.pluginPanel.precheckFailed', { error: err }),
             error: err,
           }
           setResults((r) => ({ ...r, [plugin.meta.id]: result }))
@@ -116,7 +193,7 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
             success: false,
             message: result.message,
           })
-          return
+          return result
         }
       }
 
@@ -145,18 +222,78 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
           result.mimeType || 'application/octet-stream'
         )
       }
+
+      return result
     } catch (err) {
       const result: ExportResult = {
         success: false,
-        message: '执行异常',
+        message: t('agent.pluginPanel.execError'),
         error: err instanceof Error ? err.message : String(err),
       }
       setResults((r) => ({ ...r, [plugin.meta.id]: result }))
       recordPluginExecution(plugin.meta.id, { success: false, message: result.message })
+      return result
+    }
+  }, [knowledgeCard, states])
+
+  const handleExport = useCallback(async (plugin: ExportPlugin) => {
+    if (!knowledgeCard) return
+    if (executing || batchProgress.running) return
+
+    setExecuting(plugin.meta.id)
+    try {
+      await executePlugin(plugin)
     } finally {
       setExecuting(null)
     }
-  }, [knowledgeCard, executing, states])
+  }, [knowledgeCard, executing, batchProgress.running, executePlugin])
+
+  // D33 — 批量串行执行选中插件
+  const handleBatchExport = useCallback(async () => {
+    if (!knowledgeCard) return
+    if (batchProgress.running) return
+    if (selectedIds.size === 0) return
+
+    const queue = BUILTIN_PLUGINS.filter((p) => selectedIds.has(p.meta.id))
+    setBatchProgress({
+      running: true,
+      total: queue.length,
+      current: 0,
+      currentPluginId: null,
+      successes: 0,
+      failures: 0,
+      done: false,
+    })
+
+    let successes = 0
+    let failures = 0
+
+    for (let i = 0; i < queue.length; i++) {
+      const plugin = queue[i]
+      setBatchProgress((prev) => ({
+        ...prev,
+        current: i + 1,
+        currentPluginId: plugin.meta.id,
+      }))
+
+      const result = await executePlugin(plugin)
+      if (result.success) successes++
+      else failures++
+
+      setBatchProgress((prev) => ({
+        ...prev,
+        successes,
+        failures,
+      }))
+    }
+
+    setBatchProgress((prev) => ({
+      ...prev,
+      running: false,
+      currentPluginId: null,
+      done: true,
+    }))
+  }, [knowledgeCard, selectedIds, batchProgress.running, executePlugin])
 
   return (
     <div
@@ -185,17 +322,37 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
           <span style={{ fontSize: '18px' }}>🧩</span>
           <div>
             <div style={{ fontSize: '13px', fontWeight: 700, color: '#581c87' }}>
-              Plugin Marketplace
+              {t('agent.pluginPanel.marketplace')}
             </div>
             <div style={{ fontSize: '11px', color: '#7c3aed', marginTop: '2px' }}>
-              一键导出 Knowledge Card 到第三方工具
+              {t('agent.pluginPanel.hint')}
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '6px', fontSize: '11px', color: '#7c3aed' }}>
+        <div style={{ display: 'flex', gap: '6px', fontSize: '11px', color: '#7c3aed', alignItems: 'center' }}>
           <span style={{ background: 'rgba(255,255,255,0.6)', padding: '2px 8px', borderRadius: '999px', fontWeight: 600 }}>
-            📦 {BUILTIN_PLUGINS.length} 个已安装
+            {t('agent.pluginPanel.installed', { count: BUILTIN_PLUGINS.length })}
           </span>
+          {/* D33 — 批量模式 toggle */}
+          {knowledgeCard && (
+            <button
+              onClick={() => handleToggleBatchMode(!batchMode)}
+              style={{
+                padding: '2px 8px',
+                background: batchMode ? '#7c3aed' : 'rgba(255,255,255,0.6)',
+                color: batchMode ? 'white' : '#7c3aed',
+                border: `1px solid ${batchMode ? '#7c3aed' : '#d8b4fe'}`,
+                borderRadius: '999px',
+                fontSize: '10px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              title="勾选多个插件一次性导出"
+            >
+              {batchMode ? '✓ 批量模式' : '⚡ 批量模式'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -210,11 +367,32 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
               fontSize: '12px',
             }}
           >
-            ⚠️ 请先生成 Knowledge Card 后再使用 Plugin 导出
+            {t('agent.pluginPanel.requireKc')}
           </div>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* D33 — 批量工具栏 */}
+          {batchMode && knowledgeCard && (
+            <BatchToolbar
+              selectedCount={selectedIds.size}
+              total={BUILTIN_PLUGINS.length}
+              running={batchProgress.running}
+              done={batchProgress.done}
+              successes={batchProgress.successes}
+              failures={batchProgress.failures}
+              current={batchProgress.current}
+              currentPluginId={batchProgress.currentPluginId}
+              currentPluginName={
+                batchProgress.currentPluginId
+                  ? BUILTIN_PLUGINS.find(p => p.meta.id === batchProgress.currentPluginId)?.meta.name || ''
+                  : ''
+              }
+              onSelectAll={handleSelectAll}
+              onUnselectAll={handleUnselectAll}
+              onRun={handleBatchExport}
+            />
+          )}
           {BUILTIN_PLUGINS.map((plugin) => (
             <PluginCard
               key={plugin.meta.id}
@@ -226,6 +404,11 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
               onToggleEnabled={(enabled) => handleToggleEnabled(plugin.meta.id, enabled)}
               onConfigChange={(key, value) => handleConfigChange(plugin.meta.id, key, value)}
               onExport={() => handleExport(plugin)}
+              selectionMode={batchMode}
+              selected={selectedIds.has(plugin.meta.id)}
+              onToggleSelect={() => handleToggleSelect(plugin.meta.id)}
+              batchRunning={batchProgress.running}
+              isCurrentInBatch={batchProgress.currentPluginId === plugin.meta.id}
             />
           ))}
         </div>
@@ -234,6 +417,9 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
         {knowledgeCard && (
           <OnchainHistory knowledgeCard={knowledgeCard} refreshTrigger={executing} />
         )}
+
+        {/* D32 — Plugin Marketplace 远程插件市场 */}
+        <MarketplacePanel />
 
         {/* Demo Mode 声明 */}
         <div
@@ -247,11 +433,8 @@ export function PluginPanel({ knowledgeCard }: PluginPanelProps) {
             color: '#9a3412',
             lineHeight: 1.5,
           }}
-        >
-          ⚠️ <strong>Demo Mode</strong>：onchain-export 插件用 Web Crypto API 真实计算 SHA-256，
-          并生成 EVM 兼容格式的 mock tx hash，但未实际广播到 X Layer mainnet。
-          v2.3 将接入 OKX Agentic Wallet 完成真实签名与广播。
-        </div>
+          dangerouslySetInnerHTML={{ __html: t('agent.pluginPanel.demoMode') }}
+        />
       </div>
     </div>
   )
@@ -268,6 +451,7 @@ function OnchainHistory({
   knowledgeCard: KnowledgeCard
   refreshTrigger: string | null
 }) {
+  const { t } = useI18n()
   const [records, setRecords] = useState<OnchainRecord[]>([])
   const [expanded, setExpanded] = useState(false)
 
@@ -308,7 +492,7 @@ function OnchainHistory({
         }}
       >
         <span>{expanded ? '▾' : '▸'}</span>
-        <span>📜 Onchain History</span>
+        <span>{t('agent.pluginPanel.onchainHistory')}</span>
         <span
           style={{
             marginLeft: 'auto',
@@ -319,7 +503,7 @@ function OnchainHistory({
             fontWeight: 600,
           }}
         >
-          {records.length} 次
+          {t('agent.pluginPanel.times', { count: records.length })}
         </span>
       </button>
 
@@ -335,6 +519,7 @@ function OnchainHistory({
 }
 
 function OnchainRecordItem({ record }: { record: OnchainRecord }) {
+  const { t } = useI18n()
   const [showDetails, setShowDetails] = useState(false)
 
   return (
@@ -358,7 +543,7 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
           · {record.chainName}
         </span>
         <span style={{ color: '#a16207', fontSize: '10px' }}>
-          · {formatRelativeTime(record.publishedAt)}
+          · {formatRelativeTime(record.publishedAt, t)}
         </span>
         <button
           onClick={() => setShowDetails(!showDetails)}
@@ -373,13 +558,13 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
             cursor: 'pointer',
           }}
         >
-          {showDetails ? '隐藏' : '详情'}
+          {showDetails ? t('agent.pluginPanel.hide') : t('agent.pluginPanel.details')}
         </button>
       </div>
 
       {/* Tx hash */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
-        <span style={{ color: '#64748b', fontSize: '10px', width: '60px' }}>Tx</span>
+        <span style={{ color: '#64748b', fontSize: '10px', width: '60px' }}>{t('agent.pluginPanel.txLabel')}</span>
         <code style={{ fontSize: '10px', color: '#0f1729', fontFamily: 'monospace', flex: 1 }}>
           0x{record.txHash.substring(0, 16)}...{record.txHash.substring(56)}
         </code>
@@ -395,8 +580,8 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
 
       {/* Block + Gas */}
       <div style={{ display: 'flex', gap: '12px', fontSize: '10px', color: '#64748b' }}>
-        <span>📦 Block #{record.blockNumber.toLocaleString()}</span>
-        <span>⛽ {record.gasUsed} OKB</span>
+        <span>{t('agent.pluginPanel.block', { n: record.blockNumber.toLocaleString() })}</span>
+        <span>{t('agent.pluginPanel.gasUsed', { gas: record.gasUsed })}</span>
         <span>👤 {shortAddress(record.walletAddress)}</span>
       </div>
 
@@ -414,13 +599,13 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
           }}
         >
           <div style={{ marginBottom: '4px' }}>
-            <strong>SHA-256:</strong>{' '}
+            <strong>{t('agent.pluginPanel.shaLabel')}</strong>{' '}
             <code style={{ fontSize: '9px', fontFamily: 'monospace', wordBreak: 'break-all' }}>
               {record.kcSha256}
             </code>
           </div>
           <div style={{ marginBottom: '4px' }}>
-            <strong>IPFS:</strong>{' '}
+            <strong>{t('agent.pluginPanel.ipfsLabel')}</strong>{' '}
             <a
               href={record.ipfsUrl}
               target="_blank"
@@ -431,7 +616,7 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
             </a>
           </div>
           <div>
-            <strong>Contract:</strong>{' '}
+            <strong>{t('agent.pluginPanel.contractLabel')}</strong>{' '}
             <code style={{ fontSize: '9px', fontFamily: 'monospace' }}>
               {shortAddress(RESEARCHKIT_REGISTRY_CONTRACT)}
             </code>
@@ -446,12 +631,169 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
 // 辅助
 // ============================================================================
 
-function formatRelativeTime(timestamp: number): string {
+function formatRelativeTime(timestamp: number, t: TFn): string {
   const diff = Date.now() - timestamp
-  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
+  if (diff < 60_000) return t('agent.pluginPanel.relativeTime.secondsAgo', { n: Math.floor(diff / 1000) })
+  if (diff < 3600_000) return t('agent.pluginPanel.relativeTime.minutesAgo', { n: Math.floor(diff / 60_000) })
+  if (diff < 86400_000) return t('agent.pluginPanel.relativeTime.hoursAgo', { n: Math.floor(diff / 3600_000) })
   return new Date(timestamp).toLocaleDateString()
+}
+
+// ============================================================================
+// D33 — BatchToolbar 批量执行工具栏
+// ============================================================================
+
+function BatchToolbar({
+  selectedCount,
+  total,
+  running,
+  done,
+  successes,
+  failures,
+  current,
+  currentPluginId,
+  currentPluginName,
+  onSelectAll,
+  onUnselectAll,
+  onRun,
+}: {
+  selectedCount: number
+  total: number
+  running: boolean
+  done: boolean
+  successes: number
+  failures: number
+  current: number
+  currentPluginId: string | null
+  currentPluginName: string
+  onSelectAll: () => void
+  onUnselectAll: () => void
+  onRun: () => void
+}) {
+  const progressPct = running && total > 0 ? Math.round((current / selectedCount) * 100) : 0
+
+  return (
+    <div
+      style={{
+        padding: '12px',
+        background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+        border: '1px solid #c4b5fd',
+        borderRadius: '8px',
+        animation: 'fadeIn 0.2s ease-out',
+      }}
+    >
+      {/* Top row — 选择 + 执行按钮 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+        <span style={{ fontSize: '12px', fontWeight: 700, color: '#5b21b6' }}>
+          🎯 批量执行队列
+        </span>
+        <span
+          style={{
+            fontSize: '10px',
+            padding: '2px 8px',
+            background: 'white',
+            color: '#7c3aed',
+            borderRadius: '999px',
+            fontWeight: 600,
+          }}
+        >
+          {selectedCount} / {total} 选中
+        </span>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
+          <button
+            onClick={onSelectAll}
+            disabled={running}
+            style={{
+              padding: '4px 10px',
+              background: running ? '#e5e7eb' : 'white',
+              color: running ? '#9ca3af' : '#7c3aed',
+              border: '1px solid #c4b5fd',
+              borderRadius: '6px',
+              fontSize: '10px',
+              fontWeight: 600,
+              cursor: running ? 'not-allowed' : 'pointer',
+            }}
+          >
+            全选
+          </button>
+          <button
+            onClick={onUnselectAll}
+            disabled={running}
+            style={{
+              padding: '4px 10px',
+              background: running ? '#e5e7eb' : 'white',
+              color: running ? '#9ca3af' : '#7c3aed',
+              border: '1px solid #c4b5fd',
+              borderRadius: '6px',
+              fontSize: '10px',
+              fontWeight: 600,
+              cursor: running ? 'not-allowed' : 'pointer',
+            }}
+          >
+            清空
+          </button>
+          <button
+            onClick={onRun}
+            disabled={running || selectedCount === 0}
+            style={{
+              ...btnPrimary,
+              padding: '4px 14px',
+              background: running || selectedCount === 0
+                ? '#cbd5e1'
+                : 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: running || selectedCount === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {running ? '⏳ 执行中...' : `▶ 执行全部 (${selectedCount})`}
+          </button>
+        </div>
+      </div>
+
+      {/* Progress bar — 执行中或完成时显示 */}
+      {(running || done) && selectedCount > 0 && (
+        <div style={{ marginTop: '8px' }}>
+          {/* 进度文字 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#5b21b6', marginBottom: '4px', fontWeight: 600 }}>
+            <span>
+              {running && currentPluginId
+                ? `⏳ ${current} / ${selectedCount} — 正在执行 ${currentPluginName}`
+                : done
+                ? `✅ 完成 — 成功 ${successes} / 失败 ${failures}`
+                : `${current} / ${selectedCount}`}
+            </span>
+            <span>{progressPct}%</span>
+          </div>
+          {/* 进度条 */}
+          <div
+            style={{
+              height: '6px',
+              background: '#e9d5ff',
+              borderRadius: '999px',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${done ? 100 : progressPct}%`,
+                background: done
+                  ? (failures > 0 ? 'linear-gradient(90deg, #10b981 0%, #10b981 70%, #ef4444 100%)' : '#10b981')
+                  : 'linear-gradient(90deg, #7c3aed 0%, #9333ea 100%)',
+                borderRadius: '999px',
+                transition: 'width 0.3s ease-out',
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ============================================================================
@@ -467,6 +809,11 @@ function PluginCard({
   onToggleEnabled,
   onConfigChange,
   onExport,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
+  batchRunning = false,
+  isCurrentInBatch = false,
 }: {
   plugin: ExportPlugin
   state: PluginState
@@ -476,16 +823,33 @@ function PluginCard({
   onToggleEnabled: (enabled: boolean) => void
   onConfigChange: (key: string, value: string | boolean) => void
   onExport: () => void
+  selectionMode?: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
+  batchRunning?: boolean
+  isCurrentInBatch?: boolean
 }) {
+  const { t } = useI18n()
   const meta = plugin.meta
   const isDisabled = !state.enabled || disabled
+  const [showDetails, setShowDetails] = useState(false)
+  const category = meta.category || 'export'
+  const perms = plugin.permissions
+  // D33 — 批量模式下卡片可勾选条件：启用中 + 非 disabled + 非批量执行中
+  const selectable = selectionMode && state.enabled && !disabled && !batchRunning
 
   return (
     <div
       style={{
         padding: '12px 14px',
-        background: state.enabled ? 'white' : '#fafbfc',
-        border: `2px solid ${result?.success ? '#a7f3d0' : result && !result.success ? '#fecaca' : '#e2e8f0'}`,
+        background: state.enabled ? (isCurrentInBatch ? '#eff6ff' : 'white') : '#fafbfc',
+        border: `2px solid ${
+          isCurrentInBatch ? '#3b82f6'
+          : result?.success ? '#a7f3d0'
+          : result && !result.success ? '#fecaca'
+          : selected ? '#a78bfa'
+          : '#e2e8f0'
+        }`,
         borderRadius: '8px',
         opacity: disabled ? 0.6 : 1,
         transition: 'all 0.2s',
@@ -493,6 +857,35 @@ function PluginCard({
     >
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
+        {/* D33 — 批量模式 checkbox */}
+        {selectionMode && (
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '20px',
+              height: '32px',
+              flexShrink: 0,
+              cursor: selectable ? 'pointer' : 'not-allowed',
+            }}
+            title={selectable ? '勾选加入批量队列' : (batchRunning ? '批量执行中' : '插件未启用')}
+          >
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelect}
+              disabled={!selectable}
+              style={{
+                width: '16px',
+                height: '16px',
+                cursor: selectable ? 'pointer' : 'not-allowed',
+                accentColor: '#7c3aed',
+              }}
+            />
+          </label>
+        )}
+
         <div
           style={{
             width: '32px',
@@ -526,19 +919,19 @@ function PluginCard({
             >
               v{meta.version}
             </span>
-            {meta.tags.map((t) => (
+            {meta.tags.map((tag) => (
               <span
-                key={t}
+                key={tag}
                 style={{
                   fontSize: '9px',
                   padding: '1px 5px',
-                  background: t === 'official' ? '#dbeafe' : '#f3f4f6',
-                  color: t === 'official' ? '#1e40af' : '#475569',
+                  background: tag === 'official' ? '#dbeafe' : '#f3f4f6',
+                  color: tag === 'official' ? '#1e40af' : '#475569',
                   borderRadius: '3px',
                   fontWeight: 600,
                 }}
               >
-                {t}
+                {tag}
               </span>
             ))}
           </div>
@@ -609,13 +1002,92 @@ function PluginCard({
             {cap.type} · {cap.format}
           </span>
         ))}
+        {/* D31 — Category badge */}
+        <span
+          style={{
+            fontSize: '9px',
+            padding: '2px 6px',
+            background: category === 'export' ? '#dbeafe' : category === 'source' ? '#fef3c7' : '#fce7f3',
+            color: category === 'export' ? '#1e40af' : category === 'source' ? '#92400e' : '#9d174d',
+            borderRadius: '4px',
+            fontWeight: 600,
+            border: `1px solid ${category === 'export' ? '#bfdbfe' : category === 'source' ? '#fde68a' : '#fbcfe8'}`,
+          }}
+        >
+          {category}
+        </span>
+        {/* D31 — 权限摘要 badge（点击展开详情） */}
+        {perms && (
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            style={{
+              fontSize: '9px',
+              padding: '2px 6px',
+              background: showDetails ? '#fef2f2' : '#f8fafc',
+              color: '#475569',
+              borderRadius: '4px',
+              fontWeight: 500,
+              border: '1px solid #e2e8f0',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+            }}
+            title="查看插件权限声明"
+          >
+            🔒 perms
+            <span style={{ fontSize: '8px' }}>{showDetails ? '▾' : '▸'}</span>
+          </button>
+        )}
       </div>
+
+      {/* D31 — Permissions 详情面板（可折叠） */}
+      {showDetails && perms && (
+        <div
+          style={{
+            marginBottom: '10px',
+            padding: '8px 10px',
+            background: '#fef2f2',
+            borderRadius: '6px',
+            border: '1px solid #fecaca',
+            fontSize: '10px',
+            color: '#7f1d1d',
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '9px' }}>
+            🔐 权限声明
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', lineHeight: 1.5 }}>
+            <div>
+              <strong>KC 字段：</strong>{' '}
+              {perms.kcFields?.length ? (
+                perms.kcFields.includes('*') ? <span style={{ color: '#dc2626', fontWeight: 700 }}>全部（*）</span> : perms.kcFields.join(', ')
+              ) : '—'}
+            </div>
+            <div>
+              <strong>外部 API：</strong>{' '}
+              {perms.externalApis?.length ? perms.externalApis.join(', ') : '无'}
+            </div>
+            <div>
+              <strong>网络：</strong> {perms.network ? '✅ 需要' : '❌ 不需要'}
+            </div>
+            <div>
+              <strong>文件系统：</strong> {perms.filesystem ? '✅ 需要' : '❌ 不需要'}
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <strong>钱包签名：</strong>{' '}
+              {perms.walletSignature ? <span style={{ color: '#dc2626', fontWeight: 700 }}>⚠️ 需要（敏感操作）</span> : '❌ 不需要'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Config form (if requiredConfig) */}
       {meta.requiresConfig && meta.configSchema && meta.configSchema.length > 0 && state.enabled && (
         <div style={{ marginBottom: '10px', padding: '8px', background: '#f8fafc', borderRadius: '6px' }}>
           <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 700, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            ⚙️ 配置
+            {t('agent.pluginPanel.config')}
           </div>
           {meta.configSchema.map((field) => (
             <div key={field.key} style={{ marginBottom: '6px' }}>
@@ -652,23 +1124,44 @@ function PluginCard({
         </div>
       )}
 
-      {/* Action button */}
-      <button
-        onClick={onExport}
-        disabled={isDisabled || executing}
-        style={{
-          ...btnPrimary,
-          width: '100%',
-          padding: '8px 12px',
-          background: isDisabled || executing ? '#cbd5e1' : `linear-gradient(135deg, ${meta.color} 0%, ${meta.color}dd 100%)`,
-          opacity: isDisabled || executing ? 0.7 : 1,
-          cursor: isDisabled || executing ? 'not-allowed' : 'pointer',
-          fontSize: '12px',
-          fontWeight: 700,
-        }}
-      >
-        {executing ? '⏳ 执行中...' : `🚀 ${meta.icon} 执行导出`}
-      </button>
+      {/* Action button — 批量模式下隐藏单个按钮 */}
+      {!selectionMode && (
+        <button
+          onClick={onExport}
+          disabled={isDisabled || executing}
+          style={{
+            ...btnPrimary,
+            width: '100%',
+            padding: '8px 12px',
+            background: isDisabled || executing ? '#cbd5e1' : `linear-gradient(135deg, ${meta.color} 0%, ${meta.color}dd 100%)`,
+            opacity: isDisabled || executing ? 0.7 : 1,
+            cursor: isDisabled || executing ? 'not-allowed' : 'pointer',
+            fontSize: '12px',
+            fontWeight: 700,
+          }}
+        >
+          {executing ? t('agent.pluginPanel.executing') : t('agent.pluginPanel.executeBtn', { icon: meta.icon })}
+        </button>
+      )}
+      {/* D33 — 批量模式下显示状态条 */}
+      {selectionMode && isCurrentInBatch && (
+        <div
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            background: '#dbeafe',
+            border: '1px solid #93c5fd',
+            borderRadius: '6px',
+            fontSize: '11px',
+            color: '#1e40af',
+            fontWeight: 700,
+            textAlign: 'center',
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+        >
+          ⏳ 批量执行中...
+        </div>
+      )}
 
       {/* Result */}
       {result && (
@@ -686,7 +1179,7 @@ function PluginCard({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
             <span>{result.success ? '✅' : '❌'}</span>
-            <span style={{ fontWeight: 600 }}>{result.success ? '成功' : '失败'}</span>
+            <span style={{ fontWeight: 600 }}>{result.success ? t('agent.pluginPanel.successLabel') : t('agent.pluginPanel.failureLabel')}</span>
             {result.durationMs && (
               <span style={{ fontSize: '9px', color: '#94a3b8', marginLeft: 'auto' }}>
                 ⚡ {result.durationMs}ms
@@ -739,7 +1232,7 @@ function PluginCard({
           <span>{state.lastResult.success ? '✅' : '❌'}</span>
           <span style={{ flex: 1 }}>{state.lastResult.message}</span>
           <span style={{ fontSize: '9px', color: '#94a3b8' }}>
-            {formatRelativeTime(state.lastExecutedAt)}
+            {formatRelativeTime(state.lastExecutedAt, t)}
           </span>
         </div>
       )}
@@ -750,6 +1243,237 @@ function PluginCard({
           to { opacity: 1; transform: translateY(0); }
         }
       ` }} />
+    </div>
+  )
+}
+
+// ============================================================================
+// D32 — MarketplacePanel 远程插件市场
+// ============================================================================
+
+function MarketplacePanel() {
+  const [expanded, setExpanded] = useState(false)
+  const [manifests, setManifests] = useState<PluginManifest[]>([])
+  const [installed, setInstalled] = useState<PluginManifest[]>([])
+  const [installing, setInstalling] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    const [list, installedList] = await Promise.all([
+      loadMarketplace(),
+      Promise.resolve(loadInstalledManifests()),
+    ])
+    setManifests(list)
+    setInstalled(installedList)
+  }, [])
+
+  useEffect(() => {
+    if (expanded && manifests.length === 0) {
+      refresh()
+    }
+  }, [expanded, manifests.length, refresh])
+
+  const handleInstall = useCallback(async (manifest: PluginManifest) => {
+    setInstalling(manifest.id)
+    setError(null)
+    setToast(null)
+    const result = await installPlugin(manifest.id)
+    if (result.success) {
+      setToast(`✅ "${manifest.name}" 安装成功`)
+      window.setTimeout(() => setToast(null), 3000)
+      // 刷新已安装列表
+      setInstalled(loadInstalledManifests())
+    } else {
+      setError(result.error || '安装失败')
+    }
+    setInstalling(null)
+  }, [])
+
+  const isInstalled = (id: string) => installed.some(m => m.id === id)
+
+  // 按 official 排序：官方在前
+  const sorted = [...manifests].sort((a, b) => {
+    if (a.official !== b.official) return a.official ? -1 : 1
+    return (b.installCount || 0) - (a.installCount || 0)
+  })
+
+  return (
+    <div
+      style={{
+        marginTop: '12px',
+        padding: '10px 12px',
+        background: 'linear-gradient(135deg, #f0f9ff 0%, #faf5ff 100%)',
+        border: '1px solid #c4b5fd',
+        borderRadius: '8px',
+      }}
+    >
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+          padding: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: '#5b21b6',
+          fontSize: '12px',
+          fontWeight: 700,
+        }}
+      >
+        <span>{expanded ? '▾' : '▸'}</span>
+        <span>🌐 Plugin Marketplace</span>
+        <span
+          style={{
+            marginLeft: 'auto',
+            background: '#ede9fe',
+            padding: '1px 6px',
+            borderRadius: '999px',
+            fontSize: '10px',
+            fontWeight: 600,
+            color: '#6d28d9',
+          }}
+        >
+          {manifests.length} 可安装 · {installed.length} 已安装
+        </span>
+      </button>
+
+      {expanded && (
+        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {manifests.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '11px', padding: '12px' }}>
+              正在加载市场...
+            </div>
+          )}
+
+          {sorted.map((m) => (
+            <MarketplaceCard
+              key={m.id}
+              manifest={m}
+              installed={isInstalled(m.id)}
+              installing={installing === m.id}
+              onInstall={() => handleInstall(m)}
+            />
+          ))}
+
+          {error && (
+            <div style={{ padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '4px', fontSize: '10px', color: '#991b1b' }}>
+              ❌ {error}
+            </div>
+          )}
+          {toast && (
+            <div style={{ padding: '6px 8px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '4px', fontSize: '10px', color: '#166534' }}>
+              {toast}
+            </div>
+          )}
+
+          <div style={{ marginTop: '4px', fontSize: '9px', color: '#94a3b8', textAlign: 'center' }}>
+            v2.3 mock marketplace — 真实远程加载待 v2.4 沙箱化
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MarketplaceCard({
+  manifest,
+  installed,
+  installing,
+  onInstall,
+}: {
+  manifest: PluginManifest
+  installed: boolean
+  installing: boolean
+  onInstall: () => void
+}) {
+  const category = manifest.category || 'export'
+  const rating = manifest.rating || 0
+
+  return (
+    <div
+      style={{
+        padding: '8px 10px',
+        background: 'white',
+        border: `1px solid ${installed ? '#a7f3d0' : '#e2e8f0'}`,
+        borderRadius: '6px',
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'flex-start',
+        opacity: installing ? 0.6 : 1,
+      }}
+    >
+      <div
+        style={{
+          width: '28px',
+          height: '28px',
+          borderRadius: '6px',
+          background: `${manifest.color}15`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '16px',
+          flexShrink: 0,
+        }}
+      >
+        {manifest.icon}
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f1729' }}>
+            {manifest.name}
+          </span>
+          <span style={{ fontSize: '9px', padding: '1px 4px', background: '#f1f5f9', color: '#64748b', borderRadius: '3px' }}>
+            v{manifest.version}
+          </span>
+          {manifest.official ? (
+            <span style={{ fontSize: '9px', padding: '1px 4px', background: '#dbeafe', color: '#1e40af', borderRadius: '3px', fontWeight: 600 }}>
+              official
+            </span>
+          ) : (
+            <span style={{ fontSize: '9px', padding: '1px 4px', background: '#fef3c7', color: '#92400e', borderRadius: '3px', fontWeight: 600 }}>
+              community
+            </span>
+          )}
+          <span style={{ fontSize: '9px', padding: '1px 4px', background: '#f8fafc', color: '#475569', borderRadius: '3px' }}>
+            {category}
+          </span>
+        </div>
+        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px', lineHeight: 1.4 }}>
+          {manifest.description}
+        </div>
+        <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '3px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <span>⭐ {rating.toFixed(1)}</span>
+          <span>📦 {(manifest.sizeKb || 0)} KB</span>
+          <span>👤 {manifest.author}</span>
+          {manifest.permissions?.walletSignature && (
+            <span style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ 需要钱包签名</span>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={onInstall}
+        disabled={installed || installing}
+        style={{
+          padding: '4px 10px',
+          background: installed ? '#dcfce7' : installing ? '#e2e8f0' : btnPrimary.background,
+          color: installed ? '#166534' : installing ? '#64748b' : 'white',
+          border: 'none',
+          borderRadius: '4px',
+          fontSize: '10px',
+          fontWeight: 700,
+          cursor: installed || installing ? 'default' : 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        {installed ? '✓ 已装' : installing ? '⏳ 安装中...' : '+ 安装'}
+      </button>
     </div>
   )
 }

@@ -1,22 +1,20 @@
 /**
- * Onchain Export Plugin — D13 重头戏
+ * Onchain Export Plugin — D13 + D22 双模式重构
  *
- * 把 Knowledge Card 发布到 X Layer 链上（Demo Mode）：
+ * 把 Knowledge Card 发布到 X Layer 链上：
+ * - mock 模式（demo 用）：派生 mock tx hash / token ID / IPFS URL
+ * - real 模式（D23/D24 填入）：调用 OKX Agentic Wallet + Pinata + viem
+ *
  * 1. 用 Web Crypto API 真实计算 KC 的 SHA-256 hash
- * 2. 派生 mock tx hash（确定性：同 KC + 同 wallet → 同 tx hash）
- * 3. 派生 mock block number / token ID / IPFS URL
- * 4. 写入 onchain-ledger（localStorage）模拟"链上记录"
- * 5. 返回 explorer URL 给 UI 展示
+ * 2. 通过 OnchainServices 接口调用对应的 mock/real 实现
+ * 3. 写入 onchain-ledger（localStorage）记录链上状态
+ * 4. 返回 explorer URL 给 UI 展示
  *
- * ⚠️ Demo Mode 声明（写在 UI 上让评委看到）：
- *    "本插件计算真实的 SHA-256 hash + 生成 EVM 兼容格式的 mock tx hash，
- *     但未实际广播到 X Layer mainnet。v2.3 将接入 OKX Agentic Wallet 真实签名。"
- *
- * v2.3 升级路径：
- * - 替换 sha256(kc) → 不变（继续作为 content hash）
- * - 替换 deriveTxHash → 调用 OKX Agentic Wallet 发送交易得到真实 tx hash
- * - 替换 appendRecord → 不变（结构兼容真实 receipt）
- * - 添加 wallet 连接 UI（meta.ts 已声明 requiresConfig=true + wallet address schema）
+ * D22 改造点：
+ * - 抽出 6 个可替换接口（TxSigner / IpfsUploader / NonceProvider / GasEstimator / ContractCaller / WalletConnector）
+ * - mock 模式行为完全不变（保留 v2.2.5 demo 行为）
+ * - real 模式通过 D23/D24 填入真实 SDK
+ * - 通过 config.mode 切换（默认 'mock'）
  */
 
 import type {
@@ -37,6 +35,7 @@ import {
   RESEARCHKIT_REGISTRY_CONTRACT,
 } from '@/lib/onchain-utils'
 import { appendRecord, findByKcHash, type OnchainRecord } from '@/lib/onchain-ledger'
+import { getOnchainServices, resolveOnchainMode } from '@/lib/onchain-modes'
 
 // ============================================================================
 // 插件定义
@@ -53,6 +52,8 @@ export const onchainExportPlugin: ExportPlugin = {
     color: '#f97316',
     tags: ['official', 'experimental', 'demo'],
     requiresConfig: true,
+    // D31 — 类别与权限声明
+    category: 'export',
     configSchema: [
       {
         key: 'walletAddress',
@@ -93,6 +94,33 @@ export const onchainExportPlugin: ExportPlugin = {
     },
   ],
 
+  // D31 — 权限声明：需要钱包地址 + 调用 X Layer RPC + 写入本地 ledger
+  permissions: {
+    kcFields: ['title', 'summary', 'authors', 'field', 'year'],
+    externalApis: ['xlayer.okx.com', 'api.ipfs.com'],
+    network: true,
+    filesystem: true,
+    walletSignature: true,
+  },
+
+  // D31 — 生命周期钩子（onEnable 校验钱包地址，onUninstall 清理 ledger）
+  lifecycle: {
+    async onEnable(ctx) {
+      const wallet = String(ctx.config?.walletAddress || '').trim()
+      if (!wallet) {
+        return { success: false, error: '请先配置钱包地址' }
+      }
+      if (!isValidAddress(wallet)) {
+        return { success: false, error: '钱包地址格式不合法' }
+      }
+      return { success: true, message: '钱包地址已校验通过' }
+    },
+    async onUninstall() {
+      console.info('[onchain-export] uninstalled, ledger retained')
+      return { success: true }
+    },
+  },
+
   validate(kc: KnowledgeCard): string | null {
     if (!kc?.title) return 'Knowledge Card 缺少 title 字段'
     if (!kc.summary) return 'Knowledge Card 缺少 summary 字段（链上 hash 需要有内容）'
@@ -105,7 +133,11 @@ export const onchainExportPlugin: ExportPlugin = {
     try {
       const { knowledgeCard: kc, config } = ctx
 
-      // 1. 校验配置
+      // 0. 解析 mode + 获取 services（D22 双模式）
+      const mode = resolveOnchainMode(config)
+      const services = getOnchainServices(mode)
+
+      // 1. 校验配置（用 services.walletConnector 校验）
       const walletAddress = String(config.walletAddress || '').trim()
       if (!walletAddress) {
         return {
@@ -115,7 +147,7 @@ export const onchainExportPlugin: ExportPlugin = {
           durationMs: Date.now() - start,
         }
       }
-      if (!isValidAddress(walletAddress)) {
+      if (!services.walletConnector.isValidAddress(walletAddress)) {
         return {
           success: false,
           message: '钱包地址格式错误（应为 0x + 40 hex chars）',
@@ -133,7 +165,7 @@ export const onchainExportPlugin: ExportPlugin = {
       const kcCanonical = canonicalizeKc(kc)
       const kcSha256 = await sha256(kcCanonical)
 
-      // 3. 检查是否已发布过（避免重复 mint）
+      // 3. 检查是否已发布过（避免重复 mint）— mock/real 共用
       const existing = findByKcHash(kcSha256)
       if (existing && existing.walletAddress === walletAddress && existing.chainId === chainId) {
         // 同一 KC + 同一 wallet + 同一链 → 返回已有记录（模拟"已 mint 过，不重复"）
@@ -148,50 +180,52 @@ export const onchainExportPlugin: ExportPlugin = {
         }
       }
 
-      // 4. 计算 mock nonce（同 wallet 已发布的 KC 数 + 1）
-      const nonce = computeWalletNonce(walletAddress)
+      // 4. 调用 services 接口（mock/real 自动切换）
+      // 4a. IPFS 上传（获取 ipfsUrl + cid）
+      const ipfsResult = await services.ipfsUploader.upload(kcCanonical, kcSha256)
 
-      // 5. 派生 mock tx hash（确定性）
-      const txHash = await deriveTxHash({
+      // 4b. mint KC（获取 tokenId）
+      const mintResult = await services.contractCaller.mintKc({
+        contractAddress: RESEARCHKIT_REGISTRY_CONTRACT,
         kcSha256,
-        walletAddress,
-        nonce,
+        ipfsCid: ipfsResult.cid,
+        from: walletAddress,
         chainId,
       })
 
-      // 6. 派生其他字段
-      const tokenId = await deriveKcTokenId(kcSha256)
-      const blockNumber = deriveBlockNumber(Date.now())
-      const ipfsUrl = buildMockIpfsUrl(kcSha256)
-      const explorerTxUrl = buildExplorerTxUrl(txHash)
+      // 4c. 签名 + 广播交易（获取 txHash + blockNumber + gasUsed）
+      const txResult = await services.txSigner.sendTx({
+        to: RESEARCHKIT_REGISTRY_CONTRACT,
+        data: `0x${kcSha256}${ipfsResult.cid}`,
+        from: walletAddress,
+        chainId,
+      })
 
-      // 7. 构造完整记录
+      // 5. 构造完整记录（mock/real 共用）
+      const explorerTxUrl = buildExplorerTxUrl(txResult.txHash)
       const record: OnchainRecord = {
         id: kcSha256.substring(0, 16),
         title: kc.title,
         kc,
         kcSha256,
-        txHash,
-        blockNumber,
-        tokenId,
+        txHash: txResult.txHash,
+        blockNumber: txResult.blockNumber,
+        tokenId: mintResult.tokenId,
         walletAddress,
         chainId,
         chainName: chainInfo.name,
-        ipfsUrl,
+        ipfsUrl: ipfsResult.url,
         explorerTxUrl,
         publishedAt: Date.now(),
-        gasUsed: '0.000021', // mock gas（OKB）
+        gasUsed: txResult.gasUsed,
       }
 
-      // 8. 写入 ledger
+      // 6. 写入 ledger（mock/real 共用）
       appendRecord(record)
-
-      // 9. 模拟"网络延迟"让 UI 显得真实
-      await sleep(800 + Math.random() * 500)
 
       return {
         success: true,
-        message: `✅ 已锚定到 ${chainInfo.name} · block #${blockNumber.toLocaleString()} · token #${tokenId}`,
+        message: `✅ 已锚定到 ${chainInfo.name} · block #${txResult.blockNumber.toLocaleString()} · token #${mintResult.tokenId}`,
         url: explorerTxUrl,
         data: JSON.stringify(record, null, 2),
         filename: `onchain-record-${record.id}.json`,
@@ -235,16 +269,12 @@ function sortObjectKeys(obj: any): any {
 }
 
 /**
- * 计算钱包已发布的 KC 数（mock nonce）
+ * 计算钱包已发布的 KC 数 — D22 后已迁移到 MockNonceProvider
+ * 保留此占位避免破坏 import（如果有外部引用）
+ * @deprecated D22 — 改用 services.nonceProvider.getNonce()
  */
 function computeWalletNonce(_walletAddress: string): number {
-  // v2.2 demo: 简单返回 1（实际 nonce 应从 ledger 统计）
-  // v2.3 真实接入后从 wallet 直接读取 nonce
   return 1
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(r => setTimeout(r, ms))
 }
 
 function formatRelativeTime(timestamp: number): string {

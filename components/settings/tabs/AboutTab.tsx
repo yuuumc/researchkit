@@ -1,12 +1,50 @@
 'use client'
 
+import { useI18n } from '@/components/I18nProvider'
+
 /**
- * AboutTab — 关于页
+ * AboutTab — 关于页(D37 i18n 化)
  *
- * 显示版本信息 + 技术栈 + 链接
+ * 显示版本信息 + 技术栈 + Roadmap
+ * D37:全部文案走 i18n,Roadmap 反映 v2.3 i18n 进度
+ * Agent 描述复用 settings.prompt.agentXXX 保持单一来源
  */
 
+type RoadmapRow = {
+  day: string
+  task: string
+  status: 'done' | 'next' | 'planned'
+}
+
+const ROADMAP: RoadmapRow[] = [
+  { day: 'D1-D7', task: 'v2.1 — LLMProvider + Settings + Prompt + Preset + Cost', status: 'done' },
+  { day: 'D8-D16', task: 'v2.2 — Compare / Memory / Chat / Explain / Plugin / Onchain / Demo', status: 'done' },
+  { day: 'D17-D21', task: 'v2.2.5 — Quality Release (Token / SSE / Mobile / Animations)', status: 'done' },
+  { day: 'D22', task: 'v2.2.6 — Stability Hotfix (Regression / Overflow)', status: 'done' },
+  { day: 'D22-D35', task: 'v2.3 — Onchain / Engineering Debt / Streaming / Plugins', status: 'planned' },
+  { day: 'D36-D40', task: 'v2.3 i18n — Infrastructure / Settings / Home / Auto Translate / Release', status: 'next' },
+]
+
+const STATUS_COLOR: Record<RoadmapRow['status'], string> = {
+  done: '#22c55e',
+  next: '#3b82f6',
+  planned: '#94a3b8',
+}
+
 export function AboutTab() {
+  const { t } = useI18n()
+
+  const agents: Array<{ name: string; descKey: string }> = [
+    { name: 'Planner', descKey: 'settings.prompt.agentPlanner' },
+    { name: 'Reader', descKey: 'settings.prompt.agentReader' },
+    { name: 'Analyzer', descKey: 'settings.prompt.agentAnalyzer' },
+    { name: 'Terminology', descKey: 'settings.prompt.agentTerminology' },
+    { name: 'Recommendation', descKey: 'settings.prompt.agentRecommendation' },
+    { name: 'KnowledgeBuilder', descKey: 'settings.prompt.agentKnowledgeBuilder' },
+    { name: 'Reflection', descKey: 'settings.prompt.agentReflection' },
+    { name: 'Export', descKey: '' },
+  ]
+
   return (
     <div
       style={{
@@ -22,7 +60,7 @@ export function AboutTab() {
           ResearchKit
         </h3>
         <p style={{ margin: '6px 0 0', color: '#6366f1', fontSize: '14px', fontWeight: 600 }}>
-          AI-Powered Research Paper Understanding
+          {t('settings.about.tagline')}
         </p>
         <div
           style={{
@@ -36,54 +74,53 @@ export function AboutTab() {
             fontWeight: 600,
           }}
         >
-          v2.1-dev (D3)
+          {t('settings.about.versionBadge', { version: '2.3-dev (D37)' })}
         </div>
       </div>
 
-      <Section title="🎯 Mission">
-        把任何研究论文变成结构化、可分享的知识卡 — 5 个 AI Agent 协同工作，
-        2 分钟生成 takeaway / 术语图谱 / 推荐阅读 / Markdown / Obsidian / Knowledge Graph。
+      <Section title={t('settings.about.missionTitle')}>
+        {t('settings.about.missionDesc')}
       </Section>
 
-      <Section title="🤖 Agent Pipeline">
+      <Section title={t('settings.about.agentPipelineTitle')}>
         <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: 1.8 }}>
-          <li><strong>Planner</strong> — LLM 自主规划执行步骤</li>
-          <li><strong>Reader</strong> — 价值导向的阅读笔记</li>
-          <li><strong>Analyzer</strong> — 深度分析（按 input_type 动态字段）</li>
-          <li><strong>Terminology</strong> — 术语图谱 + 依赖 DAG</li>
-          <li><strong>Recommendation</strong> — 4 类 intent 推荐阅读</li>
-          <li><strong>KnowledgeBuilder</strong> — 汇总成最终知识卡</li>
-          <li><strong>Export</strong> — Markdown / Obsidian / Mermaid / JSON</li>
+          {agents.map(a => (
+            <li key={a.name}>
+              <strong>{a.name}</strong> — {a.descKey ? t(a.descKey) : 'Markdown / Obsidian / Mermaid / JSON'}
+            </li>
+          ))}
         </ul>
       </Section>
 
-      <Section title="🏗 Tech Stack">
+      <Section title={t('settings.about.techStackTitle')}>
         <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: 1.8 }}>
-          <li><strong>Framework</strong> — Next.js 14 (App Router)</li>
-          <li><strong>LLM</strong> — OpenAI Compatible API（DeepSeek / OpenAI / OpenRouter / Groq / Custom）</li>
-          <li><strong>UI</strong> — React 18 + Inline Styles (CSS-in-JS)</li>
-          <li><strong>Language</strong> — TypeScript 5</li>
-          <li><strong>Storage</strong> — localStorage + cookie（用户配置）</li>
+          <li><strong>{t('settings.about.techFramework')}</strong> — {t('settings.about.techFrameworkDesc')}</li>
+          <li><strong>{t('settings.about.techLLM')}</strong> — {t('settings.about.techLLMDesc')}</li>
+          <li><strong>{t('settings.about.techUI')}</strong> — {t('settings.about.techUIDesc')}</li>
+          <li><strong>{t('settings.about.techLanguage')}</strong> — {t('settings.about.techLanguageDesc')}</li>
+          <li><strong>{t('settings.about.techStorage')}</strong> — {t('settings.about.techStorageDesc')}</li>
         </ul>
       </Section>
 
-      <Section title="📜 Roadmap">
+      <Section title={t('settings.about.roadmapTitle')}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
             <tr style={{ background: '#f8fafc' }}>
-              <th style={cellStyle}>Day</th>
-              <th style={cellStyle}>Task</th>
-              <th style={cellStyle}>Status</th>
+              <th style={cellStyle}>{t('settings.about.colDay')}</th>
+              <th style={cellStyle}>{t('settings.about.colTask')}</th>
+              <th style={cellStyle}>{t('settings.about.colStatus')}</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td style={cellStyle}>D1</td><td style={cellStyle}>LLMProvider Interface</td><td style={{ ...cellStyle, color: '#22c55e' }}>✅ Done</td></tr>
-            <tr><td style={cellStyle}>D2</td><td style={cellStyle}>OpenAICompatProvider + migrate</td><td style={{ ...cellStyle, color: '#22c55e' }}>✅ Done</td></tr>
-            <tr><td style={cellStyle}>D3</td><td style={cellStyle}>Settings UI + Provider config</td><td style={{ ...cellStyle, color: '#22c55e' }}>✅ Done</td></tr>
-            <tr><td style={cellStyle}>D4</td><td style={cellStyle}>PromptBuilder (3-layer) + Prompt Tab</td><td style={{ ...cellStyle, color: '#22c55e' }}>✅ Done</td></tr>
-            <tr><td style={cellStyle}>D5</td><td style={cellStyle}>Prompt Preset + Output Language</td><td style={{ ...cellStyle, color: '#3b82f6' }}>🟡 Next</td></tr>
-            <tr><td style={cellStyle}>D6-D7</td><td style={cellStyle}>Cost Dashboard + v2.1 tag</td><td style={{ ...cellStyle, color: '#94a3b8' }}>⏳ Planned</td></tr>
-            <tr><td style={cellStyle}>D8-D16</td><td style={cellStyle}>ChainHack Sprint (Compare / Memory / Plugins / Onchain)</td><td style={{ ...cellStyle, color: '#94a3b8' }}>⏳ Planned</td></tr>
+            {ROADMAP.map(row => (
+              <tr key={row.day}>
+                <td style={cellStyle}>{row.day}</td>
+                <td style={cellStyle}>{row.task}</td>
+                <td style={{ ...cellStyle, color: STATUS_COLOR[row.status] }}>
+                  {t(`settings.about.status${row.status.charAt(0).toUpperCase()}${row.status.slice(1)}`)}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </Section>

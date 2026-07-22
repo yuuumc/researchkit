@@ -8,37 +8,29 @@ import {
   clearProjectExtensionClient,
   clearAllProjectExtensionsClient,
 } from '@/lib/prompt-extensions'
+import { useI18n } from '@/components/I18nProvider'
 import { btnPrimary, btnSecondary, inputStyle } from '@/lib/ui-styles'
 
 /**
- * PromptTab — Agent Prompt 扩展配置
+ * PromptTab — Agent Prompt 扩展配置(D37 i18n 化)
  *
- * D4 v2.1 实现三层 Prompt 架构的可视化编辑：
- * - System 🔒 ResearchKit 内置（只读，本 Tab 不展示）
- * - Project ➕ 项目级扩展（本 Tab 主要功能）
- * - User ➕ 单次扩展（D5+ 在生成知识卡时通过 UI 传入）
- *
- * UI：
- * - 左侧 Agent 列表（Reader/Analyzer/Terminology/Recommendation/Planner/Reflection/Replan/KnowledgeBuilder）
- * - 右侧选中 Agent 的 Project Extension 表单
- *   - Append Instructions（追加在 System prompt 末尾的规则）
- *   - Output Preferences（输出偏好，如"避免第一人称"）
- * - "保存"按钮 + "清除该 Agent"按钮
- * - 顶部"清除所有扩展"按钮
+ * D4 v2.1 实现三层 Prompt 架构的可视化编辑
+ * D37:主要文案走 i18n,Agent 名称保留英文(代码标识符)
  */
 
-const AGENTS: Array<{ name: AgentName; label: string; desc: string }> = [
-  { name: 'Reader', label: 'Reader', desc: '阅读理解 + 价值判断' },
-  { name: 'Analyzer', label: 'Analyzer', desc: '深度分析（按 schema 提取字段）' },
-  { name: 'Terminology', label: 'Terminology', desc: '术语图谱 + 依赖 DAG' },
-  { name: 'Recommendation', label: 'Recommendation', desc: '4 类 intent 推荐阅读' },
-  { name: 'Planner', label: 'Planner', desc: '规划执行步骤' },
-  { name: 'Reflection', label: 'Reflection', desc: '评估 Knowledge Card 完整度' },
-  { name: 'Replan', label: 'Replan', desc: '根据 Reflection 反馈重新规划' },
-  { name: 'KnowledgeBuilder', label: 'KnowledgeBuilder', desc: '汇总成最终知识卡' },
+const AGENTS: Array<{ name: AgentName; descKey: string }> = [
+  { name: 'Reader', descKey: 'settings.prompt.agentReader' },
+  { name: 'Analyzer', descKey: 'settings.prompt.agentAnalyzer' },
+  { name: 'Terminology', descKey: 'settings.prompt.agentTerminology' },
+  { name: 'Recommendation', descKey: 'settings.prompt.agentRecommendation' },
+  { name: 'Planner', descKey: 'settings.prompt.agentPlanner' },
+  { name: 'Reflection', descKey: 'settings.prompt.agentReflection' },
+  { name: 'Replan', descKey: 'settings.prompt.agentReplan' },
+  { name: 'KnowledgeBuilder', descKey: 'settings.prompt.agentKnowledgeBuilder' },
 ]
 
 export function PromptTab() {
+  const { t } = useI18n()
   const [extensions, setExtensions] = useState<Partial<Record<AgentName, ProjectExtension>>>({})
   const [selected, setSelected] = useState<AgentName>('Reader')
   const [draft, setDraft] = useState<ProjectExtension>({ appendInstructions: '', outputPreferences: '' })
@@ -70,7 +62,6 @@ export function PromptTab() {
       appendInstructions: draft.appendInstructions?.trim() || undefined,
       outputPreferences: draft.outputPreferences?.trim() || undefined,
     }
-    // 空内容时清除该 Agent 的扩展
     if (!trimmed.appendInstructions && !trimmed.outputPreferences) {
       clearProjectExtensionClient(selected)
       const next = { ...extensions }
@@ -85,7 +76,7 @@ export function PromptTab() {
   }
 
   const handleClearAgent = () => {
-    if (!confirm(`确定要清除 ${selected} 的 Project Extension 吗？`)) return
+    if (!confirm(t('settings.prompt.clearAgentConfirm', { agent: selected }))) return
     clearProjectExtensionClient(selected)
     const next = { ...extensions }
     delete next[selected]
@@ -94,14 +85,14 @@ export function PromptTab() {
   }
 
   const handleClearAll = () => {
-    if (!confirm('确定要清除所有 Agent 的 Project Extension 吗？此操作不可撤销。')) return
+    if (!confirm(t('settings.prompt.clearAllConfirm'))) return
     clearAllProjectExtensionsClient()
     setExtensions({})
     setDraft({ appendInstructions: '', outputPreferences: '' })
   }
 
   if (!loaded) {
-    return <div style={{ padding: '24px', color: '#64748b' }}>Loading...</div>
+    return <div style={{ padding: '24px', color: '#64748b' }}>{t('common.loading')}</div>
   }
 
   const activeCount = Object.keys(extensions).length
@@ -140,7 +131,7 @@ export function PromptTab() {
             borderRadius: '10px',
             fontSize: '11px',
           }}>
-            {activeCount} active
+            {activeCount} {t('settings.prompt.activeCount')}
           </span>
         </div>
         {AGENTS.map(agent => {
@@ -174,11 +165,11 @@ export function PromptTab() {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {hasExt && <span style={{ color: isSelected ? 'white' : '#22c55e', fontSize: '10px' }}>●</span>}
-                <span>{agent.label}</span>
+                <span>{agent.name}</span>
               </div>
               {!isSelected && (
                 <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                  {agent.desc}
+                  {t(agent.descKey)}
                 </div>
               )}
             </button>
@@ -201,7 +192,7 @@ export function PromptTab() {
             fontWeight: 600,
           }}
         >
-          清除所有扩展
+          {t('settings.prompt.clearAll')}
         </button>
       </aside>
 
@@ -219,7 +210,7 @@ export function PromptTab() {
             {selected} <span style={{ color: '#6366f1', fontSize: '14px', fontWeight: 500 }}>— Project Extension</span>
           </h3>
           <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b' }}>
-            {AGENTS.find(a => a.name === selected)?.desc}
+            {t(AGENTS.find(a => a.name === selected)?.descKey || 'settings.prompt.agentReader')}
           </p>
         </header>
 
@@ -236,25 +227,25 @@ export function PromptTab() {
           }}
         >
           <div style={{ fontWeight: 600, marginBottom: '4px', color: '#0f1729' }}>
-            🔒 三层 Prompt 架构
+            🔒 {t('settings.prompt.architectureTitle')}
           </div>
           <div>
-            <strong>System</strong>（只读） → <strong>Project Extension</strong>（本页配置） → <strong>User Extension</strong>（单次调用）
+            <strong>System</strong> ({t('settings.general.readonly')}) → <strong>Project Extension</strong> ({t('settings.prompt.thisPage')}) → <strong>User Extension</strong> ({t('settings.general.oneshot')})
           </div>
           <div style={{ marginTop: '4px', color: '#64748b' }}>
-            Project Extension 会追加在 System prompt 末尾，不会覆盖内置规则。所有该 Agent 的 LLM 调用都会自动注入。
+            {t('settings.prompt.architectureHint')}
           </div>
         </div>
 
         {/* Append Instructions */}
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#0f1729', marginBottom: '6px' }}>
-            Append Instructions
+            {t('settings.prompt.appendInstructions')}
           </label>
           <textarea
             value={draft.appendInstructions || ''}
             onChange={e => handleDraftChange('appendInstructions', e.target.value)}
-            placeholder="追加在 System prompt 末尾的规则。例如：&#10;- 重点抓 datasets 字段（本项目关注数据集对比）&#10;- limitations 至少 3 条&#10;- 引用 GB/T 7714 格式"
+            placeholder={t('settings.prompt.appendPlaceholder')}
             rows={6}
             style={{
               ...inputStyle,
@@ -267,19 +258,19 @@ export function PromptTab() {
             }}
           />
           <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
-            附加规则（追加在 System prompt 末尾，不会替换内置规则）
+            {t('settings.prompt.appendHint')}
           </p>
         </div>
 
         {/* Output Preferences */}
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#0f1729', marginBottom: '6px' }}>
-            Output Preferences
+            {t('settings.prompt.outputPreferences')}
           </label>
           <textarea
             value={draft.outputPreferences || ''}
             onChange={e => handleDraftChange('outputPreferences', e.target.value)}
-            placeholder="输出偏好（影响所有 LLM 调用）。例如：&#10;- 使用被动语态&#10;- 避免第一人称&#10;- 中文输出，术语保留英文原文"
+            placeholder={t('settings.prompt.outputPlaceholder')}
             rows={4}
             style={{
               ...inputStyle,
@@ -292,14 +283,14 @@ export function PromptTab() {
             }}
           />
           <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
-            通用输出偏好（语言、风格、术语等）
+            {t('settings.prompt.outputHint')}
           </p>
         </div>
 
         {/* 按钮组 */}
         <div style={{ display: 'flex', gap: '12px', marginTop: '28px', flexWrap: 'wrap' }}>
           <button onClick={handleSave} style={btnPrimary}>
-            💾 保存扩展
+            {t('settings.prompt.save')}
           </button>
           <button
             onClick={handleClearAgent}
@@ -310,7 +301,7 @@ export function PromptTab() {
               cursor: extensions[selected] ? 'pointer' : 'not-allowed',
             }}
           >
-            🗑 清除该 Agent
+            {t('settings.prompt.clearAgent')}
           </button>
         </div>
 
@@ -326,13 +317,13 @@ export function PromptTab() {
               color: '#1e40af',
             }}
           >
-            ✅ {selected} 的 Project Extension 已保存，下次该 Agent 调用时生效
+            ✅ {t('settings.prompt.savedDetail', { agent: selected })}
           </div>
         )}
 
         {extensions[selected]?.updatedAt && (
           <div style={{ marginTop: '16px', fontSize: '11px', color: '#94a3b8' }}>
-            最后更新：{new Date(extensions[selected]!.updatedAt!).toLocaleString('zh-CN')}
+            {t('settings.general.lastUpdated')}: {new Date(extensions[selected]!.updatedAt!).toLocaleString('zh-CN')}
           </div>
         )}
       </section>
