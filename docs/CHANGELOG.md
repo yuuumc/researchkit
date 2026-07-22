@@ -5,6 +5,95 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ---
 
+## [v2.3.0] — 2026-07-22 — i18n 完整国际化
+
+> **类型**:Minor Release — 5 天 i18n 计划（D36-D40）落地，新增 Application Language / Output Language / Auto Translate 三层语言分离架构
+
+### Added
+
+#### 4 层语言分离架构
+
+- **Application Language**（UI 文案）：支持 `auto / zh-CN / en-US / ja-JP`，cookie 注入 + 客户端 hydration 切换
+- **Output Language**（KC 输出）：支持 `auto`（跟随源语言）或显式 `zh-CN / en-US / ja-JP`
+- **Auto Translate**（开/关）：开启时 Explain / Chat / Compare 三个 Agent 模块的回复跟随 Application Language
+- **Prompt Language**（锁死 `en-US`）：LLM 内部 prompt 永远英文（效果最佳），UI 显示 `🔒 English ✓ Recommended`
+
+技术栈：自建零依赖 `t(key, params, locale)` 系统（< 1KB），6 个 namespace（`home / agent / common / settings / preset / export`）。
+
+#### D36 — i18n 基础设施
+
+- `lib/i18n.ts` — 核心 `t()` 函数，支持 `{param}` 占位符替换
+- `lib/locale-types.ts` — `AppLocale` / `ResolvedLocale` 类型
+- `components/I18nProvider.tsx` — `useI18n()` hook 返回 `{ appLocale, resolvedLocale, t, setLocale }`
+- SSR 行为：服务端渲染 `'auto'` → `'en-US'`，hydration 后切换
+
+#### D37 — Settings UI 全面国际化（PR #30）
+
+- 5 个 Settings Tab 标签走 i18n
+- `components/settings/tabs/GeneralTab.tsx` — 4 层语言设置选择器（Application / Output / Prompt / Auto Translate）
+- `ProviderTab / PromptTab / CostTab / AboutTab` — 全部本地化
+- 24 个 prompt key + 16 个 cost key + 20 个 about key 新增到 `locales/{zh-CN,en-US}/settings.json`
+
+#### D38 — 主页 + Agent 模块国际化（PR #31）
+
+- `app/page.tsx` — 全部 UI 文案 i18n 化（`home.*` namespace）
+- `lib/ui-labels.ts` — 新增 `getKcFieldLabels(appLocale)`，KC 字段标签跟随 Application Language（而非 Output Language）
+- 4 个 Agent 组件 i18n 化：
+  - `AgentTimeline.tsx`
+  - `SmartSuggestionBanner.tsx` — `fmtRelativeTime(ts, t)` 接收 t 函数
+  - `ChatWithKC.tsx` — `generateSuggestions(kc, t)` 重构为接收 t 函数
+  - `ExplainKC.tsx` — `AUDIENCE_OPTIONS` 改为 `localeKey` + `audienceLabel()` 辅助函数
+- `CompareTab.tsx` + `PluginPanel.tsx` 全部 i18n 化
+- 扩展 `locales/{zh-CN,en-US}/home.json` (+95 行) + `agent.json` (+179 行)
+
+#### D39 — Auto Translate + 智能检测（PR #32）
+
+**前端**：
+- `lib/detect-language.ts` — `detectInputLanguage()` 复用 `lib/locale.ts` 的 `detectLocale`（Unicode 范围统计），返回 `{ detected, sampleSize, counts, confidence }`
+- `getLanguageSuggestion()` — 智能建议触发条件：
+  - `outputLocale === 'auto'`（用户未显式选 Output）
+  - `detected !== resolveAppLocale(appLocale)`（源语言与 UI 语言不同）
+  - `detected !== 'other'`（无法判断时不建议）
+- `components/LanguageDetectBanner.tsx` — 显示检测结果 + 详情折叠 + 一键切换建议
+  - 防抖 300ms，文本 < 20 字符不显示，"忽略" 按本次会话记忆
+- `app/page.tsx` 集成 Banner（text/url/batch 模式）
+
+**后端 Auto Translate**：
+- `lib/server-user-preferences.ts` 新增 `buildAutoTranslateDirective()`
+  - `autoTranslate=false` → 返回空字符串（原行为）
+  - `autoTranslate=true` → 追加 `Please respond in {appLocale}.` 指令到 system prompt 末尾
+- 3 个路由追加 directive：
+  - `app/api/research/explain-kc/route.ts`
+  - `app/api/research/chat-kc/route.ts`
+  - `app/api/research/compare-papers/route.ts`
+
+#### D40 — 回归测试 i18n 扩展
+
+- `scripts/regression-test.ts` 扩展：
+  - 每篇 fixture 跑两次（`appLocale = outputLocale = zh-CN / en-US`）
+  - 通过 cookie 注入 `researchkit-user-preferences`（base64 JSON）
+  - `validateKc` 校验按 `expectedOutputLocale` 而非 `fixture.locale`（因为 KC 语言现在由 outputLocale 决定）
+  - 报告新增 `AppLocale` 列 + `zh-CN Success` / `en-US Success` 分项汇总
+  - 环境变量 `RESEARCHKIT_TARGET_LOCALES` 支持单 locale 调试（如 `RESEARCHKIT_TARGET_LOCALES=zh-CN`）
+
+### Verification
+
+- `tsc --noEmit`：0 errors
+- HTTP 冒烟测试（D40-3）：4 种 locale × 2 个页面（Home / Settings）= 8 个 case，全部 HTTP 200 + 0 未翻译 i18n key 暴露
+- 完整 LLM 回归测试（10 fixture × 2 locale = 20 case）：需用户自行运行 `npm run test:regression`（需 `RESEARCHKIT_API_KEY` 环境变量）
+
+### Known Limitations
+
+- `ja-JP` locale 在 SSR 时 fallback 到 `en-US`（无 `locales/ja-JP/` 目录，运行时 fallback）
+- 完整 LLM 流程测试（边界 case：中+英 / 英+中 / AutoTranslate 开关）需用户提供 LLM API Key 自行运行
+
+### Plan Reference
+
+- `docs/v2.3-i18n-plan.md` — 5 天实施计划（D36-D40）
+- PR #30 (D37) / PR #31 (D38) / PR #32 (D39) / 本 PR (D40)
+
+---
+
 ## [v2.2.6] — 2026-07-21 — Stability Hotfix
 
 > **类型**:Stability Hotfix — 修复 v2.2.5 发布后发现的 2 个真实小问题,无新功能
