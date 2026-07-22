@@ -647,6 +647,9 @@ function OnchainRecordItem({ record }: { record: OnchainRecord }) {
             <code style={{ fontSize: '9px', fontFamily: 'monospace' }}>
               {shortAddress(RESEARCHKIT_REGISTRY_CONTRACT)}
             </code>
+            <span style={{ fontSize: '9px', color: '#94a3b8', marginLeft: '4px' }}>
+              (virtual — mock mode, not deployed)
+            </span>
           </div>
           <div>
             <strong>Mode</strong>{' '}

@@ -174,16 +174,17 @@ export function GeneralTab() {
       <div
         style={{
           padding: '16px 20px',
-          background: '#fffbeb',
+          background: '#f8fafc',
           borderRadius: '12px',
           marginBottom: '28px',
-          border: '1px solid #fde68a',
+          border: '1px solid #e2e8f0',
+          borderLeft: '2px solid #3b82f6',
         }}
       >
-        <div style={{ fontWeight: 700, fontSize: '14px', color: '#92400e', marginBottom: '4px' }}>
+        <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f1729', marginBottom: '4px' }}>
           🌍 {t('settings.general.languageTitle')}
         </div>
-        <div style={{ fontSize: '12px', color: '#a16207', marginBottom: '16px', lineHeight: 1.5 }}>
+        <div style={{ fontSize: '12px', color: '#475569', marginBottom: '16px', lineHeight: 1.5 }}>
           {t('settings.general.languageHint')}
         </div>
 
