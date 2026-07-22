@@ -41,6 +41,7 @@ Thumbs.db
 # ResearchKit 运行时产物（不应进仓库）
 .researchkit-memory.json
 .researchkit-output/
+.researchkit-data/
 
 # TypeScript 增量编译缓存
 *.tsbuildinfo

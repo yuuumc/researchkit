@@ -25,13 +25,19 @@ export async function runPlanner(
   input: CoordinatorInput,
   sourceLocale: Locale,
   targetLocale: Locale,
-  languageDirective: string
+  languageDirective: string,
+  onAgentToken?: (agent: string, delta: string) => void
 ): Promise<{ plan: Plan; durationMs: number }> {
   const plannerTask = createMessage('task', 'Coordinator', 'Planner', {
     content: input.content,
     source_locale: sourceLocale,
     target_locale: targetLocale,
     language_directive: languageDirective,
+    // D28 — 透传 onAgentToken callback 到 PlannerAgent.handleMessage
+    // handleMessage 内部检测此字段，若有则改用 provider.chatStream()
+    on_agent_token: onAgentToken
+      ? (delta: string) => onAgentToken('Planner', delta)
+      : undefined,
   })
 
   const start = Date.now()
