@@ -1165,6 +1165,13 @@ On the WMT 2014 English-to-French translation task, our model establishes a new 
               onChange={(e) => setInput(e.target.value)}
               placeholder={t('home.placeholders.textLong')}
               style={inputStyle}
+              // Enter 直接提交（Shift+Enter 换行）— D-fix
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  ;(e.currentTarget.closest('form') as HTMLFormElement | null)?.requestSubmit()
+                }
+              }}
               onFocus={(e) => (e.target.style.borderColor = '#6366f1')}
               onBlur={(e) => (e.target.style.borderColor = '#e2e8f2')}
             />

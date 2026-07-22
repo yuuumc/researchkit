@@ -70,7 +70,7 @@ export function LiveThoughts({ thoughts, active }: LiveThoughtsProps) {
       style={{
         position: 'fixed',
         bottom: '20px',
-        right: '20px',
+        left: '20px',
         width: '400px',
         maxHeight: collapsed ? '48px' : '55vh',
         background: 'rgba(15, 23, 42, 0.96)',
