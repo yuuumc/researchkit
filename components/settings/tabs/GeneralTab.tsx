@@ -1,19 +1,19 @@
 'use client'
 
 /**
- * GeneralTab — 通用设置（D5 实现）
+ * GeneralTab — 通用设置(D5 实现 + D37 i18n 重构)
  *
- * 功能：
- * - Prompt Preset：5 角色切换（Academic / Beginner / Developer / Researcher / Product Manager）
- *   影响：所有 Agent 的 PromptBuilder 会注入对应 persona 指令
- * - Output Language：'auto'（跟随源语言）或强制 zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES
- *   影响：所有 Agent 的 targetLocale（用户偏好 'auto' 时跟随源语言，否则强制覆盖）
+ * D37 新结构:4 层语言 Settings(按 v2.3-i18n-plan.md)
+ * - Application Language  → UI / Help / Tooltip(下拉:Auto / 中文 / English / 日本語)
+ * - Output Language       → KC 最终输出(下拉:Auto / 中文 / English / 8 种语言)
+ * - Prompt Language       → 锁死 English(只读,显示推荐标记)
+ * - Auto Translate        → Explain/Chat 翻译开关(checkbox)
  *
- * 存储：localStorage + cookie（让 server side 通过 next/headers 读取）
+ * 保留:D5 的 Preset 选择 + 状态条 + 架构说明
  */
 
 import { useState, useEffect } from 'react'
-import { PRESET_LIST, DEFAULT_PRESET, type PresetId } from '@/config/presets'
+import { PRESET_LIST, DEFAULT_PRESET, type PresetId, getPresetTemplate } from '@/config/presets'
 import type { Locale } from '@/lib/locale'
 import {
   getUserPreferencesClient,
@@ -22,20 +22,29 @@ import {
   DEFAULT_USER_PREFERENCES,
   type UserPreferences,
 } from '@/lib/user-preferences'
+import { useI18n } from '@/components/I18nProvider'
+import { useDetectBrowserLocale } from '@/components/I18nProvider'
+import { APP_LOCALE_DISPLAY, type AppLocale } from '@/lib/locale-types'
 import { btnPrimary, btnSecondary, inputStyle } from '@/lib/ui-styles'
 
-const LOCALE_OPTIONS: Array<{ value: 'auto' | Locale; label: string; hint: string }> = [
-  { value: 'auto', label: 'Auto — 跟随源语言', hint: '默认行为：检测输入语言并跟随（v2.0 兼容）' },
-  { value: 'zh-CN', label: '中文 (简体)', hint: '强制中文输出（即使输入是英文）' },
-  { value: 'en-US', label: 'English (US)', hint: '强制英文输出' },
-  { value: 'ja-JP', label: '日本語', hint: '强制日文输出' },
-  { value: 'ko-KR', label: '한국어', hint: '强制韩文输出' },
-  { value: 'fr-FR', label: 'Français', hint: '强制法文输出' },
-  { value: 'de-DE', label: 'Deutsch', hint: '强制德文输出' },
-  { value: 'es-ES', label: 'Español', hint: '强制西班牙文输出' },
+// Output Language 选项(8 种 + Auto)— 保留 D5 的原选项
+const LOCALE_OPTIONS: Array<{ value: 'auto' | Locale; label: string; hintKey: string }> = [
+  { value: 'auto', label: 'Auto', hintKey: 'settings.general.outputLanguageAutoHint' },
+  { value: 'zh-CN', label: '中文 (简体)', hintKey: 'settings.general.outputLanguageZhHint' },
+  { value: 'en-US', label: 'English (US)', hintKey: 'settings.general.outputLanguageEnHint' },
+  { value: 'ja-JP', label: '日本語', hintKey: 'settings.general.outputLanguageJaHint' },
+  { value: 'ko-KR', label: '한국어', hintKey: 'settings.general.outputLanguageKoHint' },
+  { value: 'fr-FR', label: 'Français', hintKey: 'settings.general.outputLanguageFrHint' },
+  { value: 'de-DE', label: 'Deutsch', hintKey: 'settings.general.outputLanguageDeHint' },
+  { value: 'es-ES', label: 'Español', hintKey: 'settings.general.outputLanguageEsHint' },
 ]
 
+// Application Language 选项
+const APP_LOCALE_OPTIONS: AppLocale[] = ['auto', 'zh-CN', 'en-US', 'ja-JP']
+
 export function GeneralTab() {
+  const { t, appLocale, setLocale, resolvedLocale } = useI18n()
+  const browserLocale = useDetectBrowserLocale()
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_USER_PREFERENCES)
   const [loaded, setLoaded] = useState(false)
   const [usingDefault, setUsingDefault] = useState(true)
@@ -44,9 +53,11 @@ export function GeneralTab() {
   useEffect(() => {
     const saved = getUserPreferencesClient()
     setPrefs(saved)
-    // 判断是否使用默认值（preset=academic && outputLocale=auto）
     setUsingDefault(
-      saved.preset === DEFAULT_PRESET && saved.outputLocale === 'auto'
+      saved.preset === DEFAULT_PRESET &&
+      saved.outputLocale === 'auto' &&
+      saved.appLocale === 'auto' &&
+      saved.autoTranslate === true
     )
     setLoaded(true)
   }, [])
@@ -56,33 +67,51 @@ export function GeneralTab() {
     setSaved(false)
   }
 
-  const handleLocaleChange = (locale: 'auto' | Locale) => {
+  const handleOutputLocaleChange = (locale: 'auto' | Locale) => {
     setPrefs(prev => ({ ...prev, outputLocale: locale }))
+    setSaved(false)
+  }
+
+  const handleAppLocaleChange = (locale: AppLocale) => {
+    setPrefs(prev => ({ ...prev, appLocale: locale }))
+    setLocale(locale) // 立即切换 UI 语言
+    setSaved(false)
+  }
+
+  const handleAutoTranslateChange = (enabled: boolean) => {
+    setPrefs(prev => ({ ...prev, autoTranslate: enabled }))
     setSaved(false)
   }
 
   const handleSave = () => {
     saveUserPreferencesClient(prefs)
     setUsingDefault(
-      prefs.preset === DEFAULT_PRESET && prefs.outputLocale === 'auto'
+      prefs.preset === DEFAULT_PRESET &&
+      prefs.outputLocale === 'auto' &&
+      prefs.appLocale === 'auto' &&
+      prefs.autoTranslate === true
     )
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
 
   const handleReset = () => {
-    if (!confirm('确定要重置为默认设置吗？Preset=Academic，Output Language=Auto。')) return
+    if (!confirm(t('settings.general.resetConfirm'))) return
     clearUserPreferencesClient()
     setPrefs(DEFAULT_USER_PREFERENCES)
+    setLocale('auto') // 重置 Application Language 到 auto
     setUsingDefault(true)
     setSaved(false)
   }
 
   if (!loaded) {
-    return <div style={{ padding: '24px', color: '#64748b' }}>Loading...</div>
+    return <div style={{ padding: '24px', color: '#64748b' }}>{t('common.loading')}</div>
   }
 
-  const selectedPreset = PRESET_LIST.find(p => p.id === prefs.preset) || PRESET_LIST[0]
+  const selectedPreset = getPresetTemplate(prefs.preset)
+  // Preset label + description 走 i18n(根据当前 appLocale)
+  const presetLabel = t(`preset.${prefs.preset}.label`)
+  const presetDescription = t(`preset.${prefs.preset}.description`)
 
   return (
     <div
@@ -107,13 +136,13 @@ export function GeneralTab() {
       >
         {usingDefault ? (
           <>
-            ⚙️ <strong>当前使用默认设置</strong>
-            （Preset=Academic，Output Language=Auto 跟随源语言）
+            ⚙️ <strong>{t('settings.general.usingDefaultStatus')}</strong>
+            {t('settings.general.usingDefault')}
           </>
         ) : (
           <>
-            ✅ <strong>当前使用自定义偏好</strong>
-            （Preset={selectedPreset.label}，Output Language={prefs.outputLocale}）
+            ✅ <strong>{t('settings.general.usingCustomStatus')}</strong>
+            {t('settings.general.usingCustom', { preset: presetLabel, outputLocale: prefs.outputLocale })}
           </>
         )}
       </div>
@@ -131,37 +160,129 @@ export function GeneralTab() {
         }}
       >
         <div style={{ fontWeight: 600, marginBottom: '6px', color: '#0f1729' }}>
-          🎭 Prompt 三层架构 + 角色注入
+          🎭 {t('settings.general.promptArchitecture')}
         </div>
         <div>
-          <strong>System</strong>（只读内置） → <strong>Preset Persona</strong>（本页选择的角色） → <strong>Project</strong>（Prompt Tab） → <strong>User</strong>（单次扩展）
+          <strong>System</strong> ({t('settings.general.readonly')}) → <strong>Preset Persona</strong> ({t('settings.general.presetPersona')}) → <strong>Project</strong> ({t('settings.general.promptTab')}) → <strong>User</strong> ({t('settings.general.oneshot')})
         </div>
         <div style={{ marginTop: '4px', color: '#64748b' }}>
-          Preset 会注入到所有 Agent 的 prompt 中，影响 LLM 视角和输出风格；Output Language 会强制覆盖最终输出语言。
+          {t('settings.general.presetHint')}
         </div>
       </div>
 
-      {/* Preset 选择 */}
-      <Field label="Prompt Preset" hint="选择生成知识卡时 LLM 使用的角色视角">
+      {/* === 语言区块(D37 新增)— 4 层语言 Settings === */}
+      <div
+        style={{
+          padding: '16px 20px',
+          background: '#fffbeb',
+          borderRadius: '12px',
+          marginBottom: '28px',
+          border: '1px solid #fde68a',
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: '14px', color: '#92400e', marginBottom: '4px' }}>
+          🌍 {t('settings.general.languageTitle')}
+        </div>
+        <div style={{ fontSize: '12px', color: '#a16207', marginBottom: '16px', lineHeight: 1.5 }}>
+          {t('settings.general.languageHint')}
+        </div>
+
+        {/* Application Language */}
+        <Field
+          label={t('settings.general.appLanguage')}
+          hint={t('settings.general.appLanguageHint') + (appLocale === 'auto' && browserLocale ? ` (Detected: ${browserLocale})` : '')}
+        >
+          <select
+            value={appLocale}
+            onChange={e => handleAppLocaleChange(e.target.value as AppLocale)}
+            style={{ ...inputStyle, minHeight: 'auto', padding: '10px 12px', cursor: 'pointer' }}
+          >
+            {APP_LOCALE_OPTIONS.map(locale => (
+              <option key={locale} value={locale}>
+                {APP_LOCALE_DISPLAY[locale].flag} {APP_LOCALE_DISPLAY[locale].label}
+                {locale === 'auto' && browserLocale ? ` (→ ${browserLocale})` : ''}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        {/* Output Language */}
+        <Field
+          label={t('settings.general.outputLanguage')}
+          hint={t('settings.general.outputLanguageHint')}
+        >
+          <select
+            value={prefs.outputLocale}
+            onChange={e => handleOutputLocaleChange(e.target.value as 'auto' | Locale)}
+            style={{ ...inputStyle, minHeight: 'auto', padding: '10px 12px', cursor: 'pointer' }}
+          >
+            {LOCALE_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b' }}>
+            {t(opt_hint_key(prefs.outputLocale, LOCALE_OPTIONS))}
+          </p>
+        </Field>
+
+        {/* Prompt Language(只读) */}
+        <Field
+          label={t('settings.general.promptLanguage')}
+          hint={t('settings.general.promptLanguageHint')}
+        >
+          <div
+            style={{
+              padding: '10px 12px',
+              background: '#f1f5f9',
+              borderRadius: '8px',
+              fontSize: '13px',
+              color: '#0f1729',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <span style={{ fontSize: '16px' }}>🔒</span>
+            <span>{t('settings.general.promptLanguageLocked')}</span>
+          </div>
+        </Field>
+
+        {/* Auto Translate */}
+        <Field
+          label={t('settings.general.autoTranslate')}
+          hint={t('settings.general.autoTranslateHint')}
+        >
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+            <input
+              type="checkbox"
+              checked={prefs.autoTranslate}
+              onChange={e => handleAutoTranslateChange(e.target.checked)}
+              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            <span>{prefs.autoTranslate ? t('common.yes') : t('common.no')}</span>
+          </label>
+        </Field>
+      </div>
+
+      {/* === Preset 选择(D5 保留)== */}
+      <Field label={t('settings.general.presetTitle')} hint={t('settings.general.presetHint')}>
         <select
           value={prefs.preset}
           onChange={e => handlePresetChange(e.target.value as PresetId)}
-          style={{
-            ...inputStyle,
-            minHeight: 'auto',
-            padding: '10px 12px',
-            cursor: 'pointer',
-          }}
+          style={{ ...inputStyle, minHeight: 'auto', padding: '10px 12px', cursor: 'pointer' }}
         >
           {PRESET_LIST.map(preset => (
             <option key={preset.id} value={preset.id}>
-              {preset.icon} {preset.label} — {preset.description}
+              {preset.icon} {t(`preset.${preset.id}.label`)} — {t(`preset.${preset.id}.description`)}
             </option>
           ))}
         </select>
       </Field>
 
-      {/* 选中 preset 详情 */}
+      {/* 选中 preset 详情(走 i18n) */}
       <div
         style={{
           marginTop: '-8px',
@@ -176,7 +297,7 @@ export function GeneralTab() {
         }}
       >
         <div style={{ fontWeight: 600, marginBottom: '6px' }}>
-          {selectedPreset.icon} {selectedPreset.label} Persona
+          {selectedPreset.icon} {t('settings.general.personaPreview', { label: presetLabel })}
         </div>
         <pre
           style={{
@@ -192,33 +313,10 @@ export function GeneralTab() {
         </pre>
       </div>
 
-      {/* Output Language */}
-      <Field label="Output Language" hint="所有 Agent 输出知识卡时使用的语言">
-        <select
-          value={prefs.outputLocale}
-          onChange={e => handleLocaleChange(e.target.value as 'auto' | Locale)}
-          style={{
-            ...inputStyle,
-            minHeight: 'auto',
-            padding: '10px 12px',
-            cursor: 'pointer',
-          }}
-        >
-          {LOCALE_OPTIONS.map(opt => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b' }}>
-          {LOCALE_OPTIONS.find(o => o.value === prefs.outputLocale)?.hint}
-        </p>
-      </Field>
-
       {/* 操作按钮 */}
       <div style={{ display: 'flex', gap: '12px', marginTop: '32px', flexWrap: 'wrap' }}>
         <button onClick={handleSave} style={btnPrimary}>
-          💾 保存偏好
+          💾 {t('settings.general.save')}
         </button>
         {!usingDefault && (
           <button
@@ -229,7 +327,7 @@ export function GeneralTab() {
               background: '#fee2e2',
             }}
           >
-            🗑 重置为默认
+            🗑 {t('settings.general.resetToDefault')}
           </button>
         )}
       </div>
@@ -247,14 +345,14 @@ export function GeneralTab() {
             color: '#1e40af',
           }}
         >
-          ✅ 偏好已保存，下次生成知识卡时生效
+          ✅ {t('settings.general.savedDetail')}
         </div>
       )}
 
       {/* 更新时间 */}
       {prefs.updatedAt && (
         <div style={{ marginTop: '16px', fontSize: '11px', color: '#94a3b8' }}>
-          最后更新：{new Date(prefs.updatedAt).toLocaleString('zh-CN')}
+          {t('settings.general.lastUpdated')}: {new Date(prefs.updatedAt).toLocaleString(resolvedLocale)}
         </div>
       )}
     </div>
@@ -274,7 +372,7 @@ function Field({
   children: React.ReactNode
 }) {
   return (
-    <div style={{ marginBottom: '20px' }}>
+    <div style={{ marginBottom: '16px' }}>
       <label
         style={{
           display: 'block',
@@ -294,4 +392,10 @@ function Field({
       )}
     </div>
   )
+}
+
+// 辅助:根据 outputLocale 值返回对应的 hint key
+function opt_hint_key(value: 'auto' | Locale, options: Array<{ value: 'auto' | Locale; hintKey: string }>): string {
+  const opt = options.find(o => o.value === value)
+  return opt?.hintKey || 'settings.general.outputLanguageAutoHint'
 }

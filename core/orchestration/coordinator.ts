@@ -61,6 +61,16 @@ export interface CoordinatorInput {
    * 触发时机：每个关键阶段开始时
    */
   onStage?: (stage: CoordinatorStage) => void
+  /**
+   * D28 — 可选：Agent token 流式回调（用于 SSE 实时推送 LLM token 给前端）
+   *
+   * 触发时机：Planner / Reflection / Replan 三个 text-mode Agent 收到每个 token delta 时
+   * （JSON-mode Agent 如 Reader / Analyzer 不流式，输出无法实时渲染）
+   *
+   * @param agent Agent 名（'Planner' / 'Reflection' / 'Replan'）
+   * @param delta token delta（如 ' {' 或 ' "rationale"')
+   */
+  onAgentToken?: (agent: string, delta: string) => void
 }
 
 export interface CoordinatorOutput {
@@ -108,6 +118,7 @@ export interface CoordinatorOutput {
 export async function coordinate(input: CoordinatorInput): Promise<CoordinatorOutput> {
   const startTime = Date.now()
   const onStage = input.onStage
+  const onAgentToken = input.onAgentToken
 
   // D6 Cost & Token Dashboard — 入口开始采集
   const collector = beginCollection()
@@ -124,7 +135,8 @@ export async function coordinate(input: CoordinatorInput): Promise<CoordinatorOu
     input,
     sourceLocale,
     targetLocale,
-    languageDirective
+    languageDirective,
+    onAgentToken
   )
   onStage?.({ id: 2, label: 'Plan Generated', detail: `complexity=${plan.complexity}, steps=${plan.steps.length}` })
 
@@ -146,7 +158,8 @@ export async function coordinate(input: CoordinatorInput): Promise<CoordinatorOu
     initialResults,
     input,
     { sourceLocale, targetLocale, languageDirective },
-    onStage
+    onStage,
+    onAgentToken
   )
 
   let execution = workflow.execution

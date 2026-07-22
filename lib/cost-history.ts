@@ -1,21 +1,24 @@
 /**
  * Cost History — D6 Cost Dashboard 持久化
  *
- * 存储：localStorage（key: 'researchkit:cost-history'）
+ * D29 升级：从 localStorage 迁移到 server-side 持久化
+ * 客户端通过 fetch /api/history/cost 间接读写 .researchkit-data/cost-history.json
  *
  * 写入方：app/page.tsx — 每次收到 SSE result 时追加一条
  * 读取方：components/settings/tabs/CostTab.tsx — Summary Cards + Per-Agent + Recent Runs
  *
  * 设计：
- * - 仅 client side（localStorage），不写 cookie（不需要 server 读取）
- * - 容量上限 50 条（FIFO，超出自动 pop 最旧）
+ * - client side：async + fetch（不再用 localStorage）
+ * - server side：fs.promises + 原子写入（tmp + rename）
+ * - 容量上限 50 条（FIFO）
  * - 字段精简：只存 Dashboard 展示需要的字段，不存完整 knowledge card
+ *
+ * 迁移说明：v2.2 之前的 localStorage 数据不会自动迁移到 server-side
  */
 
-import type { AgentUsageSummary, ChatUsage } from '@/lib/usage-collector'
+import type { AgentUsageSummary, ChatUsage } from '@/types/usage'
 
-const STORAGE_KEY = 'researchkit:cost-history'
-const MAX_RUNS = 50
+const API_URL = '/api/history/cost'
 
 export interface CostRun {
   /** 时间戳（毫秒）— 用于排序和"最近运行"表格 */
@@ -39,21 +42,18 @@ export interface CostRun {
   model?: string
 }
 
-function isBrowser(): boolean {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-}
-
 /**
  * 读取全部历史记录（按时间倒序）
+ *
+ * D29 — 改为 async + fetch /api/history/cost
  */
-export function loadCostHistory(): CostRun[] {
-  if (!isBrowser()) return []
+export async function loadCostHistory(): Promise<CostRun[]> {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed as CostRun[]
+    const res = await fetch(API_URL, { cache: 'no-store' })
+    if (!res.ok) return []
+    const data = await res.json()
+    if (!Array.isArray(data.runs)) return []
+    return data.runs as CostRun[]
   } catch (err) {
     console.warn('[cost-history] load failed:', err)
     return []
@@ -61,35 +61,37 @@ export function loadCostHistory(): CostRun[] {
 }
 
 /**
- * 追加一条记录（自动 FIFO 截断到 MAX_RUNS）
+ * 追加一条记录（自动 FIFO 截断到 MAX_RUNS=50）
+ *
+ * D29 — 改为 async + POST /api/history/cost
  */
-export function appendCostRun(run: CostRun): void {
-  if (!isBrowser()) return
+export async function appendCostRun(run: CostRun): Promise<void> {
   try {
-    const list = loadCostHistory()
-    list.unshift(run) // 最新的放最前
-    if (list.length > MAX_RUNS) list.length = MAX_RUNS
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+    await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(run),
+    })
   } catch (err) {
-    // localStorage 满或被禁用时静默失败
     console.warn('[cost-history] append failed:', err)
   }
 }
 
 /**
  * 清空全部历史记录
+ *
+ * D29 — 改为 async + DELETE /api/history/cost
  */
-export function clearCostHistory(): void {
-  if (!isBrowser()) return
+export async function clearCostHistory(): Promise<void> {
   try {
-    window.localStorage.removeItem(STORAGE_KEY)
+    await fetch(API_URL, { method: 'DELETE' })
   } catch (err) {
     console.warn('[cost-history] clear failed:', err)
   }
 }
 
 // ============================================================================
-// 聚合辅助 — CostTab 显示历史汇总用
+// 聚合辅助 — CostTab 显示历史汇总用（纯函数，不变）
 // ============================================================================
 
 export interface CostHistorySummary {
