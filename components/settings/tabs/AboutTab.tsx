@@ -52,7 +52,7 @@ export function AboutTab() {
             fontWeight: 600,
           }}
         >
-          {t('settings.about.versionBadge', { version: 'v2.3.1' })}
+          {t('settings.about.versionBadge', { version: '2.3.1' })}
         </div>
       </div>
 
