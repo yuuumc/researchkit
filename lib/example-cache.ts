@@ -33,6 +33,14 @@ import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { normalizeExampleContent, EXAMPLE_FIXTURE } from './example-content'
+// v2.3.3 hotfix：从 config 引用回放节拍常量，避免本文件硬编码导致 config 改动无效
+import {
+  EXAMPLE_REPLAY_TIME_SCALE,
+  EXAMPLE_REPLAY_MIN_EVENT_GAP_MS,
+  EXAMPLE_REPLAY_MAX_EVENT_GAP_MS,
+  EXAMPLE_REPLAY_STAGE_MIN_DWELL_MS,
+  EXAMPLE_REPLAY_TAIL_MS,
+} from '@/config/orchestration'
 
 // ============================================================================
 // 常量
@@ -322,11 +330,11 @@ export interface ReplayOptions {
 }
 
 export const DEFAULT_REPLAY_OPTIONS: ReplayOptions = {
-  timeScale: 0.15,
-  minEventGapMs: 50,
-  maxEventGapMs: 1200,
-  stageMinDwellMs: 400,
-  tailMs: 300,
+  timeScale: EXAMPLE_REPLAY_TIME_SCALE,
+  minEventGapMs: EXAMPLE_REPLAY_MIN_EVENT_GAP_MS,
+  maxEventGapMs: EXAMPLE_REPLAY_MAX_EVENT_GAP_MS,
+  stageMinDwellMs: EXAMPLE_REPLAY_STAGE_MIN_DWELL_MS,
+  tailMs: EXAMPLE_REPLAY_TAIL_MS,
 }
 
 export interface ReplaySink {
