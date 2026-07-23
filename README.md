@@ -4,26 +4,27 @@
 > chat with it, compare it, explain it, anchor it onchain.
 > Built for **OKX AI Genesis Hackathon** — ASP #6853 on [OKX.AI](https://www.okx.ai/agents/6853).
 
-![version](https://img.shields.io/badge/version-v2.3.2-blue)
+![version](https://img.shields.io/badge/version-v2.3.3-blue)
 ![status](https://img.shields.io/badge/status-live-brightgreen)
 ![i18n](https://img.shields.io/badge/i18n-zh--CN%20%2F%20en--US-orange)
 ![tests](https://img.shields.io/badge/regression-10%2F10-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 🌐 **Live demo**: https://researchkit-mu.vercel.app
-📦 **Latest release**: [v2.3.2 — 安全加固迭代](https://github.com/yuuumc/researchkit/releases/tag/v2.3.2)
+📦 **Latest release**: [v2.3.3 — 示例缓存 + 演示性回放引擎](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3)
 
-📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.3.1 Release Notes](./releases/v2.3.1-release-notes.md) · [Branching](./docs/BRANCHING.md)
+📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.3.3 Release Notes](./releases/v2.3.3-release-notes.md) · [v2.3.2 Release Notes](./releases/v2.3.2-release-notes.md) · [Branching](./docs/BRANCHING.md)
 
 ---
 
-## Quick Stats (v2.3.2)
+## Quick Stats (v2.3.3)
 
 | Metric | Value |
 |---|---|
 | Regression test pass rate | **100%** (10/10 papers × 2 locales = 20 runs, 5 langs × 5 domains) |
-| Avg tokens / Knowledge Card | 13,019 |
-| Avg cost / Knowledge Card | $0.0022 |
+| Avg tokens / Knowledge Card | 14,569 |
+| Avg cost / Knowledge Card | $0.0028 |
+| **「载入示例」缓存回放耗时** | **~10-15s**（原 30-90s live，4-5x 提速） |
 | SSE first-byte latency | < 100ms |
 | Production build (First Load JS) | 126 kB |
 | LLM providers supported | 9 (DeepSeek / OpenAI / OpenRouter / Groq / SiliconFlow / Volcano / DashScope / Hunyuan / Custom) |
@@ -57,6 +58,23 @@ Paste any paper, document, or URL → a team of 6 AI agents reads, analyzes, and
 - ⛓️ **Onchain Export (Dual Mode, D22)** — mock/real swappable via 6 interfaces (TxSigner / IpfsUploader / NonceProvider / GasEstimator / ContractCaller / WalletConnector)
 - 🧪 **Prompt Playground** — 4 presets + temperature / maxTokens / responseFormat controls
 - 🌐 **Full i18n (D36-D40)** — 4-layer language separation architecture + LanguageDetectBanner
+
+### v2.3.3 Highlights
+
+#### 性能优化 — 示例缓存 + 演示性回放引擎
+- **问题**：「载入示例」触发完整 7-stage 流水线，实测 30-90s，Vercel 60s 硬超时下极易触发 58s `Promise.race` 超时保护
+- **方案**：示例内容固定 → 预计算 + 三层缓存（进程内 Map + 仓库 fixture + 运行时 fs）+ 演示性回放引擎（按录制时间线缩放重发 stage + token 事件）
+- **结果**：「载入示例」从 30-90s 降到 **~10-15s**（4-5x 提速），cacheHit=true，输出质量零损失（缓存的就是真实 LLM 输出）
+- **Cache key 严格门控**：`sha256(normalize(content)) + providerType + model + outputLocale + preset`，仅示例内容才查缓存
+- **Hotfix**：修复 `DEFAULT_REPLAY_OPTIONS` 硬编码 `minEventGapMs=50` 导致 config hotfix 无效的 bug（678 token × 50ms = 33.9s），改为引用 config 常量（5ms）
+
+#### A1 边界防御
+- **S2 + arXiv 外部搜索**：加 `AbortSignal.timeout(8000)` 防止拖死 pipeline
+- **arXiv API**：`http://` → `https://` 协议升级
+- **Export 步骤**：`executePlan` 入口过滤重复执行
+
+#### 保留 v2.3.2 安全加固
+`maxDuration=60`、58s `Promise.race`、H4 stack trace 脱敏、`allAgentsFailed` 诊断、C1 cookie 改造全部保留，仅叠加缓存分支逻辑。
 
 ### v2.3.2 Highlights
 
@@ -478,7 +496,7 @@ researchkit/
 │   └── demo-video/                    # ≤ 90s demo MP4 files
 ├── .env.local.example
 ├── start.bat                          # Windows launcher
-├── package.json                       # v2.3.2
+├── package.json                       # v2.3.3
 └── README.md
 ```
 
@@ -493,7 +511,7 @@ researchkit/
 | Service type | A2MCP (free, 0 USDT) |
 | Endpoint | `https://researchkit-mu.vercel.app/api/research/multi-agent-stream` |
 | Network | X Layer |
-| Version | v2.3.2 (安全加固迭代, 2026-07-22) |
+| Version | v2.3.3 (示例缓存 + 演示性回放引擎, 2026-07-23) |
 | Onchain Mode | `mock (demo)` — 6 swappable interfaces stubbed, real SDK in D23/D24 roadmap |
 | Onchain OS TX | _mock_ (deterministic hash derived from KC content + wallet, never broadcast) |
 
@@ -507,7 +525,9 @@ researchkit/
 | **Minor (1.x)** | New features in existing architecture (new export, new input mode, new subsystem) |
 | **Patch (1.0.x)** | Bug fixes, prompt tuning, UI polish, quality releases |
 
-**v2.3.2** is a Patch release — security hardening based on `ResearchKit-2.3.1-审查报告.md`. Day 1: C1 Critical (API key moved out of cookie) + H1-H5 High (tool whitelist, SSRF guard, rate limit, stack trace sanitization, pluginId validation). Day 2: M2/M3/L1/L2/L3 cleanup (redirect policy, JSON truncation marker, dead code removal). See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.3.2) for full details.
+**v2.3.3** is a Patch release — performance optimization for the hackathon-critical "Load Example" button. Adds a three-layer example cache (in-process Map + repo fixture + runtime fs) + a demo replay engine that replays recorded stage/token events on a scaled timeline, dropping "Load Example" wall time from 30-90s to ~10-15s (4-5x speedup) with zero output quality loss. Includes a hotfix for `DEFAULT_REPLAY_OPTIONS` hardcoding `minEventGapMs=50` (config hotfix was not propagating). All v2.3.2 security hardening preserved. See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3) for full details.
+
+**v2.3.2** is a Patch release — security hardening based on `ResearchKit-2.3.1-审查报告.md`. Day 1: C1 Critical (API key moved out of cookie) + H1-H5 High (tool whitelist, SSRF guard, rate limit, stack trace sanitization, pluginId validation). Day 2: M2/M3/L1/L2/L3 cleanup (redirect policy, JSON truncation marker, dead code removal). See [release notes](./releases/v2.3.2-release-notes.md) for full details.
 
 **v2.3.1** is a Patch release — security hardening (API key never shown in plain, danger styling, double confirmation), Vercel deployment fixes (58s timeout guard, MAX_ITERATIONS=0 on Vercel), and plugin marketplace improvements (deduped community plugins, built-in shown as installed). See [release notes](./releases/v2.3.1-release-notes.md) for full details.
 
