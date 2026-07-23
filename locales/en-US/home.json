@@ -166,7 +166,7 @@
     }
   },
   "footer": {
-    "version": "ResearchKit OS v2.3.2",
+    "version": "ResearchKit OS v2.3.3",
     "description": "Powered by DeepSeek · AI Research Pipeline · Agent Workflow + MCP Tools + Reflection Loop · 3 Export Formats (MD / Obsidian / Knowledge Graph) · Built for OKX.AI Genesis Hackathon"
   },
   "knowledgeCard": "📖 Knowledge Card",
