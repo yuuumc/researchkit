@@ -128,3 +128,44 @@ export const PLANNER_MAX_ATTEMPTS = 3
  * 1000ms → 2000ms，避免在限流期间加重服务器负担。
  */
 export const PLANNER_BASE_DELAY_MS = 1000
+
+// ============================================================================
+// Example Cache 回放节拍（v2.3.3 / C）
+// ============================================================================
+
+/**
+ * 回放时间缩放系数：原始 run 耗时 × 此系数 = 回放耗时
+ *
+ * - 0.15 = 60s 原始 → 9s 回放（甜蜜点：demo 节奏 + LiveThoughts 仍可见）
+ * - 调大（接近 1）→ 更接近原始但 demo 偏慢
+ * - 调小（接近 0）→ 回放过快，token 流动画掉帧
+ */
+export const EXAMPLE_REPLAY_TIME_SCALE = 0.15
+
+/**
+ * 回放时任意两事件最小间隔（ms）
+ *
+ * 防止原始 run 中两个事件 t 差 < 几毫秒时回放把 SSE 推爆；
+ * 配合 30ms 的 TOKEN_FLUSH_INTERVAL_MS 保证前端能正常渲染。
+ */
+export const EXAMPLE_REPLAY_MIN_EVENT_GAP_MS = 50
+
+/**
+ * 回放时任意两事件最大间隔（ms）
+ *
+ * 防止原始 run 中某段空闲被 1:1 还原（看起来像卡住）。
+ */
+export const EXAMPLE_REPLAY_MAX_EVENT_GAP_MS = 1200
+
+/**
+ * 回放时每个 stage 事件进入前的最小停留（ms）
+ *
+ * 保证 UI 进度面板上每阶段「可见」至少这么久。
+ * 7 阶段 × 400ms = 2.8s 最小 stage 感知时长。
+ */
+export const EXAMPLE_REPLAY_STAGE_MIN_DWELL_MS = 400
+
+/**
+ * 回放最后一个事件后等待（ms），让 UI 稳住再发 result。
+ */
+export const EXAMPLE_REPLAY_TAIL_MS = 300

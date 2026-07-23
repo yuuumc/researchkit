@@ -42,6 +42,7 @@ Thumbs.db
 .researchkit-memory.json
 .researchkit-output/
 .researchkit-data/
+.researchkit-cache/
 
 # 回归测试报告产物（测试时生成，不应进仓库）
 scripts/reports/*.json
