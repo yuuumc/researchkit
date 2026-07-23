@@ -147,8 +147,11 @@ export const EXAMPLE_REPLAY_TIME_SCALE = 0.15
  *
  * 防止原始 run 中两个事件 t 差 < 几毫秒时回放把 SSE 推爆；
  * 配合 30ms 的 TOKEN_FLUSH_INTERVAL_MS 保证前端能正常渲染。
+ *
+ * v2.3.3 修复：从 50 改为 5。token 流密集时（678 个 token）每个 50ms 会把回放拖到 33s。
+ * 5ms × 678 = 3.4s，配合 30ms flush buffer 实际 SSE 事件数仍受控。
  */
-export const EXAMPLE_REPLAY_MIN_EVENT_GAP_MS = 50
+export const EXAMPLE_REPLAY_MIN_EVENT_GAP_MS = 5
 
 /**
  * 回放时任意两事件最大间隔（ms）
