@@ -19,6 +19,7 @@ import { getKcFieldLabels } from '@/lib/ui-labels'
 import { appendCostRun } from '@/lib/cost-history'
 import { appendKCToHistory, loadKCHistory } from '@/lib/kc-history'
 import { computeSmartSuggestion as computeSmartSuggestionHeuristic, type SmartSuggestion } from '@/lib/smart-suggestion'
+import { EXAMPLE_FIXTURE } from '@/lib/example-content'  // v2.3.3 (C): 共享「载入示例」固定输入（与缓存键单一事实源）
 import {
   getUserPreferencesClient,
   saveUserPreferencesClient,
@@ -380,7 +381,9 @@ export default function Home() {
       // 只在确实生成了知识卡 + 有 token 统计时记录（避免失败请求污染历史）
       const md = finalData.metadata || {}
       const perAgent = Array.isArray(md.per_agent_usage) ? md.per_agent_usage : []
-      if (md.total_tokens > 0 && perAgent.length > 0 && finalData.knowledge_card) {
+      // v2.3.3 (C): 缓存回放不消耗真实 token/cost，跳过 cost history 写入避免重复计数
+      const isExampleReplay = !!(md as any).example_replay?.cacheHit
+      if (md.total_tokens > 0 && perAgent.length > 0 && finalData.knowledge_card && !isExampleReplay) {
         try {
           await appendCostRun({
             timestamp: Date.now(),
@@ -593,11 +596,8 @@ export default function Home() {
 
   const loadExample = () => {
     setMode('text')
-    setInput(`The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.
-
-Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU.
-
-On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.`)
+    // v2.3.3 (C): 从 lib/example-content 共享常量取，与缓存 hash / precompute 脚本保持单一事实源
+    setInput(EXAMPLE_FIXTURE.content)
   }
 
   return (

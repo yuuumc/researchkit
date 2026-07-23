@@ -43,12 +43,16 @@ export interface RecommendationOutput {
 
 /**
  * Semantic Scholar API — 用 citation count 检索
+ *
+ * v2.3.3 (A1) — 加 8s AbortSignal.timeout，防止 S2 偶发慢响应拖死 stage 3
+ * 超时 → catch 返回空数组，不影响整体
  */
 async function searchSemanticScholar(query: string, limit = 3): Promise<RecommendedResource[]> {
   try {
     const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=title,url,abstract,year,citationCount`
     const response = await fetch(url, {
       headers: { 'User-Agent': 'ResearchKit/1.0' },
+      signal: AbortSignal.timeout(8_000),
     })
 
     if (!response.ok) return []
@@ -71,11 +75,20 @@ async function searchSemanticScholar(query: string, limit = 3): Promise<Recommen
 
 /**
  * arXiv API
+ *
+ * v2.3.3 (A1):
+ *  - 改 http → https（避免某些环境对明文 HTTP 的限制；arXiv 官方支持 https）
+ *  - 加 8s AbortSignal.timeout，防止 arXiv 偶发慢响应拖死 stage 3
+ *  - 加 User-Agent（部分 arXiv 镜像对裸 UA 限流）
+ * 超时 → catch 返回空数组，不影响整体
  */
 async function searchArxiv(query: string, limit = 3): Promise<RecommendedResource[]> {
   try {
-    const url = `http://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}`
-    const response = await fetch(url)
+    const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}`
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'ResearchKit/1.0' },
+      signal: AbortSignal.timeout(8_000),
+    })
     if (!response.ok) return []
 
     const xml = await response.text()

@@ -9,6 +9,16 @@
  *
  * 前端用 EventSource 订阅，进度面板与真实后端执行严格同步；
  * Live Thoughts 浮窗组件接收 agent_token 事件，逐 token 渲染 AI 思考过程
+ *
+ * v2.3.3 (C) —「载入示例」路径优化：
+ *  - 若请求内容命中 EXAMPLE_FIXTURE 且 provider/locale/preset 与缓存一致：
+ *    走「演示性回放」分支，把录制好的 stage 时间线 + agent_token 流按节拍重发，
+ *    整体 4-7s 完成（典型原始 run 30-90s），对 UI 契约零破坏。
+ *  - 否则正常调 coordinate()。若是示例请求但缓存 miss，会同时录制 + 自填充
+ *    到内存 + .researchkit-cache/（fs 不可写时静默失败），第二次起命中回放。
+ *  - env EXAMPLE_CACHE_DISABLED=1 永远走 live 路径，便于现场对比。
+ *  - 保留 v2.3.2 安全加固：maxDuration=60 / 58s Promise.race / H4 stack trace 脱敏。
+ *    缓存命中走回放时不需要 58s 保护（回放本身 4-7s，远低于阈值）。
  */
 
 import { NextRequest } from 'next/server'
@@ -21,6 +31,22 @@ import {
   MAX_CONTENT_LENGTH,
   RATE_LIMIT_KC,
 } from '@/config/orchestration'
+// v2.3.3 (C) — 示例缓存 / 回放
+import { getUserConfigFromCookieValue, USER_CONFIG_COOKIE_KEY } from '@/lib/user-config'
+import { getServerUserPreferences } from '@/lib/server-user-preferences'
+import { detectLocale } from '@/lib/locale'
+import {
+  buildExampleCacheKey,
+  getExampleCache,
+  setExampleCache,
+  isExampleRequest,
+  createRecorder,
+  replayExample,
+  type CachedExample,
+  type ResultPayload,
+  type ReplaySink,
+} from '@/lib/example-cache'
+import { buildResultPayload } from '@/lib/result-payload'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -148,7 +174,117 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // ============================================================
+        // v2.3.3 (C) — 解析当前请求的 cache key（provider + locale + preset）
+        // 用于决定走 cache 回放还是 live 路径（仅示例内容会查 cache）
+        // ============================================================
+        const userConfigCookie = request.cookies.get(USER_CONFIG_COOKIE_KEY)?.value
+        const cookieConfig = userConfigCookie
+          ? getUserConfigFromCookieValue(userConfigCookie)
+          : null
+        const model = cookieConfig?.model
+          || (process.env.LLM_MODEL || '').trim()
+          || 'deepseek-v4-flash'
+        const envBaseUrl = (process.env.OPENAI_BASE_URL || '').toLowerCase()
+        const providerType = cookieConfig?.type
+          || (envBaseUrl.includes('deepseek') ? 'deepseek'
+            : envBaseUrl.includes('openai') ? 'openai'
+            : envBaseUrl.includes('openrouter') ? 'openrouter'
+            : envBaseUrl.includes('groq') ? 'groq'
+            : 'custom')
+        const detected = detectLocale(content)
+        const prefs = getServerUserPreferences()
+        const outputLocale = prefs.outputLocale === 'auto' ? detected : prefs.outputLocale
+        const cacheKey = buildExampleCacheKey({
+          content,
+          model,
+          providerType,
+          outputLocale,
+          preset: prefs.preset,
+        })
+        const cached = getExampleCache(cacheKey)
+        // 若是示例请求但缓存 miss，live 路径要同时录制用于自填充
+        const shouldRecord = !cached && isExampleRequest(content)
+
+        // 构造 abort-aware sleep（让 replay 在客户端断开时立即退出）
+        const abortableSleep = (ms: number): Promise<void> => {
+          if (request.signal.aborted) return Promise.resolve()
+          return new Promise<void>((resolve) => {
+            const t = setTimeout(() => {
+              request.signal.removeEventListener('abort', onAbort)
+              resolve()
+            }, ms)
+            const onAbort = () => {
+              clearTimeout(t)
+              resolve()
+            }
+            request.signal.addEventListener('abort', onAbort, { once: true })
+          })
+        }
+
         try {
+          if (cached) {
+            // ============================================================
+            // v2.3.3 (C) — 缓存命中：演示性回放（不需要 58s 保护，回放 4-7s）
+            // ============================================================
+            const sink: ReplaySink = {
+              sendStage: (s) => send('stage', s),
+              pushToken: (agent, delta) => {
+                tokenBuffer.push({ agent, delta })
+                scheduleFlush()
+              },
+              flushTokens: () => {
+                if (flushTimer !== null) {
+                  clearTimeout(flushTimer)
+                  flushTimer = null
+                }
+                flushTokenBuffer()
+              },
+              isAborted: () => request.signal.aborted,
+              sleep: abortableSleep,
+            }
+            await replayExample(cached, sink)
+            if (request.signal.aborted) return
+
+            // 发送 result（不修改原 cached.result，浅拷贝 metadata 追加回放标记）
+            const replayedMetadata = (cached.result && cached.result.metadata) || {}
+            const replayPayload: ResultPayload = {
+              ...(cached.result || {}),
+              metadata: {
+                ...replayedMetadata,
+                example_replay: {
+                  cacheHit: true,
+                  originalDurationMs: cached.originalDurationMs,
+                  cacheCreatedAt: cached.createdAt,
+                },
+              },
+            }
+            send('result', replayPayload)
+
+            // 最终阶段：Done
+            send('stage', { id: 7, label: 'Done' })
+            return
+          }
+
+          // ============================================================
+          // Live 路径（无缓存或非示例请求）
+          // 保留 v2.3.2 安全加固：58s Promise.race + allAgentsFailed 诊断
+          // 若是示例但缓存 miss → 同步录制，用于自填充
+          // ============================================================
+          const recorder = shouldRecord ? createRecorder() : null
+          const onStage = recorder
+            ? recorder.wrapOnStage((s) => send('stage', s))
+            : (s: any) => send('stage', s)
+          const onAgentToken = recorder
+            ? recorder.wrapOnAgentToken((agent: string, delta: string) => {
+                tokenBuffer.push({ agent, delta })
+                scheduleFlush()
+              })
+            : (agent: string, delta: string) => {
+                tokenBuffer.push({ agent, delta })
+                scheduleFlush()
+              }
+
           // Vercel 超时保护：58s 内未完成则主动发 error 事件
           // Vercel function 60s hard kill，留 2s 给 flush + close
           const PIPELINE_TIMEOUT_MS = 58_000
@@ -165,14 +301,8 @@ export async function POST(request: NextRequest) {
               content,
               title,
               source,
-              onStage: (stage) => {
-                send('stage', stage)
-              },
-              onAgentToken: (agent, delta) => {
-                // D28 — token 流式推送，buffer + 节流 flush
-                tokenBuffer.push({ agent, delta })
-                scheduleFlush()
-              },
+              onStage,
+              onAgentToken,
             }),
             timeoutPromise,
           ])
@@ -237,67 +367,28 @@ export async function POST(request: NextRequest) {
             return  // 不调用 controller.close()，由 finally 统一关闭，避免双重 close 抛 TypeError
           }
 
-          // 推送最终结果（与 /api/research/multi-agent 字段完全一致）
-          send('result', {
-            success: true,
-            knowledge_card: result.knowledgeCard,
-            recommendations: result.recommendations,
-            markdown: result.exports.markdown,
-            obsidian: result.exports.obsidian,
-            json: result.exports.json,
-            mindmap: result.exports.mindmap,
-            plan: result.plan,
-            execution: result.execution.map(e => ({
-              step_id: e.step.id,
-              agent: e.step.agent,
-              reason: e.step.reason,
-              parallel_group: e.step.parallel_group,
-              required: e.step.required,
-              success: e.success,
-              duration_ms: e.durationMs,
-              error: e.error,
-            })),
-            reflection: result.reflection,
-            iterations: result.iterations,
-            total_iterations: result.totalIterations,
-            tool_calls: result.toolCalls.map(tc => ({
-              id: tc.id,
-              tool: tc.tool,
-              called_by: tc.calledBy,
-              input: tc.input,
-              success: tc.result.success,
-              output: tc.result.output,
-              error: tc.result.error,
-              duration_ms: tc.result.durationMs,
-            })),
-            pipeline: result.pipeline,
-            metadata: {
-              total_duration_ms: result.totalDurationMs,
-              planner_duration_ms: result.plannerDurationMs,
-              reflection_duration_ms: result.reflectionDurationMs,
-              tool_call_duration_ms: result.toolCallDurationMs,
-              tool_calls_count: result.toolCalls.length,
-              tool_calls_succeeded: result.toolCalls.filter(tc => tc.result.success).length,
-              agent_count: result.execution.length,
-              steps_planned: result.plan.steps.length,
-              steps_executed: result.execution.length,
-              steps_succeeded: result.execution.filter(e => e.success).length,
-              reflection_satisfied: result.reflection.satisfied,
-              reflection_iterations: result.totalIterations,
-              supplementary_steps_executed: result.iterations.reduce(
-                (acc, iter) => acc + (iter.supplementary_execution?.length || 0), 0
-              ),
-              input_type: result.plan.input_type,
-              complexity: result.plan.complexity,
-              source,
-              // ===== D6 Cost & Token Dashboard =====
-              total_tokens: result.totalUsage?.totalTokens ?? 0,
-              total_prompt_tokens: result.totalUsage?.promptTokens ?? 0,
-              total_completion_tokens: result.totalUsage?.completionTokens ?? 0,
-              total_cost_usd: result.totalCostUsd ?? 0,
-              per_agent_usage: result.perAgentUsage ?? [],
-            },
-          })
+          // 推送最终结果（v2.3.3 改用共享 buildResultPayload，与 precompute 缓存字段同构）
+          const payload = buildResultPayload(result, source)
+          send('result', payload)
+
+          // v2.3.3 (C) — 若是示例请求且本次为 live 路径，持久化到三层缓存
+          // 下一次同 provider/locale 命中即走回放
+          if (recorder) {
+            const entry: CachedExample = {
+              cacheVersion: 1,
+              contentHash: cacheKey.contentHash,
+              model: cacheKey.model,
+              providerType: cacheKey.providerType,
+              outputLocale: cacheKey.outputLocale,
+              preset: cacheKey.preset,
+              createdAt: new Date().toISOString(),
+              originalDurationMs: result.totalDurationMs,
+              stages: recorder.stages,
+              tokenStreams: recorder.tokens,
+              result: payload,
+            }
+            setExampleCache(entry)
+          }
 
           // 最终阶段：Done
           send('stage', { id: 7, label: 'Done' })
