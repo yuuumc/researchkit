@@ -301,6 +301,9 @@ export async function POST(request: NextRequest) {
               content,
               title,
               source,
+              // v2.3.3 fix: 把已解析的 outputLocale 传给 coordinator
+              // outputLocale 在 L197 已解析为具体 locale（'auto' → detected）
+              outputLocale: outputLocale as any,
               onStage,
               onAgentToken,
             }),

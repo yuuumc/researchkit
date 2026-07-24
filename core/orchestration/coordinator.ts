@@ -57,6 +57,13 @@ export interface CoordinatorInput {
   source?: string
   language?: 'zh' | 'en'
   /**
+   * 可选：目标输出 locale（v2.3.3 fix）
+   * - 不传 / undefined → targetLocale = sourceLocale（旧行为，不翻译）
+   * - 传入具体 locale（如 'en-US'）→ targetLocale 用此值，强制跨语言输出
+   * 注意：'auto' 应由调用方解析为具体 locale 后再传入
+   */
+  outputLocale?: Locale
+  /**
    * 可选：阶段进度回调（用于 SSE 实时推送进度给前端）
    * 触发时机：每个关键阶段开始时
    */
@@ -126,7 +133,8 @@ export async function coordinate(input: CoordinatorInput): Promise<CoordinatorOu
   // ===== Locale 检测（升级版：两阶段语言架构） =====
   // 入口检测一次，所有 Agent 共享
   const sourceLocale = detectLocale(input.content)
-  const targetLocale: Locale = sourceLocale  // 默认目标 = 源语言（不翻译，避免信息丢失）
+  // v2.3.3 fix: 用调用方传入的 outputLocale（已解析为具体 locale），不再硬等于 sourceLocale
+  const targetLocale: Locale = input.outputLocale || sourceLocale
   const languageDirective = buildLanguageDirective(sourceLocale, targetLocale)
 
   // ===== Step 1: Planning =====

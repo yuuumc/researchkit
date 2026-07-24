@@ -75,7 +75,7 @@ function appLocaleToLlmLanguageName(resolved: ResolvedLocale): string | null {
   switch (resolved) {
     case 'zh-CN': return 'Simplified Chinese (简体中文)'
     case 'en-US': return 'English (US)'
-    case 'ja-JP': return 'Japanese (日本語)'
+    // v2.3.3: ja-JP 已从 AppLocale 移除，但 Output Language 仍支持 ja-JP（由 LLM 处理，不经过此函数）
     default: return null
   }
 }

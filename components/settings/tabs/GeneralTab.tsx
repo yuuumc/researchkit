@@ -40,7 +40,8 @@ const LOCALE_OPTIONS: Array<{ value: 'auto' | Locale; label: string; hintKey: st
 ]
 
 // Application Language 选项
-const APP_LOCALE_OPTIONS: AppLocale[] = ['auto', 'zh-CN', 'en-US', 'ja-JP']
+// v2.3.3: 移除 ja-JP（无翻译包，选了也 fallback 到 en-US）
+const APP_LOCALE_OPTIONS: AppLocale[] = ['auto', 'zh-CN', 'en-US']
 
 export function GeneralTab() {
   const { t, appLocale, setLocale, resolvedLocale } = useI18n()

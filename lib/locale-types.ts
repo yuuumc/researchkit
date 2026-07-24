@@ -13,9 +13,12 @@
 /**
  * 用户可配置的 Application Locale
  * - 'auto' = 跟随浏览器(默认)
- * - 'zh-CN' / 'en-US' / 'ja-JP' = 显式指定
+ * - 'zh-CN' / 'en-US' = 显式指定
+ *
+ * v2.3.3: 移除 ja-JP（无翻译包，选了也 fallback 到 en-US）
+ * Output Language（传给 LLM 的）仍支持 ja-JP，不受此限制
  */
-export type AppLocale = 'auto' | 'zh-CN' | 'en-US' | 'ja-JP'
+export type AppLocale = 'auto' | 'zh-CN' | 'en-US'
 
 /**
  * 解析后的 Locale(用于翻译资源查找)
@@ -26,7 +29,7 @@ export type ResolvedLocale = Exclude<AppLocale, 'auto'>
 
 export const DEFAULT_APP_LOCALE: AppLocale = 'auto'
 
-export const SUPPORTED_APP_LOCALES: AppLocale[] = ['auto', 'zh-CN', 'en-US', 'ja-JP']
+export const SUPPORTED_APP_LOCALES: AppLocale[] = ['auto', 'zh-CN', 'en-US']
 
 /**
  * 把 AppLocale(可能 'auto')解析为具体的 ResolvedLocale
@@ -47,7 +50,7 @@ export function resolveAppLocale(locale: AppLocale): ResolvedLocale {
     const lower = candidate.toLowerCase()
     if (lower.startsWith('zh')) return 'zh-CN'
     if (lower.startsWith('en')) return 'en-US'
-    if (lower.startsWith('ja')) return 'ja-JP'
+    // v2.3.3: 其他语言(含日语)fallback 到 en-US
   }
   return 'en-US'
 }
@@ -70,10 +73,5 @@ export const APP_LOCALE_DISPLAY: Record<AppLocale, { label: string; flag: string
     label: 'English (US)',
     flag: '🇺🇸',
     hint: 'American English',
-  },
-  'ja-JP': {
-    label: '日本語',
-    flag: '🇯🇵',
-    hint: 'Japanese (falls back to English in v2.3, full support in v2.4)',
   },
 }

@@ -55,15 +55,6 @@ const RESOURCES: Record<ResolvedLocale, Record<Namespace, Record<string, unknown
     agent: enUSAgent as Record<string, unknown>,
     export: enUSExport as Record<string, unknown>,
   },
-  // ja-JP / 其他:暂 fallback 到 en-US(v2.4 再补)
-  'ja-JP': {
-    common: enUSCommon as Record<string, unknown>,
-    settings: enUSSettings as Record<string, unknown>,
-    preset: enUSPreset as Record<string, unknown>,
-    home: enUSHome as Record<string, unknown>,
-    agent: enUSAgent as Record<string, unknown>,
-    export: enUSExport as Record<string, unknown>,
-  },
 }
 
 // ============================================================================
@@ -132,7 +123,7 @@ export function detectBrowserLocale(): ResolvedLocale {
     const lower = candidate.toLowerCase()
     if (lower.startsWith('zh')) return 'zh-CN'
     if (lower.startsWith('en')) return 'en-US'
-    if (lower.startsWith('ja')) return 'ja-JP'
+    // v2.3.3: 其他语言(含日语)fallback 到 en-US
   }
 
   return 'en-US'
