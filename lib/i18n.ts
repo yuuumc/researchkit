@@ -27,6 +27,7 @@ import zhCNSettings from '@/locales/zh-CN/settings.json'
 import zhCNPreset from '@/locales/zh-CN/preset.json'
 import zhCNHome from '@/locales/zh-CN/home.json'
 import zhCNAgent from '@/locales/zh-CN/agent.json'
+import zhCNAgentRun from '@/locales/zh-CN/agent-run.json'
 import zhCNExport from '@/locales/zh-CN/export.json'
 
 import enUSCommon from '@/locales/en-US/common.json'
@@ -34,9 +35,10 @@ import enUSSettings from '@/locales/en-US/settings.json'
 import enUSPreset from '@/locales/en-US/preset.json'
 import enUSHome from '@/locales/en-US/home.json'
 import enUSAgent from '@/locales/en-US/agent.json'
+import enUSAgentRun from '@/locales/en-US/agent-run.json'
 import enUSExport from '@/locales/en-US/export.json'
 
-type Namespace = 'common' | 'settings' | 'preset' | 'home' | 'agent' | 'export'
+type Namespace = 'common' | 'settings' | 'preset' | 'home' | 'agent' | 'agentRun' | 'export'
 
 const RESOURCES: Record<ResolvedLocale, Record<Namespace, Record<string, unknown>>> = {
   'zh-CN': {
@@ -45,6 +47,7 @@ const RESOURCES: Record<ResolvedLocale, Record<Namespace, Record<string, unknown
     preset: zhCNPreset as Record<string, unknown>,
     home: zhCNHome as Record<string, unknown>,
     agent: zhCNAgent as Record<string, unknown>,
+    agentRun: zhCNAgentRun as Record<string, unknown>,
     export: zhCNExport as Record<string, unknown>,
   },
   'en-US': {
@@ -53,6 +56,7 @@ const RESOURCES: Record<ResolvedLocale, Record<Namespace, Record<string, unknown
     preset: enUSPreset as Record<string, unknown>,
     home: enUSHome as Record<string, unknown>,
     agent: enUSAgent as Record<string, unknown>,
+    agentRun: enUSAgentRun as Record<string, unknown>,
     export: enUSExport as Record<string, unknown>,
   },
 }

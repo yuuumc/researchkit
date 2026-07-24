@@ -145,9 +145,20 @@ const usageAls: AsyncLocalStorageLike<UsageContext> | null = AsyncLocalStorageCt
  * D25 改造：进入新 ALS 上下文，store 跟随当前 async chain
  * 后续所有 await（planner / executor / workflow）共享同一 store
  *
+ * v2.4.0 fix — 幂等：若当前 ALS 上下文已有 collector（嵌套场景，如 runAgent → coordinate），
+ * 直接复用现有 collector，不创建新的。避免 enterWith 覆盖导致外层 records 丢失。
+ *
  * @returns 创建的 collector（用于结束时调用 summarize()）
  */
 export function beginCollection(): UsageCollector {
+  const existing = usageAls?.getStore()
+  if (existing?.collector) {
+    // 嵌套场景：复用外层 collector，只重置 agentName
+    if (usageAls) {
+      usageAls.enterWith({ collector: existing.collector, agentName: 'unknown' })
+    }
+    return existing.collector
+  }
   const collector = new UsageCollector()
   if (usageAls) {
     usageAls.enterWith({ collector, agentName: 'unknown' })

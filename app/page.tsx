@@ -26,6 +26,9 @@ import {
   type UserPreferences,
 } from '@/lib/user-preferences'
 import type { Locale } from '@/lib/locale'
+import { AgentRunTimeline } from '@/components/AgentRunTimeline'
+import { AgentRunForm, type AgentRunFormParams } from '@/components/AgentRunForm'
+import { SessionHistoryButton } from '@/components/SessionHistoryDrawer'
 
 type InputMode = 'text' | 'url' | 'pdf' | 'batch'
 
@@ -52,6 +55,12 @@ export default function Home() {
   const [iterations, setIterations] = useState<any[]>([])
   const [totalIterations, setTotalIterations] = useState(0)
   const [uiMode, setUiMode] = useState<'simple' | 'advanced'>('simple')
+  // v2.4.0 — 顶层 view 切换：research（既有研究流）vs agent（多步研究 Agent）
+  const [viewMode, setViewMode] = useState<'research' | 'agent'>('research')
+  // v2.4.0 — Agent Run 表单提交后的参数（bump key 触发 AgentRunTimeline 重跑）
+  const [agentRunParams, setAgentRunParams] = useState<AgentRunFormParams | null>(null)
+  const [agentRunKey, setAgentRunKey] = useState(0)
+  const [agentRunning, setAgentRunning] = useState(false)
   const [markdownPreviewOpen, setMarkdownPreviewOpen] = useState(false)
   const [pipelineExpanded, setPipelineExpanded] = useState(false)
   const [mindmap, setMindmap] = useState('')
@@ -1107,7 +1116,44 @@ export default function Home() {
         }
       `}} />
 
-      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 20px' }}>
+      {/* v2.4.0 — 顶层 view 切换 tab bar（sticky top，跨视图固定） */}
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          background: 'rgba(255,255,255,0.92)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          borderBottom: '1px solid #e2e8f0',
+          padding: '10px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          maxWidth: '1100px',
+          margin: '0 auto',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '6px', flex: 1 }}>
+          <button
+            type="button"
+            onClick={() => setViewMode('research')}
+            style={tabStyle(viewMode === 'research')}
+          >
+            📚 {t('home.viewMode.research')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('agent')}
+            style={tabStyle(viewMode === 'agent')}
+          >
+            🤖 {t('agentRun.tab.label')}
+          </button>
+        </div>
+      </div>
+
+      {viewMode === 'research' && (
+        <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px 20px' }}>
         {/* === Settings 浮动入口（右上角） === */}
         <a
           href="/settings"
@@ -1115,7 +1161,7 @@ export default function Home() {
           className="settings-fab"
           style={{
             position: 'fixed',
-            top: '20px',
+            top: '80px',
             right: '20px',
             width: '44px',
             height: '44px',
@@ -2085,8 +2131,59 @@ export default function Home() {
           <span style={{ fontSize: '12px' }}>{t('home.footer.description')}</span>
         </div>
       </main>
+      )}
+
+      {viewMode === 'agent' && (
+        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '24px 20px' }}>
+          {/* Agent Run 表单（合并自 /playground/agent，走 i18n + 受 Settings 控制） */}
+          <AgentRunForm
+            defaultLocale={userPrefs?.outputLocale === 'auto' || !userPrefs?.outputLocale
+              ? resolvedLocale
+              : userPrefs.outputLocale}
+            defaultMaxSteps={4}
+            disabled={agentRunning}
+            onRun={(params) => {
+              setAgentRunParams(params)
+              setAgentRunKey((k) => k + 1)
+              setAgentRunning(true)
+            }}
+          />
+
+          {/* Timeline — key 变更触发重挂载重跑 */}
+          {agentRunParams && (
+            <AgentRunTimeline
+              key={agentRunKey}
+              goal={agentRunParams.goal}
+              locale={agentRunParams.locale}
+              maxSteps={agentRunParams.maxSteps}
+              sessionId={agentRunParams.sessionId}
+              autoRun={true}
+              onComplete={() => setAgentRunning(false)}
+            />
+          )}
+
+          {/* 未运行时的引导提示 */}
+          {!agentRunParams && (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '40px 20px',
+                color: '#94a3b8',
+                fontSize: '14px',
+              }}
+            >
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🤖</div>
+              <div>{t('agentRun.tab.hint')}</div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* D34 — 浮动回到顶部按钮 */}
       <ScrollToTop />
+
+      {/* v2.4.0 — Session 历史：右侧垂直悬浮按钮 + 抽屉（跨 view 显示） */}
+      <SessionHistoryButton />
 
       {/* D28 — Live Thoughts 浮窗：实时展示 Planner / Reflection / Replan 的 token 流 */}
       <LiveThoughts thoughts={liveThoughts} active={liveThoughtsActive} />

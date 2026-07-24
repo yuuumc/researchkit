@@ -2,6 +2,10 @@
   "title": "ResearchKit OS",
   "subtitle": "把任何论文变成结构化知识卡",
   "heroHint": "AI Research Agent · 论文/文档 → 结构化知识卡 + Knowledge Graph + 推荐阅读",
+  "viewMode": {
+    "research": "研究",
+    "agent": "Agent 运行"
+  },
   "inputModes": {
     "text": "文本",
     "url": "URL",
@@ -166,7 +170,7 @@
     }
   },
   "footer": {
-    "version": "ResearchKit OS v2.3.3",
+    "version": "ResearchKit OS v2.4.0",
     "description": "Powered by DeepSeek · AI Research Pipeline · Agent Workflow + MCP Tools + Reflection Loop · 3 Export Formats (MD / Obsidian / Knowledge Graph) · Built for OKX.AI Genesis Hackathon"
   },
   "knowledgeCard": "📖 知识卡",

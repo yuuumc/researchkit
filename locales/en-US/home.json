@@ -2,6 +2,10 @@
   "title": "ResearchKit OS",
   "subtitle": "Turn any paper into a structured knowledge card",
   "heroHint": "AI Research Agent · Paper/Document → Structured Knowledge Card + Knowledge Graph + Recommended Reading",
+  "viewMode": {
+    "research": "Research",
+    "agent": "Agent Run"
+  },
   "inputModes": {
     "text": "Text",
     "url": "URL",
@@ -166,7 +170,7 @@
     }
   },
   "footer": {
-    "version": "ResearchKit OS v2.3.3",
+    "version": "ResearchKit OS v2.4.0",
     "description": "Powered by DeepSeek · AI Research Pipeline · Agent Workflow + MCP Tools + Reflection Loop · 3 Export Formats (MD / Obsidian / Knowledge Graph) · Built for OKX.AI Genesis Hackathon"
   },
   "knowledgeCard": "📖 Knowledge Card",

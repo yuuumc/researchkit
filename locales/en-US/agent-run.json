@@ -1,0 +1,103 @@
+{
+  "tab": {
+    "label": "Agent Run",
+    "hint": "v2.4.0 — Input a research goal, observe the Planner / Step 1-N / Synthesizer execution flow."
+  },
+  "form": {
+    "goalLabel": "Research Goal",
+    "goalPlaceholder": "e.g. Investigate latest advances in diffusion models for protein design",
+    "charCount": "{n} / 2000 chars (min 5)",
+    "localeLabel": "Locale",
+    "maxStepsLabel": "Max Steps",
+    "advancedBtn": "Advanced",
+    "sessionIdLabel": "Session ID (resume previous session, leave empty for new)",
+    "sessionIdPlaceholder": "sess_xxx_xxx",
+    "runBtn": "Run Agent",
+    "running": "Running...",
+    "warn": "Agent Run calls real LLM API + tools, consuming token quota. Vercel deployment max 58s (serverless timeout). Multi-step research typically costs $0.05-$0.50."
+  },
+  "status": {
+    "idle": "Idle",
+    "running": "Running",
+    "done": "Done",
+    "error": "Error",
+    "cancelled": "Cancelled"
+  },
+  "timeline": {
+    "headerLabel": "Agent Run · {session}",
+    "headerNewSession": "new session",
+    "headerResumeSession": "session {id}…",
+    "emptyGoal": "(please provide a research goal)",
+    "runBtn": "Run",
+    "cancelBtn": "Cancel",
+    "rerunBtn": "Re-run",
+    "stepFlowLabel": "Step Flow",
+    "stageRunningHint": "running…",
+    "agentThoughtsLabel": "Agent Thoughts ({count})",
+    "charsUnit": "chars",
+    "stepsDetailsLabel": "📋 Step Details ({count})",
+    "finalAnswerLabel": "📝 Final Answer",
+    "referencesLabel": "📚 References ({count})",
+    "copyMdBtn": "📋 Copy Final Answer",
+    "copyRefBtn": "📚 Copy References JSON",
+    "copied": "✓ Copied",
+    "goalTooShort": "Goal must be at least 5 chars"
+  },
+  "result": {
+    "finalAnswer": "Final Answer",
+    "references": "References",
+    "copyMd": "Copy Final Answer as Markdown",
+    "copyRef": "Copy References JSON",
+    "copied": "Copied",
+    "noMaterialId": "mat_?",
+    "elapsed": "Elapsed",
+    "cost": "Cost",
+    "noAnswer": "(No final answer produced)",
+    "noRefs": "No references",
+    "refIndex": "[{n}]"
+  },
+  "stage": {
+    "goalLoaded": "Goal loaded",
+    "planning": "Planning",
+    "planReady": "Plan ready",
+    "stepStart": "Step {n}: {kind}",
+    "stepDone": "Step {n} done",
+    "stepFailed": "Step {n} failed",
+    "synthesizing": "Synthesizing",
+    "done": "Done",
+    "error": "Error"
+  },
+  "drawer": {
+    "title": "Session History",
+    "openBtn": "Sessions",
+    "closeBtn": "Close",
+    "deleteBtn": "Delete",
+    "loading": "Loading…",
+    "detailLoading": "Loading detail…",
+    "loadFailed": "Load failed",
+    "deleteConfirm": "Delete this session? This action cannot be undone.",
+    "deleteFailed": "Delete failed",
+    "empty": "No sessions yet. Run an Agent once and it will appear here.",
+    "summary": "Goal",
+    "steps": "Steps",
+    "materials": "Materials",
+    "duration": "Duration",
+    "cost": "Cost",
+    "status": "Status",
+    "stepsUnit": "steps",
+    "sourcesUnit": "sources",
+    "relativeTime": {
+      "justNow": "just now",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago",
+      "daysAgo": "{n}d ago"
+    },
+    "detailStepsLabel": "Steps",
+    "detailMaterialsLabel": "Materials",
+    "detailFinalAnswerLabel": "Final Answer",
+    "statusLabel": "Status {status}",
+    "localeLabel": "locale {locale}",
+    "stepsCount": "{count} steps",
+    "materialsCount": "{count} materials"
+  }
+}

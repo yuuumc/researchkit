@@ -5,6 +5,9 @@
  * - 这是 MCP 工具清单（list_tools）
  * - LLM 通过 list_tools() 决定调用哪个工具
  * - call_tool(name, input) 是统一调用入口
+ *
+ * v2.4.0 增量：
+ * - 新增 agent_run — v2.4.0 多步研究 Agent 的同步包装（外部 ASP/MCP 入口）
  */
 
 import { Tool, ToolCall, ToolCallResult } from './types'
@@ -12,6 +15,7 @@ import { memoryTool } from './memory'
 import { arxivTool } from './arxiv'
 import { filesystemTool } from './filesystem'
 import { webSearchTool } from './web_search'
+import { agentRunTool } from './agent_run' // v2.4.0
 
 // 已注册的工具清单
 const TOOLS: Record<string, Tool> = {
@@ -19,6 +23,7 @@ const TOOLS: Record<string, Tool> = {
   arxiv: arxivTool,
   filesystem: filesystemTool,
   web_search: webSearchTool,
+  agent_run: agentRunTool, // v2.4.0
 }
 
 /**

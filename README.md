@@ -4,20 +4,20 @@
 > chat with it, compare it, explain it, anchor it onchain.
 > Built for **OKX AI Genesis Hackathon** — ASP #6853 on [OKX.AI](https://www.okx.ai/agents/6853).
 
-![version](https://img.shields.io/badge/version-v2.3.3-blue)
+![version](https://img.shields.io/badge/version-v2.4.0-blue)
 ![status](https://img.shields.io/badge/status-live-brightgreen)
 ![i18n](https://img.shields.io/badge/i18n-zh--CN%20%2F%20en--US-orange)
 ![tests](https://img.shields.io/badge/regression-10%2F10-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 🌐 **Live demo**: https://researchkit-mu.vercel.app
-📦 **Latest release**: [v2.3.3 — Settings effectiveness + KG flicker fix + cost dashboard](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3)
+📦 **Latest release**: [v2.4.0 — Multi-step research Agent + Session memory + i18n](https://github.com/yuuumc/researchkit/releases/tag/v2.4.0)
 
-📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.3.3 Release Notes](./releases/v2.3.3-release-notes.md) · [v2.3.2 Release Notes](./releases/v2.3.2-release-notes.md) · [Branching](./docs/BRANCHING.md)
+📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.4.0 Release Notes](./releases/v2.4.0-release-notes.md) · [v2.4.0 Architecture](./docs/v2.4.0-architecture.md) · [Branching](./docs/BRANCHING.md)
 
 ---
 
-## Quick Stats (v2.3.3)
+## Quick Stats (v2.4.0)
 
 | Metric | Value |
 |---|---|
@@ -58,6 +58,39 @@ Paste any paper, document, or URL → a team of 6 AI agents reads, analyzes, and
 - ⛓️ **Onchain Export (Dual Mode, D22)** — mock/real swappable via 6 interfaces (TxSigner / IpfsUploader / NonceProvider / GasEstimator / ContractCaller / WalletConnector)
 - 🧪 **Prompt Playground** — 4 presets + temperature / maxTokens / responseFormat controls
 - 🌐 **Full i18n (D36-D40)** — 4-layer language separation architecture + LanguageDetectBanner
+
+### v2.4.0 Highlights
+
+#### Multi-step Research Agent (`core/agent-loop/`)
+- **New**: `runAgent(goal, maxSteps, locale)` turns a free-text research goal into a multi-step execution plan — Planner LLM autonomously decides step kinds (`multi-agent` / `web` / `arxiv` / `memory-recall`), executes them in sequence, and Synthesizer LLM produces a grounded, cited final answer.
+- **Architecture**: `Planner → Step 1..N → Synthesizer` loop. Each `multi-agent` step reuses the v2.3.3 6-agent pipeline via `coordinate()`, so existing KC quality is preserved.
+- **Cost isolation**: `beginCollection()` is idempotent — nested `coordinate()` calls reuse the outer collector, and each step's `costUsd` is computed as a delta (records after − records before), preventing cumulative double-counting.
+- **Output Language injection**: `route.ts` passes the resolved `outputLocale` from user preferences into `AgentLoopInput`, so the Synthesizer honors the General Tab "Output Language" setting.
+
+#### Session persistence + resume
+- **New**: `lib/persistence/session-store.ts` writes each session to `/tmp/researchkit-sessions/<id>.json` (Vercel-safe), with steps + materials + final answer.
+- **Resume**: `POST /api/agent/run` accepts `sessionId` — if the session exists, the Agent continues from where it left off.
+- **UI**: `SessionHistoryDrawer` (right-side vertical button) lists past sessions with relative timestamps (`just now` / `5m ago` / `2h ago`), click to view step-by-step detail.
+
+#### Agent Run tab in main UI (no more route split)
+- **Merge**: `AgentRunForm` + `AgentRunTimeline` are now embedded directly in the main UI's "Agent Run" tab (top toggle: `研究 / Agent Run`). The standalone `/playground/agent` route has been removed.
+- **Settings apply**: Provider (apiKey / baseURL / model) read via `getServerUserPreferences()` cookie; Preset persona via `PromptBuilder`; Output Language via `route.ts`. Agent Run is now fully controlled by the Settings tabs.
+- **58s Vercel timeout**: `route.ts` uses `maxDuration = 60` + 58s `Promise.race` guard (same as `multi-agent-stream`), with `ping`-first flush and abort-aware streaming.
+
+#### i18n for Agent Run UI
+- **New namespace**: `agent-run.json` (zh-CN + en-US) covers the tab label, form labels, status badges (idle/running/done/error/cancelled), step kinds, references, final answer, and Session drawer strings.
+- **Removed hardcoded strings**: `AgentRunTimeline.tsx` and `SessionHistoryDrawer.tsx` no longer contain hardcoded Chinese — all visible strings go through `t()`.
+
+#### UI polish
+- **Sessions button**: right-side vertical floating button (purple gradient), `writing-mode: vertical-rl` + `text-orientation: upright`. Session count badge in the drawer header (not on the button, to avoid covering the 📂 icon).
+- **Settings FAB repositioned**: `top: 80px` (was `20px`) to avoid overlapping the `研究 / Agent Run` tab toggle in the top bar.
+- **Drawer mask**: `top: 60px` (was `inset: 0`) so the top bar stays visible and clickable — Settings FAB no longer blocked by the drawer.
+- **Drawer z-index**: mask `9999`, detail modal `10001` (above Settings FAB `1000`), so the close button is always reachable.
+
+#### Tool parameter fixes
+- **web_search**: switched primary source to Wikipedia OpenSearch API (DuckDuckGo anti-bot challenge was returning empty results); DuckDuckGo kept as fallback.
+- **arxiv**: fixed `action: 'search'` missing + `maxResults` → `limit` / `max_results` parameter name mismatch.
+- **Removed**: redundant `stage: 'done'` SSE event in `route.ts:152`.
 
 ### v2.3.3 Highlights
 
@@ -530,7 +563,7 @@ researchkit/
 │   └── demo-video/                    # ≤ 90s demo MP4 files
 ├── .env.local.example
 ├── start.bat                          # Windows launcher
-├── package.json                       # v2.3.3
+├── package.json                       # v2.4.0
 └── README.md
 ```
 
@@ -545,7 +578,7 @@ researchkit/
 | Service type | A2MCP (free, 0 USDT) |
 | Endpoint | `https://researchkit-mu.vercel.app/api/research/multi-agent-stream` |
 | Network | X Layer |
-| Version | v2.3.3 (settings effectiveness + KG flicker fix + cost dashboard, 2026-07-24) |
+| Version | v2.4.0 (multi-step research Agent + session memory + i18n, 2026-07-24) |
 | Onchain Mode | `mock (demo)` — 6 swappable interfaces stubbed, real SDK in D23/D24 roadmap |
 | Onchain OS TX | _mock_ (deterministic hash derived from KC content + wallet, never broadcast) |
 
@@ -558,6 +591,8 @@ researchkit/
 | **Major (x.0)** | Architecture-level changes (new agent roles, new protocol) |
 | **Minor (1.x)** | New features in existing architecture (new export, new input mode, new subsystem) |
 | **Patch (1.0.x)** | Bug fixes, prompt tuning, UI polish, quality releases |
+
+**v2.4.0** is a Minor release — adds a multi-step research Agent (`core/agent-loop/`) that turns a free-text research goal into a grounded, cited answer via `Planner → Step 1..N → Synthesizer` loop. Each `multi-agent` step reuses the v2.3.3 6-agent pipeline via `coordinate()`. New: session persistence (`lib/persistence/session-store.ts`) with resume support, Agent Run tab merged into the main UI (standalone `/playground/agent` route removed), full i18n for Agent Run UI (`agent-run.json` namespace), Settings (Provider / Preset / Output Language) now apply to Agent Run, `beginCollection()` made idempotent for correct per-step cost attribution, and UI polish (vertical Sessions button, Settings FAB repositioned, drawer mask no longer covers top bar). See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.4.0) for full details.
 
 **v2.3.3** is a Patch release — built on top of the example cache + demo replay engine, it adds settings module effectiveness fixes (apiKey/defaultTemperature/defaultMaxTokens dead configs, Output Language in PDF/batch, Preset in Explain/Chat/Compare), Cost dashboard integration for PDF/batch modes, Knowledge Graph flicker fix (v2.3.1 backport: hoisted @keyframes, removed transition/animation conflict, merged useEffects, stabilized tree reference with `useMemo`, made Path Trace breadcrumb always visible), and a dev environment timeout fix (58s `Promise.race` was hardcoded; now only enforced under `process.env.VERCEL`). See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3) for full details.
 

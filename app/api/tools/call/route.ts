@@ -12,6 +12,10 @@
  * - 加工具白名单：公开只暴露 web_search / arxiv
  *   filesystem / memory 仅限内部调用（通过 x-internal-key 校验）
  * - 修复 Object.keys({}) bug → listTools()
+ *
+ * v2.4.0 增量：
+ * - 把 agent_run 加进 PUBLIC_TOOLS（v2.4.0 多步研究 Agent 的对外入口）
+ * - 公开可调，无需 x-internal-key（与 web_search/arxiv 同样视为安全工具）
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,7 +25,8 @@ import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 // v2.3.2 (H1) — 工具白名单
 // 公开可调用的工具（不涉及服务端文件系统 / 记忆库）
-const PUBLIC_TOOLS = new Set(['web_search', 'arxiv'])
+// v2.4.0 增量：把 agent_run 加进公开白名单 — 这是 v2.4.0 "从工具到 Agent 服务" 的关键入口
+const PUBLIC_TOOLS = new Set(['web_search', 'arxiv', 'agent_run'])
 
 // 内部调用密钥（从环境变量读，评委测试时可通过 header 传入）
 // 生产环境应设置 INTERNAL_TOOL_KEY 环境变量
@@ -89,7 +94,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Internal error',
+        error: error instanceof Error ? error.message : 'internal error',
       },
       { status: 500 }
     )

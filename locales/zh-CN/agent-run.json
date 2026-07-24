@@ -1,0 +1,103 @@
+{
+  "tab": {
+    "label": "Agent 运行",
+    "hint": "v2.4.0 — 输入研究目标，观察 Planner / Step 1-N / Synthesizer 的执行流。"
+  },
+  "form": {
+    "goalLabel": "研究目标",
+    "goalPlaceholder": "例：调研 diffusion model 在蛋白质结构预测中的最新进展（2024-2026）",
+    "charCount": "{n} / 2000 字 (min 5)",
+    "localeLabel": "语言",
+    "maxStepsLabel": "最大步数",
+    "advancedBtn": "高级",
+    "sessionIdLabel": "Session ID（继续之前的 session，留空则创建新 session）",
+    "sessionIdPlaceholder": "sess_xxx_xxx",
+    "runBtn": "运行 Agent",
+    "running": "运行中...",
+    "warn": "Agent Run 调真实 LLM API + 工具，会消耗 token 配额。Vercel 部署版本最长 58s（受 serverless timeout 限制）。多步研究的 token 消耗通常在 $0.05-$0.50 之间。"
+  },
+  "status": {
+    "idle": "待开始",
+    "running": "执行中",
+    "done": "完成",
+    "error": "失败",
+    "cancelled": "已取消"
+  },
+  "timeline": {
+    "headerLabel": "Agent Run · {session}",
+    "headerNewSession": "new session",
+    "headerResumeSession": "session {id}…",
+    "emptyGoal": "（请提供研究目标）",
+    "runBtn": "运行",
+    "cancelBtn": "取消",
+    "rerunBtn": "重跑",
+    "stepFlowLabel": "步骤流",
+    "stageRunningHint": "执行中…",
+    "agentThoughtsLabel": "Agent 思考流（{count}）",
+    "charsUnit": "字符",
+    "stepsDetailsLabel": "📋 步骤详情（{count}）",
+    "finalAnswerLabel": "📝 最终答案",
+    "referencesLabel": "📚 参考文献（{count}）",
+    "copyMdBtn": "📋 复制最终答案",
+    "copyRefBtn": "📚 复制参考文献 JSON",
+    "copied": "✓ 已复制",
+    "goalTooShort": "研究目标至少 5 字"
+  },
+  "result": {
+    "finalAnswer": "最终答案",
+    "references": "参考文献",
+    "copyMd": "复制最终答案为 Markdown",
+    "copyRef": "复制参考文献 JSON",
+    "copied": "已复制",
+    "noMaterialId": "mat_?",
+    "elapsed": "耗时",
+    "cost": "花费",
+    "noAnswer": "（未生成最终答案）",
+    "noRefs": "无引用",
+    "refIndex": "[{n}]"
+  },
+  "stage": {
+    "goalLoaded": "目标已加载",
+    "planning": "规划中",
+    "planReady": "规划完成",
+    "stepStart": "Step {n}：{kind}",
+    "stepDone": "Step {n} 完成",
+    "stepFailed": "Step {n} 失败",
+    "synthesizing": "综合中",
+    "done": "完成",
+    "error": "错误"
+  },
+  "drawer": {
+    "title": "Session 历史",
+    "openBtn": "Sessions",
+    "closeBtn": "关闭",
+    "deleteBtn": "删除",
+    "loading": "加载中…",
+    "detailLoading": "加载详情…",
+    "loadFailed": "加载失败",
+    "deleteConfirm": "确定删除此 session？此操作不可恢复。",
+    "deleteFailed": "删除失败",
+    "empty": "暂无 session。运行一次 Agent 后会出现在这里。",
+    "summary": "目标",
+    "steps": "步数",
+    "materials": "材料",
+    "duration": "耗时",
+    "cost": "花费",
+    "status": "状态",
+    "stepsUnit": "步",
+    "sourcesUnit": "源",
+    "relativeTime": {
+      "justNow": "刚刚",
+      "minutesAgo": "{n} 分钟前",
+      "hoursAgo": "{n} 小时前",
+      "daysAgo": "{n} 天前"
+    },
+    "detailStepsLabel": "步骤",
+    "detailMaterialsLabel": "材料",
+    "detailFinalAnswerLabel": "最终答案",
+    "statusLabel": "状态 {status}",
+    "localeLabel": "locale {locale}",
+    "stepsCount": "{count} steps",
+    "materialsCount": "{count} materials"
+  }
+}
