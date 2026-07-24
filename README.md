@@ -11,7 +11,7 @@
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 🌐 **Live demo**: https://researchkit-mu.vercel.app
-📦 **Latest release**: [v2.3.3 — 示例缓存 + 演示性回放引擎](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3)
+📦 **Latest release**: [v2.3.3 — Example cache + demo replay engine](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3)
 
 📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.3.3 Release Notes](./releases/v2.3.3-release-notes.md) · [v2.3.2 Release Notes](./releases/v2.3.2-release-notes.md) · [Branching](./docs/BRANCHING.md)
 
@@ -24,7 +24,7 @@
 | Regression test pass rate | **100%** (10/10 papers × 2 locales = 20 runs, 5 langs × 5 domains) |
 | Avg tokens / Knowledge Card | 14,569 |
 | Avg cost / Knowledge Card | $0.0028 |
-| **「载入示例」缓存回放耗时** | **~10-15s**（原 30-90s live，4-5x 提速） |
+| **"Load Example" cache replay wall time** | **~10-15s** (vs 30-90s live, 4-5x speedup) |
 | SSE first-byte latency | < 100ms |
 | Production build (First Load JS) | 126 kB |
 | LLM providers supported | 9 (DeepSeek / OpenAI / OpenRouter / Groq / SiliconFlow / Volcano / DashScope / Hunyuan / Custom) |
@@ -61,58 +61,68 @@ Paste any paper, document, or URL → a team of 6 AI agents reads, analyzes, and
 
 ### v2.3.3 Highlights
 
-#### 性能优化 — 示例缓存 + 演示性回放引擎
-- **问题**：「载入示例」触发完整 7-stage 流水线，实测 30-90s，Vercel 60s 硬超时下极易触发 58s `Promise.race` 超时保护
-- **方案**：示例内容固定 → 预计算 + 三层缓存（进程内 Map + 仓库 fixture + 运行时 fs）+ 演示性回放引擎（按录制时间线缩放重发 stage + token 事件）
-- **结果**：「载入示例」从 30-90s 降到 **~10-15s**（4-5x 提速），cacheHit=true，输出质量零损失（缓存的就是真实 LLM 输出）
-- **Cache key 严格门控**：`sha256(normalize(content)) + providerType + model + outputLocale + preset`，仅示例内容才查缓存
-- **Hotfix**：修复 `DEFAULT_REPLAY_OPTIONS` 硬编码 `minEventGapMs=50` 导致 config hotfix 无效的 bug（678 token × 50ms = 33.9s），改为引用 config 常量（5ms）
+#### Performance — Example cache + demo replay engine
+- **Problem**: The "Load Example" button triggers the full 7-stage pipeline, which takes 30-90s live and easily trips the 58s `Promise.race` timeout guard under Vercel's 60s hard kill.
+- **Solution**: Example content is fixed → precompute + three-layer cache (in-process Map + repo fixture + runtime fs) + demo replay engine (replays recorded stage + token events on a scaled timeline).
+- **Result**: "Load Example" drops from 30-90s to **~10-15s** (4-5x speedup), `cacheHit=true`, zero output quality loss (the cache holds the real LLM output).
+- **Strict cache key**: `sha256(normalize(content)) + providerType + model + outputLocale + preset` — only example content can hit the cache.
+- **Hotfix**: `DEFAULT_REPLAY_OPTIONS` was hardcoding `minEventGapMs=50`, which made the config-level hotfix ineffective (678 tokens × 50ms = 33.9s). Changed to reference the config constant (5ms).
+- **Cache miss fix**: `getExampleCache` was over-strict on key dimensions — the frontend `fetch` only sends `{content, source, title}`, so `model/providerType/outputLocale/preset` are inferred server-side from cookie/prefs/env. If user prefs differ from fixture-recording prefs (e.g. `LLM_MODEL=deepseek-chat` or `outputLocale=zh-CN`), cache misses → live path → 30-90s timeout. Relaxed to return fixture on `contentHash` match, ignoring other dimensions for example requests.
 
-#### A1 边界防御
-- **S2 + arXiv 外部搜索**：加 `AbortSignal.timeout(8000)` 防止拖死 pipeline
-- **arXiv API**：`http://` → `https://` 协议升级
-- **Export 步骤**：`executePlan` 入口过滤重复执行
+#### A1 boundary defense
+- **S2 + arXiv external search**: added `AbortSignal.timeout(8000)` to prevent pipeline stall.
+- **arXiv API**: `http://` → `https://` protocol upgrade.
+- **Export step**: deduplicate execution at `executePlan` entry.
 
-#### 保留 v2.3.2 安全加固
-`maxDuration=60`、58s `Promise.race`、H4 stack trace 脱敏、`allAgentsFailed` 诊断、C1 cookie 改造全部保留，仅叠加缓存分支逻辑。
+#### v2.3.2 security hardening preserved
+`maxDuration=60`, 58s `Promise.race`, H4 stack trace sanitization, `allAgentsFailed` diagnostics, and the C1 cookie refactor are all retained; the cache branch is purely additive on top.
+
+#### Output Language fix
+- **Problem**: `Output Language` selection had no effect — input Chinese always output Chinese.
+- **Root cause**: [coordinator.ts](core/orchestration/coordinator.ts) hardcoded `targetLocale = sourceLocale`, and the route didn't pass `outputLocale` to `coordinate()`.
+- **Fix**: Added `outputLocale` field to `CoordinatorInput`; the route now passes the resolved `outputLocale` (with `'auto'` already resolved to the detected locale). Selecting Output=English + inputting Chinese now produces an English Knowledge Card.
+
+#### Application Language — Japanese removed
+- **Problem**: `ja-JP` in Application Language had no real function (no translation pack — it fell back to en-US).
+- **Fix**: Removed `ja-JP` from `AppLocale`; the dropdown now shows only `auto / zh-CN / en-US`. The browser-language resolver also falls back to en-US for Japanese browsers. Output Language still supports `ja-JP` (passed through to the LLM, unaffected).
 
 ### v2.3.2 Highlights
 
-#### 安全加固 Critical
-- **API Key 从 cookie 移除**：apiKey 改存 localStorage（不写 cookie），cookie 只存非敏感字段（type/baseURL/model）+ HttpOnly；server 端 apiKey 从 `OPENAI_API_KEY` env 补全
+#### Security hardening — Critical
+- **API key removed from cookie**: apiKey now stored in localStorage (not written to cookie); cookie only stores non-sensitive fields (type / baseURL / model) + HttpOnly; server-side apiKey falls back to `OPENAI_API_KEY` env.
 
-#### 安全加固 High
-- **工具白名单**：`/api/tools/call` 公开仅 `web_search` + `arxiv`，`filesystem`/`memory` 需 `x-internal-key` header
-- **SSRF 防护**：`/api/settings/test-provider` 校验 baseURL，拒绝 localhost/内网/云元数据 IP
-- **Rate limit**：fetch-url (15/min) + tools/call (20/min)
-- **生产 stack trace 脱敏**：`NODE_ENV === 'production'` 时不返回 `debug.stack`
-- **pluginId 格式校验**：`^[a-z0-9-]{1,64}$`
+#### Security hardening — High
+- **Tool whitelist**: `/api/tools/call` publicly exposes only `web_search` + `arxiv`; `filesystem` / `memory` require `x-internal-key` header.
+- **SSRF guard**: `/api/settings/test-provider` validates baseURL, rejects localhost / internal IPs / cloud metadata endpoints.
+- **Rate limit**: fetch-url (15/min) + tools/call (20/min).
+- **Production stack trace sanitization**: `NODE_ENV === 'production'` no longer returns `debug.stack`.
+- **pluginId format validation**: `^[a-z0-9-]{1,64}$`.
 
-#### 清账 Medium + Low
-- `redirect: 'error'` → `'follow'`（支持合法 301/302）
-- JSON 截断修复加 `wasRepaired` 标记 + tags 加 `json-repaired`（让 UI 可提示"数据可能不完整"）
-- 删除死代码 `computeWalletNonce`（D22 deprecated 遗留）
-- 删除未使用的 `import OpenAI`（重构遗留）
+#### Cleanup — Medium + Low
+- `redirect: 'error'` → `'follow'` (supports legitimate 301/302).
+- JSON truncation repair now adds a `wasRepaired` marker + `json-repaired` tag (lets the UI surface "data may be incomplete").
+- Removed dead code `computeWalletNonce` (D22 deprecated leftover).
+- Removed unused `import OpenAI` (refactor leftover).
 
 ### v2.3.1 Highlights
 
-#### 安全加固（P0 + P1）
-- **onchain mode 安全 fallback**：`resolveOnchainMode()` 强制 fallback real → mock，避免未实现接口崩溃
-- **CORS 白名单**：`lib/cors.ts` 三层策略（same-origin / localhost / `*.vercel.app` / 环境变量）
-- **PDF magic bytes 校验**：检查 `%PDF-` 文件头，防止 .exe/.html 改名上传
-- **Rate limit**：内存 Map 计数（KC 10/min、PDF 5/10min、Batch 3/10min）
-- **onchain 导出二次确认**：`window.confirm` 防误触链上 broadcast
-- **Planner 指数退避**：LLM 调用失败 1s → 2s 重试，最多 3 次
+#### Security hardening (P0 + P1)
+- **onchain mode safe fallback**: `resolveOnchainMode()` force-falls real → mock, avoiding crashes from unimplemented interfaces.
+- **CORS whitelist**: `lib/cors.ts` three-layer policy (same-origin / localhost / `*.vercel.app` / env variable).
+- **PDF magic bytes validation**: checks `%PDF-` file header, prevents .exe/.html rename uploads.
+- **Rate limit**: in-memory Map counter (KC 10/min, PDF 5/10min, Batch 3/10min).
+- **onchain export double confirmation**: `window.confirm` to prevent accidental onchain broadcast.
+- **Planner exponential backoff**: LLM call failure 1s → 2s retry, max 3 attempts.
 
-#### Vercel 部署修复
-- 只读 fs 重定向到 `/tmp/`（4 个持久化模块）
-- JSON parse 诊断增强（HTTP 400 + 完整请求体片段）
+#### Vercel deployment fixes
+- Read-only fs redirected to `/tmp/` (4 persistence modules).
+- JSON parse diagnostics enhanced (HTTP 400 + full request body snippet).
 
-#### 插件市场完善
-- 替换重复社区插件：obsidian-publish → anki-cards；ipfs-pin → github-gist
-- 兑现 mock 安装承诺：已安装社区插件现在出现在主面板（CommunityPluginCard）
-- 内置插件显示"✓ 已安装"不可点
-- 安装按钮文案明示 mock 模式
+#### Plugin marketplace polish
+- Replaced duplicate community plugins: obsidian-publish → anki-cards; ipfs-pin → github-gist.
+- Honored the mock-install promise: installed community plugins now appear in the main panel (CommunityPluginCard).
+- Built-in plugins show "✓ Installed" and are non-clickable.
+- Install button copy explicitly states mock mode.
 
 ### v2.3.0 Highlights
 
@@ -128,8 +138,8 @@ Paste any paper, document, or URL → a team of 6 AI agents reads, analyzes, and
 
 | Layer | Name | Purpose | Options |
 |---|---|---|---|
-| 1 | Application Language | UI text / Help / Tooltip / Preset label | `auto / zh-CN / en-US / ja-JP` |
-| 2 | Output Language | KC output language | `auto` (follow source) or explicit `zh-CN / en-US / ja-JP` |
+| 1 | Application Language | UI text / Help / Tooltip / Preset label | `auto / zh-CN / en-US` |
+| 2 | Output Language | KC output language | `auto` (follow source) or explicit `zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES` |
 | 3 | Auto Translate | Explain / Chat / Compare reply language | `On / Off` (follows Application Language when On) |
 | 4 | Prompt Language | LLM internal prompt language | locked to `en-US` (best performance) |
 
@@ -511,7 +521,7 @@ researchkit/
 | Service type | A2MCP (free, 0 USDT) |
 | Endpoint | `https://researchkit-mu.vercel.app/api/research/multi-agent-stream` |
 | Network | X Layer |
-| Version | v2.3.3 (示例缓存 + 演示性回放引擎, 2026-07-23) |
+| Version | v2.3.3 (example cache + demo replay engine, 2026-07-23) |
 | Onchain Mode | `mock (demo)` — 6 swappable interfaces stubbed, real SDK in D23/D24 roadmap |
 | Onchain OS TX | _mock_ (deterministic hash derived from KC content + wallet, never broadcast) |
 
@@ -525,7 +535,7 @@ researchkit/
 | **Minor (1.x)** | New features in existing architecture (new export, new input mode, new subsystem) |
 | **Patch (1.0.x)** | Bug fixes, prompt tuning, UI polish, quality releases |
 
-**v2.3.3** is a Patch release — performance optimization for the hackathon-critical "Load Example" button. Adds a three-layer example cache (in-process Map + repo fixture + runtime fs) + a demo replay engine that replays recorded stage/token events on a scaled timeline, dropping "Load Example" wall time from 30-90s to ~10-15s (4-5x speedup) with zero output quality loss. Includes a hotfix for `DEFAULT_REPLAY_OPTIONS` hardcoding `minEventGapMs=50` (config hotfix was not propagating). All v2.3.2 security hardening preserved. See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3) for full details.
+**v2.3.3** is a Patch release — performance optimization for the hackathon-critical "Load Example" button. Adds a three-layer example cache (in-process Map + repo fixture + runtime fs) + a demo replay engine that replays recorded stage/token events on a scaled timeline, dropping "Load Example" wall time from 30-90s to ~10-15s (4-5x speedup) with zero output quality loss. Includes a hotfix for `DEFAULT_REPLAY_OPTIONS` hardcoding `minEventGapMs=50` (config hotfix was not propagating), a cache-miss fix that relaxes over-strict key dimensions for example requests, an `Output Language` fix that makes the selection actually take effect, and removal of the non-functional `ja-JP` option from Application Language. All v2.3.2 security hardening preserved. See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3) for full details.
 
 **v2.3.2** is a Patch release — security hardening based on `ResearchKit-2.3.1-审查报告.md`. Day 1: C1 Critical (API key moved out of cookie) + H1-H5 High (tool whitelist, SSRF guard, rate limit, stack trace sanitization, pluginId validation). Day 2: M2/M3/L1/L2/L3 cleanup (redirect policy, JSON truncation marker, dead code removal). See [release notes](./releases/v2.3.2-release-notes.md) for full details.
 
