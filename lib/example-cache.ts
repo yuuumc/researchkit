@@ -211,7 +211,12 @@ function toKey(c: CachedExample): ExampleCacheKey {
 /**
  * 查找示例缓存。命中条件：
  *  - 当前请求内容 hash 必须等于 EXAMPLE_FIXTURE.content 的 hash（不是示例 → 永不命中）
- *  - 找到的条目 (model, providerType, outputLocale, preset) 全部一致
+ *  - 精确 key 命中（进程内）：5 维全匹配
+ *  - 文件 fixture 命中：contentHash 匹配即返回（放宽其他维度）
+ *    原因：前端 fetch 只传 {content, source, title}，model/providerType/outputLocale/preset
+ *    全由 server 从 cookie/prefs/env 推断。若用户 prefs/env 与 fixture 录制时不一致
+ *    → cache miss → live 路径 30-90s 超时。demo 场景下示例内容固定，输出也应固定
+ *    （用 fixture 录制时的 locale/preset/model），所以 contentHash 匹配即返回 fixture。
  */
 export function getExampleCache(key: ExampleCacheKey): CachedExample | null {
   if (isDisabled()) return null
@@ -223,18 +228,15 @@ export function getExampleCache(key: ExampleCacheKey): CachedExample | null {
   const memHit = memoryCache.get(cacheKeyString(key))
   if (memHit) return memHit
 
-  // 按 contentHash 找文件，再校验其他维度
+  // 按 contentHash 找文件
   const fileHit = findByContentHash(key.contentHash)
   if (fileHit) {
-    if (
-      fileHit.model === key.model &&
-      fileHit.providerType === key.providerType &&
-      fileHit.outputLocale === key.outputLocale &&
-      fileHit.preset === key.preset
-    ) {
-      memoryCache.set(cacheKeyString(key), fileHit)
-      return fileHit
-    }
+    // v2.3.3 hotfix: 示例请求放宽维度校验
+    // 只要 contentHash 匹配 EXAMPLE_FIXTURE 就返回 fixture，忽略 model/providerType/outputLocale/preset 差异
+    // demo 场景下「载入示例」应该稳定可缓存，不受用户 prefs/env 影响
+    // 用 fileHit 的 key（而非传入的 key）做进程内缓存，避免 mismatch key 污染
+    memoryCache.set(cacheKeyString(toKey(fileHit)), fileHit)
+    return fileHit
   }
   return null
 }

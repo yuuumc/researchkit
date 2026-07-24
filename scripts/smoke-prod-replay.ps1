@@ -17,10 +17,9 @@ $body = @{
   content = $content
   title = 'Attention Is All You Need'
   source = 'built-in example'
-  providerType = 'deepseek'
-  model = 'deepseek-v4-flash'
-  outputLocale = 'en-US'
-  preset = 'academic'
+  # v2.3.3 hotfix 验证：故意不传 model/providerType/outputLocale/preset
+  # 模拟前端真实请求（前端 fetch 只传 {content, source, title}）
+  # 修复后 getExampleCache 放宽维度校验，contentHash 匹配即命中
 } | ConvertTo-Json -Compress
 
 Write-Host "POST $endpoint"
