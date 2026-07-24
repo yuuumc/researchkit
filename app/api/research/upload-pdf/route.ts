@@ -10,6 +10,9 @@ import { generateKnowledgeCard } from '@/lib/llm'
 import { parsePdf, exportToMarkdown, exportToObsidian, exportToMindmap } from '@/lib/parser'
 import { handleOptions } from '@/lib/cors'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+import { getServerUserPreferences } from '@/lib/server-user-preferences'
+import { beginCollection, endCollection } from '@/lib/usage-collector'
+import { getServerProvider } from '@/lib/server-provider'
 // D43 — magic numbers 集中到 config/orchestration.ts
 import { MAX_PDF_SIZE_BYTES, RATE_LIMIT_PDF } from '@/config/orchestration'
 
@@ -106,12 +109,21 @@ export async function POST(request: NextRequest) {
       ? content.substring(0, 50000) + '...'
       : content
 
-    // 调用 LLM 生成知识卡
-    const knowledgeCard = await generateKnowledgeCard({
-      content: truncatedContent,
-      language,
-      detailLevel,
-    })
+    // v2.3.3 fix — 包 beginCollection/endCollection,让 PDF 模式也记录 cost
+    const collector = beginCollection()
+    let knowledgeCard
+    try {
+      knowledgeCard = await generateKnowledgeCard({
+        content: truncatedContent,
+        language,
+        // v2.3.3 fix — 传 outputLocale 让用户选的 Output Language 在 PDF 模式也生效
+        outputLocale: getServerUserPreferences().outputLocale,
+        detailLevel,
+      })
+    } finally {
+      endCollection()
+    }
+    const usageSummary = collector.summarize()
 
     // 如果 PDF 元数据有 title，覆盖
     if (parsed.title && parsed.title.length > 0) {
@@ -135,6 +147,13 @@ export async function POST(request: NextRequest) {
         word_count: content.length,
         processing_time_ms: processingTimeMs,
         source: parsed.source,
+        // v2.3.3 fix — 透传 cost 数据给前端写 cost history
+        total_tokens: usageSummary.totalUsage.totalTokens,
+        total_prompt_tokens: usageSummary.totalUsage.promptTokens,
+        total_completion_tokens: usageSummary.totalUsage.completionTokens,
+        total_cost_usd: usageSummary.totalCostUsd,
+        per_agent_usage: usageSummary.perAgent,
+        model: getServerProvider().displayName,
       },
     })
   } catch (error) {

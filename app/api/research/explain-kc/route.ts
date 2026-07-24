@@ -31,7 +31,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerProvider } from '@/lib/server-provider'
 import { setCurrentAgent } from '@/lib/usage-collector'
-import { buildAutoTranslateDirective } from '@/lib/server-user-preferences'
+import { buildAutoTranslateDirective, getServerUserPreferences } from '@/lib/server-user-preferences'
+import { PromptBuilder } from '@/core/prompt'
 import type { ChatMessage } from '@/core/llm/provider'
 import type { KnowledgeCard } from '@/types/knowledge'
 
@@ -186,7 +187,8 @@ function buildExplainPrompt(kc: KnowledgeCard, cfg: AudienceConfig): ChatMessage
   // D39 — Auto Translate: 用户开启时追加 locale 指令(覆盖原 "跟随 KC 语言" 规则)
   const autoTranslateDirective = buildAutoTranslateDirective()
 
-  const system = `You are ResearchKit's Explain Agent. Your job: re-explain a Knowledge Card (KC) about a research paper for a specific audience.
+  // v2.3.3 fix — 通过 PromptBuilder 注入 preset persona,让 General Tab 的 Preset 在 Explain 也生效
+  const systemContent = `You are ResearchKit's Explain Agent. Your job: re-explain a Knowledge Card (KC) about a research paper for a specific audience.
 
 # Target Audience
 You are explaining to ${cfg.description}.
@@ -214,6 +216,13 @@ Return STRICT JSON only (no markdown, no comments):
 - Be honest if the paper is too technical for the audience — say so in 'whyItMatters'.
 - All text should be in the same language as the KC's title (English KC → English explanation; Chinese KC → Chinese explanation).${autoTranslateDirective}`
 
+  const { preset } = getServerUserPreferences()
+  const built = PromptBuilder.build({
+    agent: 'Explain',
+    system: systemContent,
+    preset,
+  })
+
   const user = `# Knowledge Card
 ${formatKCForExplain(kc)}
 
@@ -222,7 +231,7 @@ Now explain this paper for: ${cfg.label} (${cfg.description}).
 Return the JSON as specified.`
 
   return [
-    { role: 'system', content: system },
+    { role: 'system', content: built.content },
     { role: 'user', content: user },
   ]
 }

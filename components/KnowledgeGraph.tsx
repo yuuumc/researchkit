@@ -10,7 +10,7 @@
  * 4. 评委看到的是"活的"知识图谱，不是静态脑图
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 
 // 知识图谱节点（前端自用结构）
 export interface KGNode {
@@ -20,6 +20,21 @@ export interface KGNode {
   color: string
   children: KGNode[]
 }
+
+// v2.3.1 KG flicker fix — 模块顶层单次声明 @keyframes
+// 旧实现把 <style> 标签塞进每个 TreeNode 内部，导致父组件 re-render 时
+// React 重写 innerHTML → 浏览器重新应用 @keyframes → animation 重启 → 节点反复闪烁
+// 顶层声明后，整个组件只注入一次 <style>，re-render 不再触碰它
+const KG_KEYFRAMES = [
+  '@keyframes kg-pulse {',
+  '  0%, 100% { transform: scale(1); opacity: 1; }',
+  '  50% { transform: scale(1.3); opacity: 0.7; }',
+  '}',
+  '@keyframes kg-slide-in {',
+  '  from { opacity: 0; transform: translateX(-12px); }',
+  '  to { opacity: 1; transform: translateX(0); }',
+  '}',
+].join('\n')
 
 /**
  * D26 — DFS 找从根到目标节点的路径
@@ -72,13 +87,20 @@ export default function KnowledgeGraph({
   // 用 rootTitle 作为 build 的 key — 只有 rootTitle 变化时才重新跑 building 动画
   // 避免 inline 创建的 tree 数组引用每次 re-render 都变，导致 useEffect 无限重跑
   const buildKey = rootTitle
-  const [lastBuildKey, setLastBuildKey] = useState(buildKey)
+  // v2.3.1 KG flicker fix — lastBuildKey 从 useState 改为 useRef
+  // 旧实现用 useState，每次 setLastBuildKey 都触发 re-render，与两个并发 useEffect 叠加放大重渲染频率
+  //
+  // 注意: 不能用 isFirstRunRef + lastBuildKeyRef 做"首次跑/重复跑"判断
+  // 原因: Next.js 14 dev 默认开 React StrictMode，useEffect 会跑两次 (mount → cleanup → re-mount)
+  // 第一次 effect 把 isFirstRunRef.current 置为 false 后，cleanup 清掉所有 timer
+  // 第二次 effect 看到 isFirstRunRef=false 且 lastBuildKeyRef===buildKey → 误判为"重复跑"提前 return
+  // 结果 setBuilding(false) 的 timer 永远不调度，Building 动画卡死
+  // 正确做法: 让 useEffect 每次 mount/buildKey 变化都重跑，由 [buildKey] dep 数组保证只在变化时触发
+  // StrictMode 的 cleanup + 重跑会重新调度 timer，最终 setBuilding(false) 会按时触发
 
-  // 生成动画：节点逐个亮起（仅在 buildKey 变化时触发）
+  // v2.3.1 KG flicker fix — 合并后的单个 useEffect
+  // 首次挂载 + buildKey 变化都走这里，cleanup 覆盖全部 timer
   useEffect(() => {
-    if (buildKey === lastBuildKey) return // 同一份结果，不重新跑动画
-    setLastBuildKey(buildKey)
-
     setBuilding(true)
     setBuildProgress(0)
     setRevealCount(0)
@@ -110,38 +132,6 @@ export default function KnowledgeGraph({
   }, [buildKey]) // 只依赖 buildKey，不依赖 tree（避免无限循环）
   // eslint-disable-next-line react-hooks/exhaustive-deps
 
-  // 首次挂载也要触发动画
-  useEffect(() => {
-    setBuilding(true)
-    setBuildProgress(0)
-    setRevealCount(0)
-
-    const totalNodes = tree.length
-    if (totalNodes === 0) {
-      setBuilding(false)
-      return
-    }
-
-    const stepMs = buildDurationMs / totalNodes
-    const revealTimers: number[] = []
-    for (let i = 0; i < totalNodes; i++) {
-      const t = window.setTimeout(() => {
-        setRevealCount(i + 1)
-        setBuildProgress(Math.round(((i + 1) / totalNodes) * 100))
-      }, (i + 1) * stepMs)
-      revealTimers.push(t)
-    }
-    const doneTimer = window.setTimeout(() => {
-      setBuilding(false)
-    }, buildDurationMs + 200)
-
-    return () => {
-      revealTimers.forEach(clearTimeout)
-      clearTimeout(doneTimer)
-    }
-  }, []) // 仅首次挂载
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-
   const toggleNode = (id: string) => {
     setExpandedNodes(prev => {
       const next = new Set(prev)
@@ -165,16 +155,23 @@ export default function KnowledgeGraph({
     }
   }
 
+  // v2.3.1 KG flicker fix — 复用于两个 return 分支的 <style> 单次注入
+  // 避免在 TreeNode 内部 inline 声明 @keyframes
+  // 注意: 不能把 JSX 元素抽成常量复用 — React 元素实例在两个不同 fragment 父级间复用会导致 reconciliation 警告
+  // 因此每个 return 分支独立渲染 <style dangerouslySetInnerHTML={{__html: KG_KEYFRAMES}} />
+
   // ===== Building 阶段 =====
   if (building) {
     return (
-      <div style={{
-        padding: '48px 24px',
-        background: 'linear-gradient(135deg, #fafbff 0%, #f0f4ff 100%)',
-        border: '1px solid #e0e7ff',
-        borderRadius: '16px',
-        textAlign: 'center',
-      }}>
+      <>
+        <style dangerouslySetInnerHTML={{ __html: KG_KEYFRAMES }} />
+        <div style={{
+          padding: '48px 24px',
+          background: 'linear-gradient(135deg, #fafbff 0%, #f0f4ff 100%)',
+          border: '1px solid #e0e7ff',
+          borderRadius: '16px',
+          textAlign: 'center',
+        }}>
         <div style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -237,17 +234,18 @@ export default function KnowledgeGraph({
             ? `Extracting concepts... ${buildProgress}%`
             : 'Knowledge graph ready — click branches to expand'}
         </div>
-
-        <style dangerouslySetInnerHTML={{ __html: `@keyframes kg-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.7; } }` }} />
       </div>
+      </>
     )
   }
 
   // ===== 展示阶段：可折叠树 =====
   return (
-    <div style={{
-      padding: '24px',
-      background: 'linear-gradient(135deg, #fafbff 0%, #f0f9ff 100%)',
+    <>
+      <style dangerouslySetInnerHTML={{ __html: KG_KEYFRAMES }} />
+      <div style={{
+        padding: '24px',
+        background: 'linear-gradient(135deg, #fafbff 0%, #f0f9ff 100%)',
       border: '1px solid #e0e7ff',
       borderRadius: '16px',
       overflow: 'auto',
@@ -269,30 +267,31 @@ export default function KnowledgeGraph({
           点击分支节点展开 / 收起 · hover 节点查看路径
         </div>
 
-        {/* D26 — Path Trace 面包屑：hover 时显示从 root 到当前节点的路径 */}
-        {hasHover && pathNodes.length > 0 && (
-          <div style={{
-            marginTop: '10px',
-            padding: '8px 12px',
-            background: 'white',
-            border: `1px solid ${pathNodes[pathNodes.length - 1]?.color || '#c7d2fe'}`,
-            borderRadius: '8px',
-            fontSize: '11px',
-            color: '#475569',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            maxWidth: '100%',
-            boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)',
-          }}>
-            <span style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
-              Path
-            </span>
-            <span style={{ color: '#94a3b8' }}>·</span>
-            <span style={{ color: '#6366f1', fontWeight: 700 }}>{rootTitle}</span>
-            {pathNodes.map((n, i) => (
+        {/* D26 — Path Trace 面包屑：常驻显示,hover 时显示从 root 到当前节点的路径 */}
+        {/* v2.3.2 fix — 改为常驻显示,无 hover 时显示 root + 提示文案,避免面包屑反复出现/消失 */}
+        <div style={{
+          marginTop: '10px',
+          padding: '8px 12px',
+          background: 'white',
+          border: `1px solid ${pathNodes.length > 0 ? (pathNodes[pathNodes.length - 1]?.color || '#c7d2fe') : '#c7d2fe'}`,
+          borderRadius: '8px',
+          fontSize: '11px',
+          color: '#475569',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          maxWidth: '100%',
+          boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)',
+        }}>
+          <span style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+            Path
+          </span>
+          <span style={{ color: '#94a3b8' }}>·</span>
+          <span style={{ color: '#6366f1', fontWeight: 700 }}>{rootTitle}</span>
+          {pathNodes.length > 0 ? (
+            pathNodes.map((n, i) => (
               <span key={n.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ color: '#cbd5e1' }}>›</span>
                 <span style={{ color: n.color, fontWeight: i === pathNodes.length - 1 ? 800 : 600 }}>
@@ -300,9 +299,13 @@ export default function KnowledgeGraph({
                   {n.label}
                 </span>
               </span>
-            ))}
-          </div>
-        )}
+            ))
+          ) : (
+            <span style={{ color: '#cbd5e1', marginLeft: '4px' }}>
+              › <span style={{ color: '#94a3b8', fontWeight: 500 }}>hover 任意节点查看路径</span>
+            </span>
+          )}
+        </div>
       </div>
 
       <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, monospace', fontSize: '13px' }}>
@@ -369,7 +372,8 @@ export default function KnowledgeGraph({
           {expandedNodes.size === 0 ? '全部展开' : '全部收起'}
         </button>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -404,19 +408,29 @@ function TreeNode({
   const isDimmed = hasHover && !isOnPath
 
   return (
-    <div style={{
+    <div
+      // v2.3.2 fix — hover 事件挂到外层 wrapper div,而不是内层 branch div
+      // 原因: 鼠标从父节点移到子节点时,会先触发父节点 branch div 的 onMouseLeave (hoveredNode=null),
+      // 再触发子节点 branch div 的 onMouseEnter (hoveredNode=childId),导致面包屑在 null ↔ childId 之间快速切换
+      // → Path Trace 面包屑反复出现和消失
+      // 改到外层 wrapper 后,鼠标在整个节点区域内移动不会触发 mouseleave,只有真正离开节点才清 hover
+      onMouseEnter={() => onHover(node.id)}
+      onMouseLeave={() => onHover(null)}
+      style={{
       marginLeft: `${indent}px`,
       marginTop: '4px',
       opacity: visible ? (isDimmed ? 0.35 : 1) : 0,
       transform: visible ? 'translateX(0)' : 'translateX(-8px)',
-      transition: 'all 0.25s ease',
+      // v2.3.1 KG flicker fix — 移除 transition
+      // 旧实现同时挂 transition + animation,animation 的 both fill 模式托管控件终态
+      // 优先级高于 transition,导致 isDimmed 淡化失效;且根因 ① 让 animation 反复重启时
+      // transition 介入做"从 -8px 到 0"的过渡,两套 transform 互相打架,观感从"水平滑入"被放大为"上下抖动"
+      // animation 的 both fill 模式已托管终态(opacity:1; transform:translateX(0)),无需 transition
       animation: visible ? `kg-slide-in 0.4s ease-out ${delay}s both` : 'none',
     }}>
       <div
         className="kg-branch-hover"
         onClick={() => hasChildren && onToggle(node.id)}
-        onMouseEnter={() => onHover(node.id)}
-        onMouseLeave={() => onHover(null)}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -484,8 +498,6 @@ function TreeNode({
           ))}
         </div>
       )}
-
-      <style dangerouslySetInnerHTML={{ __html: `@keyframes kg-slide-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }` }} />
     </div>
   )
 }

@@ -56,6 +56,8 @@ export interface KnowledgeCard {
 export interface GenerateKnowledgeCardOptions {
   content: string
   language?: 'zh' | 'en'
+  /** v2.3.3 fix — 目标输出 locale(用户在 General Tab 选的 Output Language,已解析为具体 locale) */
+  outputLocale?: string
   detailLevel?: 'brief' | 'standard' | 'detailed'
 }
 
@@ -65,7 +67,13 @@ export interface GenerateKnowledgeCardOptions {
 export async function generateKnowledgeCard(
   options: GenerateKnowledgeCardOptions
 ): Promise<KnowledgeCard> {
-  const { content, language = 'zh', detailLevel = 'standard' } = options
+  const { content, language = 'zh', outputLocale, detailLevel = 'standard' } = options
+
+  // v2.3.3 fix — 把 outputLocale 转成 language hint 注入 prompt(与 multi-agent 主路径行为一致)
+  // outputLocale 优先于 language:若用户显式选了 Output Language,覆盖旧 language 参数
+  const effectiveLanguage: 'zh' | 'en' = outputLocale
+    ? (outputLocale.startsWith('zh') ? 'zh' : 'en')
+    : language
 
   // 根据 detail_level 调整 max_tokens
   const maxTokensMap = {
@@ -86,7 +94,7 @@ export async function generateKnowledgeCard(
     const response = await provider.chat(
       [
         { role: 'system', content: kbBuilt.content },
-        { role: 'user', content: KNOWLEDGE_CARD_USER_PROMPT(content, language) },
+        { role: 'user', content: KNOWLEDGE_CARD_USER_PROMPT(content, effectiveLanguage) },
       ],
       {
         maxTokens: maxTokensMap[detailLevel],
@@ -154,7 +162,7 @@ export async function generateKnowledgeCard(
         const retryResponse = await provider.chat(
           [
             { role: 'system', content: kbBuilt.content },
-            { role: 'user', content: KNOWLEDGE_CARD_USER_PROMPT(content, language) },
+            { role: 'user', content: KNOWLEDGE_CARD_USER_PROMPT(content, effectiveLanguage) },
           ],
           {
             maxTokens: maxTokensMap[detailLevel] + 1000,

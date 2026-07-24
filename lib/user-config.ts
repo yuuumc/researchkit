@@ -47,35 +47,74 @@ export function getUserConfigClient(): ProviderConfig | null {
 /**
  * 客户端：保存用户 Provider 配置
  *
- * localStorage 存完整配置（含 apiKey），cookie 只存非敏感字段（type/baseURL/model）
- * cookie 加 HttpOnly，防止 XSS 窃取
+ * localStorage 存完整配置(含 apiKey,客户端回填表单用)
+ * cookie 只存非敏感字段(type/baseURL/model)
+ *
+ * v2.3.3 fix — apiKey 通过独立 HttpOnly cookie 传递:
+ * 调用 /api/settings/save-provider-key 端点,由 server 用 Set-Cookie 写 HttpOnly cookie
+ * (JS 无法通过 document.cookie 设置真正的 HttpOnly)
+ * 失败时不阻塞保存(降级到 env OPENAI_API_KEY,与旧行为一致)
+ *
+ * @param config 完整 ProviderConfig
+ * @param syncApiKeyToServer 是否同步 apiKey 到 server HttpOnly cookie(默认 true)
+ *                           重置时传 false,会发空值清除 cookie
  */
-export function saveUserConfigClient(config: ProviderConfig): void {
+export async function saveUserConfigClient(
+  config: ProviderConfig,
+  syncApiKeyToServer: boolean = true
+): Promise<void> {
   if (typeof window === 'undefined') return
   const json = JSON.stringify(config)
   window.localStorage.setItem(STORAGE_KEY, json)
 
-  // v2.3.2 (C1) — cookie 只存非敏感字段，apiKey 不写 cookie
+  // v2.3.2 (C1) — 非 apiKey 字段写普通 cookie
+  // v2.3.3 fix — defaultTemperature 也加入非敏感 cookie(让 Provider Tab 的温度滑块真正生效)
   const safeConfig = {
     type: config.type,
     baseURL: config.baseURL,
     model: config.model,
+    defaultTemperature: config.defaultTemperature,
   }
   const base64 = btoa(unescape(encodeURIComponent(JSON.stringify(safeConfig))))
   const maxAge = COOKIE_MAX_AGE_DAYS * 24 * 60 * 60
-  document.cookie = `${COOKIE_KEY}=${base64}; path=/; max-age=${maxAge}; SameSite=Strict; HttpOnly`
+  document.cookie = `${COOKIE_KEY}=${base64}; path=/; max-age=${maxAge}; SameSite=Strict`
+
+  // v2.3.3 fix — apiKey 通过 server-side HttpOnly cookie 设置
+  // 不阻塞,失败时降级(用户可继续用 env key)
+  if (syncApiKeyToServer) {
+    try {
+      await fetch('/api/settings/save-provider-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: config.apiKey }),
+      })
+    } catch (err) {
+      console.warn('[user-config] 同步 apiKey 到 server cookie 失败,将降级到 env key:', err instanceof Error ? err.message : err)
+    }
+  }
 }
 
 /**
  * 客户端：清除用户 Provider 配置
  *
  * 用户点"重置"按钮时调用
+ * v2.3.3 fix — 同步清除 server apiKey cookie
  */
-export function clearUserConfigClient(): void {
+export async function clearUserConfigClient(): Promise<void> {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem(STORAGE_KEY)
-  // 让 cookie 立即过期
-  document.cookie = `${COOKIE_KEY}=; path=/; max-age=0; SameSite=Strict; HttpOnly`
+  // 清除非敏感 cookie
+  document.cookie = `${COOKIE_KEY}=; path=/; max-age=0; SameSite=Strict`
+  // v2.3.3 fix — 清除 apiKey HttpOnly cookie(必须走 server 端点)
+  try {
+    await fetch('/api/settings/save-provider-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: '' }),
+    })
+  } catch (err) {
+    console.warn('[user-config] 清除 apiKey cookie 失败:', err instanceof Error ? err.message : err)
+  }
 }
 
 /**

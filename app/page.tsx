@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import KnowledgeGraph, { buildKnowledgeGraph } from '@/components/KnowledgeGraph'
 import AgentTimeline from '@/components/AgentTimeline'
 import { CompareTab } from '@/components/CompareTab'
@@ -76,6 +76,17 @@ export default function Home() {
   const [userPrefs, setUserPrefs] = useState<UserPreferences | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mindmapRef = useRef<HTMLDivElement>(null)
+
+  // v2.3.1 KG flicker fix — 用 useMemo 稳定 buildKnowledgeGraph(result) 的数组引用
+  // 旧实现 inline 调用 buildKnowledgeGraph(result)，每次 page.tsx re-render
+  // (LiveThoughts 60ms flush / SSE 事件 / tab 切换) 都会创建新数组引用 →
+  // KnowledgeGraph 组件 re-render → React 重写 <style> innerHTML →
+  // 浏览器重新应用 @keyframes → animation 重启 → 节点反复闪烁抖动
+  // useMemo 后，只有 result 变化时才重新计算，引用稳定，KnowledgeGraph 不再无谓 re-render
+  const knowledgeGraphTree = useMemo(
+    () => (result ? buildKnowledgeGraph(result) : []),
+    [result]
+  )
 
   // D39 — 首次加载 UserPreferences(客户端 hydration 后)
   useEffect(() => {
@@ -194,6 +205,33 @@ export default function Home() {
         setMarkdown(pdfData.markdown || '')
         setObsidian(pdfData.obsidian || '')
         setMindmap(pdfData.mindmap || '')
+
+        // v2.3.3 fix — PDF 模式也写 cost history
+        const pdfMeta = pdfData.metadata || {}
+        const pdfPerAgent = Array.isArray(pdfMeta.per_agent_usage) ? pdfMeta.per_agent_usage : []
+        if (pdfMeta.total_tokens > 0 && pdfPerAgent.length > 0 && pdfData.knowledge_card) {
+          try {
+            await appendCostRun({
+              timestamp: Date.now(),
+              title: String(pdfData.knowledge_card.title || '').substring(0, 60),
+              source: String(pdfMeta.source || 'PDF 上传'),
+              inputType: 'pdf',
+              complexity: '',
+              totalDurationMs: Number(pdfMeta.processing_time_ms || 0),
+              totalUsage: {
+                promptTokens: Number(pdfMeta.total_prompt_tokens || 0),
+                completionTokens: Number(pdfMeta.total_completion_tokens || 0),
+                totalTokens: Number(pdfMeta.total_tokens || 0),
+              },
+              totalCostUsd: Number(pdfMeta.total_cost_usd || 0),
+              perAgent: pdfPerAgent,
+              model: pdfMeta.model || undefined,
+            })
+          } catch (err) {
+            console.warn('[cost-history] PDF append failed:', err)
+          }
+        }
+
         finalizeProgress()
         setLoading(false)
         return
@@ -214,6 +252,34 @@ export default function Home() {
           return
         }
         setBatchResults(data.results || [])
+
+        // v2.3.3 fix — batch 模式也写 cost history(聚合所有 URL)
+        const batchMeta = data.metadata || {}
+        const batchPerAgent = Array.isArray(batchMeta.per_agent_usage) ? batchMeta.per_agent_usage : []
+        const successCount = (data.results || []).filter((r: any) => r.success).length
+        if (batchMeta.total_tokens > 0 && batchPerAgent.length > 0 && successCount > 0) {
+          try {
+            await appendCostRun({
+              timestamp: Date.now(),
+              title: `Batch x${successCount} (${String(urls[0] || '').substring(0, 30)}...)`,
+              source: 'batch',
+              inputType: 'batch',
+              complexity: '',
+              totalDurationMs: Number(batchMeta.processing_time_ms || 0),
+              totalUsage: {
+                promptTokens: Number(batchMeta.total_prompt_tokens || 0),
+                completionTokens: Number(batchMeta.total_completion_tokens || 0),
+                totalTokens: Number(batchMeta.total_tokens || 0),
+              },
+              totalCostUsd: Number(batchMeta.total_cost_usd || 0),
+              perAgent: batchPerAgent,
+              model: batchMeta.model || undefined,
+            })
+          } catch (err) {
+            console.warn('[cost-history] batch append failed:', err)
+          }
+        }
+
         finalizeProgress()
         return
       }
@@ -1922,7 +1988,7 @@ export default function Home() {
                     {result && (
                       <KnowledgeGraph
                         rootTitle={result.title || 'Untitled'}
-                        tree={buildKnowledgeGraph(result)}
+                        tree={knowledgeGraphTree}
                         buildDurationMs={1500}
                       />
                     )}

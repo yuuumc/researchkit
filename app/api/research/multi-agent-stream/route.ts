@@ -287,7 +287,10 @@ export async function POST(request: NextRequest) {
 
           // Vercel 超时保护：58s 内未完成则主动发 error 事件
           // Vercel function 60s hard kill，留 2s 给 flush + close
-          const PIPELINE_TIMEOUT_MS = 58_000
+          // v2.3.3 fix — 仅 Vercel 环境启用 58s 超时;本地 dev 不受 Vercel hard kill 约束,放宽到 5 分钟
+          // 之前硬编码 58_000 导致本地 dev 也被 Promise.race 提前打断,误以为"也有 58 秒限制"
+          const isVercelEnv = Boolean(process.env.VERCEL)
+          const PIPELINE_TIMEOUT_MS = isVercelEnv ? 58_000 : 300_000
           let pipelineTimedOut = false
           const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(() => {

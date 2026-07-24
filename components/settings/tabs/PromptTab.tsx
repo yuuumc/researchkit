@@ -26,7 +26,8 @@ const AGENTS: Array<{ name: AgentName; descKey: string }> = [
   { name: 'Planner', descKey: 'settings.prompt.agentPlanner' },
   { name: 'Reflection', descKey: 'settings.prompt.agentReflection' },
   { name: 'Replan', descKey: 'settings.prompt.agentReplan' },
-  { name: 'KnowledgeBuilder', descKey: 'settings.prompt.agentKnowledgeBuilder' },
+  // v2.3.3 fix — 移除 KnowledgeBuilder:multi-agent 主流程中 KB 是纯 TS 聚合器不调 LLM,配置无效
+  // 旧版 knowledge-card 单次路由仍支持,但已不再作为主入口,UI 列表移除避免误导
 ]
 
 export function PromptTab() {

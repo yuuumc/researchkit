@@ -42,6 +42,11 @@ export type AgentName =
   | 'Replan'
   // D30 — Smart Suggestion v2 也走 PromptBuilder（让 LLM 判断相关论文）
   | 'SmartSuggestion'
+  // v2.3.3 fix — 单次路由（Explain/Chat/Compare）也接入 PromptBuilder，让 Preset 生效
+  // 这些 agent 不参与 multi-agent 主流程，只为 prompt 层提供 metadata（agent 字段未在 build() 中消费）
+  | 'Explain'
+  | 'Chat'
+  | 'Compare'
 
 /**
  * Project Extension — 项目级 prompt 扩展

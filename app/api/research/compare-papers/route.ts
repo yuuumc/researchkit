@@ -21,7 +21,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerProvider } from '@/lib/server-provider'
 import { setCurrentAgent } from '@/lib/usage-collector'
-import { buildAutoTranslateDirective } from '@/lib/server-user-preferences'
+import { buildAutoTranslateDirective, getServerUserPreferences } from '@/lib/server-user-preferences'
+import { PromptBuilder } from '@/core/prompt'
 import type { KnowledgeCard } from '@/types/knowledge'
 import type { CompareResult, CompareDimension } from '@/types/compare'
 import { COMPARE_DIMENSIONS, COMPARE_DIMENSION_LABELS } from '@/types/compare'
@@ -161,6 +162,14 @@ Return STRICT JSON only (no markdown, no comments):
   "orderReason": "Paper A's foundational concepts help understand Paper B's extension."
 }${autoTranslateDirective}`
 
+  // v2.3.3 fix — 通过 PromptBuilder 注入 preset persona
+  const { preset } = getServerUserPreferences()
+  const built = PromptBuilder.build({
+    agent: 'Compare',
+    system: system,
+    preset,
+  })
+
   const user = `Compare these two papers:
 
 === PAPER A ===
@@ -172,7 +181,7 @@ ${formatKCForPrompt(kcB)}
 Return the JSON comparison as specified.`
 
   return [
-    { role: 'system' as const, content: system },
+    { role: 'system' as const, content: built.content },
     { role: 'user' as const, content: user },
   ]
 }

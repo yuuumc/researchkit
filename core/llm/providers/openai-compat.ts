@@ -53,6 +53,12 @@ export class OpenAICompatProvider implements LLMProvider {
   private readonly client: OpenAI
   private readonly model: string
   private readonly defaultTemperature: number
+  /**
+   * v2.3.3 fix — 标记用户是否在 Provider Tab 显式设置了 defaultTemperature
+   * true 时,chat()/chatStream() 会用 this.defaultTemperature 覆盖 agent 传入的 options.temperature
+   * false(未设置 / 用默认值 0.3)时,沿用 agent 各自的硬编码 temperature
+   */
+  private readonly hasCustomTemperature: boolean
   private readonly defaultMaxTokens: number | undefined
   private readonly defaultTimeout: number
 
@@ -68,11 +74,30 @@ export class OpenAICompatProvider implements LLMProvider {
     })
 
     this.model = config.model
+    // v2.3.3 fix — 用户显式设置 defaultTemperature 时,hasCustomTemperature=true
+    // 注意: fromEnv() 不设 defaultTemperature,所以 env 模式下 hasCustomTemperature=false(保持旧行为)
+    this.hasCustomTemperature = config.defaultTemperature !== undefined
     this.defaultTemperature = config.defaultTemperature ?? 0.3
     this.defaultMaxTokens = config.defaultMaxTokens
     this.defaultTimeout = config.timeout ?? 60_000
 
     this.capabilities = getCapabilities(config.type)
+  }
+
+  /**
+   * v2.3.3 fix — 解析 max_tokens 优先级
+   *
+   * 1. per-call options.maxTokens(优先级最高)
+   * 2. config.defaultMaxTokens(fallback,用户在 ProviderConfig 设置但 UI 未暴露)
+   * 3. undefined(不传给 OpenAI API,让模型用默认值)
+   *
+   * 之前 defaultMaxTokens 字段在 config 中存储但从未应用,是 dead config
+   * 现在作为 fallback 生效,与 temperature 行为一致
+   */
+  private resolveMaxTokens(callMaxTokens?: number): number | undefined {
+    if (typeof callMaxTokens === 'number' && callMaxTokens > 0) return callMaxTokens
+    if (typeof this.defaultMaxTokens === 'number' && this.defaultMaxTokens > 0) return this.defaultMaxTokens
+    return undefined
   }
 
   /**
@@ -101,8 +126,14 @@ export class OpenAICompatProvider implements LLMProvider {
       {
         model: this.model,
         messages,
-        temperature: options?.temperature ?? this.defaultTemperature,
-        ...(options?.maxTokens && { max_tokens: options.maxTokens }),
+        // v2.3.3 fix — 用户显式设置 defaultTemperature 时覆盖 agent 硬编码值
+        temperature: this.hasCustomTemperature
+          ? this.defaultTemperature
+          : (options?.temperature ?? this.defaultTemperature),
+        // v2.3.3 fix — 优先用 per-call options.maxTokens,其次用 config.defaultMaxTokens(fallback),最后不限
+        ...(this.resolveMaxTokens(options?.maxTokens) && {
+          max_tokens: this.resolveMaxTokens(options?.maxTokens),
+        }),
         ...(options?.responseFormat === 'json_object' && {
           response_format: { type: 'json_object' },
         }),
@@ -162,8 +193,14 @@ export class OpenAICompatProvider implements LLMProvider {
       {
         model: this.model,
         messages,
-        temperature: options?.temperature ?? this.defaultTemperature,
-        ...(options?.maxTokens && { max_tokens: options.maxTokens }),
+        // v2.3.3 fix — 用户显式设置 defaultTemperature 时覆盖 agent 硬编码值
+        temperature: this.hasCustomTemperature
+          ? this.defaultTemperature
+          : (options?.temperature ?? this.defaultTemperature),
+        // v2.3.3 fix — 优先用 per-call options.maxTokens,其次用 config.defaultMaxTokens(fallback),最后不限
+        ...(this.resolveMaxTokens(options?.maxTokens) && {
+          max_tokens: this.resolveMaxTokens(options?.maxTokens),
+        }),
         ...(options?.responseFormat === 'json_object' && {
           response_format: { type: 'json_object' },
         }),

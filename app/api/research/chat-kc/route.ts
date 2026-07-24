@@ -31,7 +31,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerProvider } from '@/lib/server-provider'
 import { setCurrentAgent } from '@/lib/usage-collector'
-import { buildAutoTranslateDirective } from '@/lib/server-user-preferences'
+import { buildAutoTranslateDirective, getServerUserPreferences } from '@/lib/server-user-preferences'
+import { PromptBuilder } from '@/core/prompt'
 import type { ChatMessage } from '@/core/llm/provider'
 import type { KnowledgeCard } from '@/types/knowledge'
 
@@ -150,7 +151,15 @@ function buildChatSystemPrompt(kc: KnowledgeCard): string {
 - **Stay focused**: Don't re-summarize the whole paper. Answer the specific question asked.
 - **Suggest follow-ups**: At the end of complex answers, optionally suggest 1-2 related questions the user might want to ask next.${autoTranslateDirective}`)
 
-  return parts.join('\n')
+  // v2.3.3 fix — 通过 PromptBuilder 注入 preset persona
+  const { preset } = getServerUserPreferences()
+  const built = PromptBuilder.build({
+    agent: 'Chat',
+    system: parts.join('\n'),
+    preset,
+  })
+
+  return built.content
 }
 
 /**

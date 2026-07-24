@@ -31,6 +31,7 @@ export function ProviderTab() {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [saved, setSaved] = useState(false)
   const [usingEnv, setUsingEnv] = useState(true)
+  const [saving, setSaving] = useState(false)  // v2.3.3 fix — save/reset now async
 
   useEffect(() => {
     const saved = getUserConfigClient()
@@ -88,30 +89,42 @@ export function ProviderTab() {
     }
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!config.apiKey.trim() || !config.baseURL.trim() || !config.model.trim()) {
       setTestResult({ success: false, message: t('settings.provider.errorFieldsRequired') })
       return
     }
-    saveUserConfigClient(config)
-    setUsingEnv(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    setSaving(true)
+    try {
+      // v2.3.3 fix — saveUserConfigClient 现在 async(需要调 server 端点写 HttpOnly apiKey cookie)
+      await saveUserConfigClient(config)
+      setUsingEnv(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!confirm(t('settings.provider.resetConfirm'))) return
-    clearUserConfigClient()
-    setConfig({
-      type: 'deepseek',
-      baseURL: 'https://api.deepseek.com/v1',
-      apiKey: '',
-      model: 'deepseek-v4-flash',
-      defaultTemperature: 0.3,
-    })
-    setUsingEnv(true)
-    setTestResult(null)
-    setSaved(false)
+    setSaving(true)
+    try {
+      // v2.3.3 fix — clearUserConfigClient 现在 async(需要调 server 端点清 HttpOnly cookie)
+      await clearUserConfigClient()
+      setConfig({
+        type: 'deepseek',
+        baseURL: 'https://api.deepseek.com/v1',
+        apiKey: '',
+        model: 'deepseek-v4-flash',
+        defaultTemperature: 0.3,
+      })
+      setUsingEnv(true)
+      setTestResult(null)
+      setSaved(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   // C1 修复：API Key 永不明文显示，仅支持复制到剪贴板
@@ -277,13 +290,14 @@ export function ProviderTab() {
         >
           {testing ? t('settings.provider.testing') : t('settings.provider.testConnection')}
         </button>
-        <button onClick={handleSave} style={btnPrimary}>
-          {t('settings.provider.save')}
+        <button onClick={handleSave} disabled={saving || testing} style={{ ...btnPrimary, opacity: (saving || testing) ? 0.6 : 1, cursor: (saving || testing) ? 'not-allowed' : 'pointer' }}>
+          {saving ? '...' : t('settings.provider.save')}
         </button>
         {!usingEnv && (
           <button
             onClick={handleReset}
-            style={{ ...btnSecondary, color: '#dc2626', background: '#fee2e2' }}
+            disabled={saving}
+            style={{ ...btnSecondary, color: '#dc2626', background: '#fee2e2', opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
           >
             {t('settings.provider.resetToEnv')}
           </button>

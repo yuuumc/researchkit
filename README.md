@@ -11,7 +11,7 @@
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 🌐 **Live demo**: https://researchkit-mu.vercel.app
-📦 **Latest release**: [v2.3.3 — Example cache + demo replay engine](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3)
+📦 **Latest release**: [v2.3.3 — Settings effectiveness + KG flicker fix + cost dashboard](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3)
 
 📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.3.3 Release Notes](./releases/v2.3.3-release-notes.md) · [v2.3.2 Release Notes](./releases/v2.3.2-release-notes.md) · [Branching](./docs/BRANCHING.md)
 
@@ -85,6 +85,30 @@ Paste any paper, document, or URL → a team of 6 AI agents reads, analyzes, and
 #### Application Language — Japanese removed
 - **Problem**: `ja-JP` in Application Language had no real function (no translation pack — it fell back to en-US).
 - **Fix**: Removed `ja-JP` from `AppLocale`; the dropdown now shows only `auto / zh-CN / en-US`. The browser-language resolver also falls back to en-US for Japanese browsers. Output Language still supports `ja-JP` (passed through to the LLM, unaffected).
+
+#### Settings module effectiveness fixes
+- **Provider Tab — apiKey dead config**: v2.3.2 security hardening removed apiKey from the cookie, but the server couldn't read the user-set apiKey. Added `/api/settings/save-provider-key` endpoint that sets an HttpOnly cookie; `server-provider.ts` reads apiKey from this cookie first.
+- **Provider Tab — defaultTemperature dead config**: Agent hardcoded temperature overrode user settings. Added `hasCustomTemperature` flag in `OpenAICompatProvider`; when the user explicitly sets `defaultTemperature`, it overrides the agent's hardcoded value.
+- **Provider Tab — defaultMaxTokens dead config**: The field was stored in config but never applied. Added `resolveMaxTokens()` helper as fallback (`options.maxTokens > config.defaultMaxTokens > undefined`), consistent with the temperature behavior.
+- **Prompt Tab — KnowledgeBuilder dead config**: KnowledgeBuilder is a pure TS aggregator in the multi-agent main flow and doesn't call LLM, so configuring it had no effect. Removed from the AGENTS list in `PromptTab.tsx`.
+- **General Tab — Output Language in PDF/batch modes**: `generateKnowledgeCard` didn't accept `outputLocale`, so PDF and batch routes ignored the user's Output Language setting. Added `outputLocale` parameter to the interface; routes now read from user preferences and pass it through.
+- **General Tab — Preset in Explain/Chat/Compare**: These endpoints directly concatenated the system prompt, bypassing `PromptBuilder` and ignoring the user's Preset persona. These routes now use `PromptBuilder.build()` to inject the Preset persona. Added `'Explain' | 'Chat' | 'Compare'` to the `AgentName` type.
+
+#### Cost dashboard — PDF/batch integration
+- **Problem**: PDF and batch routes bypassed the cost dashboard's token attribution (legacy TODO P2-8).
+- **Fix**: `upload-pdf/route.ts` and `batch/route.ts` now wrap `beginCollection()` / `endCollection()`; batch uses `withAgent(\`batch:${url}\`)` for per-URL attribution. Cost metadata (`total_tokens`, `total_cost_usd`, `per_agent_usage`, `model`) is passed to the frontend via `metadata`; `app/page.tsx` writes it to `appendCostRun` for both PDF (single KC) and batch (aggregated URLs) modes.
+
+#### Knowledge Graph flicker fix (v2.3.1 backport)
+- **Problem**: KG view nodes flickered + jittered when the parent component re-rendered.
+- **Root cause ①**: Each `TreeNode` declared its own inline `<style>@keyframes</style>`, so parent re-renders caused React to rewrite innerHTML → browser re-applied @keyframes → animation restarted. Fixed by hoisting `KG_KEYFRAMES` to a module-level constant, injected once per return branch.
+- **Root cause ②**: `transition: 'all 0.25s ease'` on the TreeNode wrapper conflicted with `animation: ... both` (which already controls the final state). Removed the transition.
+- **Root cause ③**: Two concurrent `useEffect`s (Effect A `[buildKey]` + Effect B `[]`) had cleanup gaps when switching tabs. Merged into a single `useEffect` with `[buildKey]` dependency.
+- **Additional fix**: `app/page.tsx` now uses `useMemo` to stabilize the `buildKnowledgeGraph(result)` array reference, preventing unnecessary KG re-renders from parent state changes (LiveThoughts 60ms flush, SSE events, tab switches).
+- **Path Trace breadcrumb fix**: Hovering child nodes (Summary, Metadata, etc.) caused the breadcrumb to flicker because `onMouseEnter`/`onMouseLeave` were bound to the inner branch div (mouseleave fired when moving to a child). Moved hover handlers to the outer wrapper div; the breadcrumb is now always visible (shows "hover any node to see path" when idle).
+
+#### Dev environment timeout fix
+- **Problem**: The 58s `Promise.race` timeout guard was hardcoded, so local `npm run dev` also got cut at 58s (not just Vercel).
+- **Fix**: `multi-agent-stream/route.ts` now uses `process.env.VERCEL` to distinguish — Vercel keeps 58s (for the 60s hard kill), local dev is relaxed to 5 minutes.
 
 ### v2.3.2 Highlights
 
@@ -521,7 +545,7 @@ researchkit/
 | Service type | A2MCP (free, 0 USDT) |
 | Endpoint | `https://researchkit-mu.vercel.app/api/research/multi-agent-stream` |
 | Network | X Layer |
-| Version | v2.3.3 (example cache + demo replay engine, 2026-07-23) |
+| Version | v2.3.3 (settings effectiveness + KG flicker fix + cost dashboard, 2026-07-24) |
 | Onchain Mode | `mock (demo)` — 6 swappable interfaces stubbed, real SDK in D23/D24 roadmap |
 | Onchain OS TX | _mock_ (deterministic hash derived from KC content + wallet, never broadcast) |
 
@@ -535,7 +559,7 @@ researchkit/
 | **Minor (1.x)** | New features in existing architecture (new export, new input mode, new subsystem) |
 | **Patch (1.0.x)** | Bug fixes, prompt tuning, UI polish, quality releases |
 
-**v2.3.3** is a Patch release — performance optimization for the hackathon-critical "Load Example" button. Adds a three-layer example cache (in-process Map + repo fixture + runtime fs) + a demo replay engine that replays recorded stage/token events on a scaled timeline, dropping "Load Example" wall time from 30-90s to ~10-15s (4-5x speedup) with zero output quality loss. Includes a hotfix for `DEFAULT_REPLAY_OPTIONS` hardcoding `minEventGapMs=50` (config hotfix was not propagating), a cache-miss fix that relaxes over-strict key dimensions for example requests, an `Output Language` fix that makes the selection actually take effect, and removal of the non-functional `ja-JP` option from Application Language. All v2.3.2 security hardening preserved. See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3) for full details.
+**v2.3.3** is a Patch release — built on top of the example cache + demo replay engine, it adds settings module effectiveness fixes (apiKey/defaultTemperature/defaultMaxTokens dead configs, Output Language in PDF/batch, Preset in Explain/Chat/Compare), Cost dashboard integration for PDF/batch modes, Knowledge Graph flicker fix (v2.3.1 backport: hoisted @keyframes, removed transition/animation conflict, merged useEffects, stabilized tree reference with `useMemo`, made Path Trace breadcrumb always visible), and a dev environment timeout fix (58s `Promise.race` was hardcoded; now only enforced under `process.env.VERCEL`). See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3) for full details.
 
 **v2.3.2** is a Patch release — security hardening based on `ResearchKit-2.3.1-审查报告.md`. Day 1: C1 Critical (API key moved out of cookie) + H1-H5 High (tool whitelist, SSRF guard, rate limit, stack trace sanitization, pluginId validation). Day 2: M2/M3/L1/L2/L3 cleanup (redirect policy, JSON truncation marker, dead code removal). See [release notes](./releases/v2.3.2-release-notes.md) for full details.
 
