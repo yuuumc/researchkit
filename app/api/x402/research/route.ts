@@ -205,11 +205,18 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     if (e instanceof X402Error) {
       // 调试：把 decode 错误详情附在 402 body 里，便于排查
+      let decodedPreview = ''
+      try {
+        decodedPreview = Buffer.from(sigHeader, 'base64').toString('utf-8').slice(0, 500)
+      } catch {
+        decodedPreview = '<base64 decode failed>'
+      }
       const errBody = {
         error: 'Payment Required (signature decode failed)',
         x402Version: 2,
         decode_error: { code: e.code, message: e.message, detail: e.detail },
         sig_header_preview: sigHeader.slice(0, 60) + '...',
+        decoded_json_preview: decodedPreview,
         resource: requirements.resource,
         accepts: requirements.accepts,
       }
