@@ -96,15 +96,18 @@ export function decodePaymentSignature(headerValue: string): PaymentPayload {
   } catch (e) {
     throw new X402Error('invalid_payment_header', 'PAYMENT-SIGNATURE 不是合法 base64 JSON', { raw: json.slice(0, 200) })
   }
-  const p = parsed as Partial<PaymentPayload>
+  const p = parsed as Partial<PaymentPayload> & { accepted?: Partial<AcceptedScheme> & { scheme?: string } }
   if (!p || typeof p !== 'object') {
     throw new X402Error('invalid_payment_header', 'PAYMENT-SIGNATURE 解析后不是对象')
   }
-  if (p.x402Version !== 2) {
+  // x402Version: OKX CLI 可能省略，默认 2
+  if (p.x402Version !== undefined && p.x402Version !== 2) {
     throw new X402Error('unsupported_version', `仅支持 x402Version=2，收到 ${String(p.x402Version)}`)
   }
-  if (p.scheme !== 'exact') {
-    throw new X402Error('unsupported_scheme', `仅支持 scheme=exact，收到 ${String(p.scheme)}`)
+  // scheme: 优先看顶层（标准 x402 v2），否则看 accepted.scheme（OKX CLI 实际格式）
+  const scheme = p.scheme || p.accepted?.scheme
+  if (scheme !== 'exact') {
+    throw new X402Error('unsupported_scheme', `仅支持 scheme=exact，收到 top-level=${String(p.scheme)}, accepted.scheme=${String(p.accepted?.scheme)}`)
   }
   if (!p.accepted || !p.payload?.authorization || !p.payload?.signature) {
     throw new X402Error('invalid_payment_header', '缺少 accepted / payload.authorization / payload.signature')
@@ -118,6 +121,10 @@ export function decodePaymentSignature(headerValue: string): PaymentPayload {
   }
   if (!/^0x[0-9a-fA-F]+$/.test(p.payload.signature)) {
     throw new X402Error('invalid_payment_header', 'signature 不是 0x 前缀 hex')
+  }
+  // 补全顶层 scheme（给后续 assertPayloadMatches 用）
+  if (!p.scheme && p.accepted?.scheme) {
+    p.scheme = p.accepted.scheme
   }
   return p as PaymentPayload
 }

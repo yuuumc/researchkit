@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
       // 调试：把 decode 错误详情附在 402 body 里，便于排查
       let decodedPreview = ''
       try {
-        decodedPreview = Buffer.from(sigHeader, 'base64').toString('utf-8').slice(0, 500)
+        decodedPreview = Buffer.from(sigHeader, 'base64').toString('utf-8').slice(0, 2000)
       } catch {
         decodedPreview = '<base64 decode failed>'
       }
