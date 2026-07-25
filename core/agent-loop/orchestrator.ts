@@ -106,7 +106,12 @@ Each step has a "kind":
                    use when the material is a long paper/article that needs deep analysis
                    set "query" to the material body, "titleHint" to the paper title
   - "web":        quick web search (use for general lookups, recent news, definitions)
+                   POWERED BY Wikipedia OpenSearch API — works best with 1-4 word keyword queries,
+                   NOT natural language sentences. Bad: "Explain HTTP 402 payment required protocol"
+                   Good: "HTTP 402" or "List of HTTP status codes"
   - "arxiv":      search arxiv (use for academic papers, especially ML/AI/science)
+                   arxiv API expects keyword queries too. Bad: "What is transformer architecture in NLP"
+                   Good: "transformer attention mechanism"
   - "memory-recall": look up previously analyzed materials in this agent's long-term memory
                      use when the goal references "the paper I read before" or similar
 
@@ -123,6 +128,10 @@ Constraints:
 - 2..N steps (N ≤ 6). Prefer 2-4 steps.
 - Order matters: later steps may depend on earlier ones.
 - Use the minimum number of steps that can answer the goal.
+- For "web" and "arxiv" steps, ALWAYS extract concise keyword queries (1-5 words),
+  never paste the full goal sentence as the query. Wikipedia and arxiv search APIs
+  match on titles/keywords, not natural language.
+- For "multi-agent" steps, the "query" field carries the material body (full text).
 - Return ONLY valid JSON, no prose, no markdown fences.`
 
 async function planSteps(

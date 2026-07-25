@@ -191,7 +191,26 @@ Wikipedia works best for concepts, definitions, people, and places. For recent n
       // 主搜索源：Wikipedia OpenSearch + Summary API（稳定、无反爬虫）
       let results = await searchViaWikipedia(query, maxResults)
 
-      // 兜底：Wikipedia 没结果时，尝试 DuckDuckGo HTML（可能被反爬虫挡，返回空）
+      // 兜底 1：Wikipedia 没结果 + query 是长句（>5 词），提炼成前 3 个关键词重试
+      if (results.length === 0) {
+        const wordCount = query.split(/\s+/).filter(Boolean).length
+        if (wordCount > 4) {
+          // 取前 3 个非停用词作为关键词
+          const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'what', 'who', 'when', 'where', 'why', 'how', 'explain', 'describe', 'tell', 'me', 'about', 'in', 'on', 'of', 'for', 'and', 'or', 'to', 'with'])
+          const keywords = query
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, ' ')
+            .split(/\s+/)
+            .filter((w) => w && !stopWords.has(w))
+            .slice(0, 3)
+          if (keywords.length > 0) {
+            const refinedQuery = keywords.join(' ')
+            results = await searchViaWikipedia(refinedQuery, maxResults)
+          }
+        }
+      }
+
+      // 兜底 2：Wikipedia 仍没结果，尝试 DuckDuckGo HTML（可能被反爬虫挡，返回空）
       if (results.length === 0) {
         results = await searchViaDuckDuckGo(query, maxResults)
       }
