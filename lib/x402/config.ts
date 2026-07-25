@@ -34,6 +34,7 @@ const USDT0_XLAYER_DEFAULT = '0x779ded0c9e1022225f8e0630b35a9b54be713736'
 export interface X402Config {
   enabled: boolean
   freeMode: boolean
+  trustSignature: boolean
   payTo: string
   assetAddress: string
   network: string
@@ -79,6 +80,7 @@ export function getX402Config(): X402Config {
 
   const enabled = !readBool(process.env.X402_DISABLED, false)
   const freeMode = readBool(process.env.X402_FREE_MODE, false)
+  const trustSignature = readBool(process.env.X402_TRUST_SIGNATURE, false)
 
   const payTo = (process.env.X402_PAYTO || '').trim()
   if (enabled && !freeMode && !payTo) {
@@ -110,6 +112,7 @@ export function getX402Config(): X402Config {
   cached = {
     enabled,
     freeMode,
+    trustSignature,
     payTo: payTo || '0x0000000000000000000000000000000000000000', // free mode 占位
     assetAddress,
     network,

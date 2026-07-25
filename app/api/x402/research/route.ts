@@ -153,7 +153,11 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // free mode：跳过 verify/settle，直接跑业务（便于 demo 演示 x402 完整链路）
+  // trustSignature 模式：跳过 facilitator verify/settle（OKX CLI 已在 TEE 侧完成签名 + 上链），
+  // 但仍走 402 challenge 流程。用于 demo / facilitator 不可用场景。
+  //   - 无 PAYMENT-SIGNATURE → 402 + accepts[]
+  //   - 有 PAYMENT-SIGNATURE → 只做本地字段匹配校验，通过即放行业务，返回 200 + payment.relayed=true
+  const trustSignature = cfg.trustSignature
   const freeMode = cfg.freeMode
 
   // 解析 body（付费 replay 时 body 与原请求一致——goal 仍要带）
@@ -167,28 +171,32 @@ export async function POST(request: NextRequest) {
 
   const sigHeader = request.headers.get('payment-signature') || request.headers.get('x-payment')
 
-  // 1) 未付费 → 402 challenge
-  if (!sigHeader || freeMode) {
+  // 1) 未付费 → 402 challenge（freeMode 例外：直接走业务）
+  if (!sigHeader) {
     if (freeMode) {
-      // free mode：直接走业务，不 verify/settle
       return await runBusinessOnly(request, cfg, body)
     }
     return paymentRequiredResponse(request, cfg, resourceUrl)
   }
 
-  // 2) 解析 PAYMENT-SIGNATURE
+  // 2) 有 PAYMENT-SIGNATURE
+  if (freeMode) {
+    // freeMode + sigHeader：直接走业务（demo 用，不验证签名）
+    return await runBusinessOnly(request, cfg, body)
+  }
+
+  // 解析 PAYMENT-SIGNATURE
   let payload: PaymentPayload
   try {
     payload = decodePaymentSignature(sigHeader)
   } catch (e) {
     if (e instanceof X402Error) {
-      // 解析失败 → 重新给 402 让买家重新签
       return paymentRequiredResponse(request, cfg, resourceUrl)
     }
     return errorResponse(request, 400, { code: 'invalid_signature', message: e instanceof Error ? e.message : 'signature parse failed' })
   }
 
-  // 3) 幂等检查
+  // 幂等检查
   const cached = getCached(sigHeader)
   if (cached) {
     return new NextResponse(cached.body, {
@@ -202,7 +210,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // 4) 匹配 accepts
+  // 匹配 accepts
   try {
     assertPayloadMatches(requirements, payload)
   } catch (e) {
@@ -212,7 +220,65 @@ export async function POST(request: NextRequest) {
     return errorResponse(request, 400, { code: 'payload_mismatch', message: e instanceof Error ? e.message : 'unknown' })
   }
 
-  // 5) facilitator /verify
+  // trustSignature 模式：跳过 facilitator，直接跑业务 + 返回 200
+  // payment.transaction 留空（未走链上 settle），payment.relayed=true 表示已放行
+  if (trustSignature) {
+    let result: Awaited<ReturnType<typeof runPaidResearch>>
+    try {
+      result = await runWithTimeout(
+        () => runPaidResearch({ goal: body.goal || '', sessionId: body.session_id, maxSteps: body.max_steps }),
+        cfg.maxDurationMs - 5_000,
+      )
+    } catch (e) {
+      if (e instanceof BusinessError) {
+        return errorResponse(request, e.status, { code: e.code, message: e.message })
+      }
+      return errorResponse(request, 500, { code: 'business_failed', message: e instanceof Error ? e.message : 'internal error' })
+    }
+    const payer = payload.payload.authorization.from
+    const responseBody = {
+      session_id: result.sessionId,
+      final_answer: result.finalAnswer,
+      references: result.references,
+      steps: result.steps.map((s) => ({
+        id: s.id, index: s.index, kind: s.kind, rationale: s.rationale, status: s.status,
+        outputSummary: s.outputSummary, durationMs: s.durationMs, costUsd: s.costUsd,
+      })),
+      total_cost_usd: result.totalCostUsd,
+      total_duration_ms: result.totalDurationMs,
+      total_usage: result.totalUsage,
+      payment: {
+        scheme: 'exact',
+        network: cfg.network,
+        asset: cfg.assetAddress,
+        amount_atomic: cfg.amountAtomic,
+        amount_usd: cfg.priceUsd,
+        payer,
+        transaction: null,
+        relayed: true,
+        mode: 'trust_signature',
+      },
+    }
+    const bodyStr = JSON.stringify(responseBody)
+    const respHeader = encodePaymentResponse({
+      success: true,
+      transaction: '',
+      network: cfg.network,
+      payer,
+      amount: cfg.amountAtomic,
+    })
+    setCached(sigHeader, { body: bodyStr, paymentResponseHeader: respHeader }, cfg.idempotencyTtlSec)
+    return new NextResponse(bodyStr, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'PAYMENT-RESPONSE': respHeader,
+        ...jsonCorsHeaders(request),
+      },
+    })
+  }
+
+  // 3) 非 trustSignature：走 facilitator verify（原逻辑）
   let verify: Awaited<ReturnType<typeof verifyPayment>>
   try {
     verify = await verifyPayment(cfg, payload, requirements)
