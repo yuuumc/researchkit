@@ -1,7 +1,7 @@
 {
   "tab": {
     "label": "Agent Run",
-    "hint": "v2.4.0 — Input a research goal, observe the Planner / Step 1-N / Synthesizer execution flow."
+    "hint": "v2.4.1 — Input a research goal, observe the Planner / Step 1-N / Synthesizer execution flow."
   },
   "form": {
     "goalLabel": "Research Goal",

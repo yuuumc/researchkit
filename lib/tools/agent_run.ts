@@ -16,7 +16,7 @@ import type { Tool, ToolCallResult } from './types'
 
 export const agentRunTool: Tool = {
   name: 'agent_run',
-  description: `Run the v2.4.0 multi-step ResearchKit research agent.
+  description: `Run the v2.4.1 multi-step ResearchKit research agent.
 The agent takes a research GOAL (not a single paper) and autonomously:
   1. Plans 2-6 steps (arxiv search / web search / multi-agent deep-dive / memory recall)
   2. Executes each step (using web_search, arxiv, or the full 6-agent pipeline)

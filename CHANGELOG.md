@@ -2,6 +2,31 @@
 
 All notable changes to ResearchKit are documented in this file.
 
+## v2.4.1 — x402 付费闸门（OKX Agent Payments Protocol 兼容）
+
+新增 `POST /api/x402/research`，按 OKX 客服反馈（ASP Accepted 卡在交付）改造：
+- 外部买家调用裸请求 → HTTP 402 + `PAYMENT-REQUIRED` 头（base64 JSON，含 `accepts[]` + Bazaar `outputSchema.input`）
+- 付费 replay（带 `PAYMENT-SIGNATURE` 头）→ facilitator /verify → 同步跑 runAgent → facilitator /settle → HTTP 200 + 完整 JSON + `PAYMENT-RESPONSE` 头
+- 业务失败/超时**不** settle，买家零扣款
+- 内存级幂等缓存（v2.5 计划迁 Upstash），同签名重复 replay 直接返缓存
+- 现有 `/api/agent/run`（免费 SSE）继续给 Web UI 用，不动
+
+协议契约：x402 v2 accepts-based + exact scheme + EIP-3009 transferWithAuthorization。Facilitator 走 OKX 官方端点 `https://web3.okx.com/api/v6/pay/x402/{verify,settle}`（HMAC 鉴权），X Layer 上 USDT0（`eip155:196`），价格 0.005 USDT/次。
+
+新增/改动文件：
+- `lib/x402/config.ts` — 配置中心（env 解析 + accepts 构造）
+- `lib/x402/payload.ts` — 协议层编解码（accepts / paymentPayload / settlement）
+- `lib/x402/facilitator.ts` — OKX facilitator 客户端（verify / settle / HMAC 鉴权）
+- `lib/x402/idempotency.ts` — 内存级幂等缓存
+- `lib/x402/run-paid.ts` — 同步业务执行包装（复用 runAgent）
+- `app/api/x402/research/route.ts` — endpoint 主流程
+- `.env.local.example` — x402 段位
+- `README.md` — 部署/测试指南
+
+不修改：stage-3 性能优化在另一 worktree，不交叉污染。
+
+部署清单与测试矩阵：见 `README.md` 的 v2.4.1 段位。
+
 ## [2.4.0] — 2026-07-24
 
 ### Major: From "Tool" to "Agent Service"

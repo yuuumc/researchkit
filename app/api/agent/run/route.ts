@@ -204,9 +204,9 @@ export async function GET() {
   return new Response(
     JSON.stringify({
       endpoint: 'POST /api/agent/run',
-      description: 'v2.4.0 multi-step research agent (SSE). Body: { goal, session_id?, locale?, max_steps? }',
+      description: 'v2.4.1 multi-step research agent (SSE). Body: { goal, session_id?, locale?, max_steps? }',
       events: ['ping', 'stage', 'agent_token', 'result', 'error'],
-      version: '2.4.0',
+      version: '2.4.1',
     }),
     { headers: { 'Content-Type': 'application/json' } }
   )

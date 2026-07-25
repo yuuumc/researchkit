@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     hasFinalAnswer: !!s.finalAnswer,
     totalCostUsd: s.totalCostUsd,
   }))
-  return NextResponse.json({ success: true, sessions: summary, count: summary.length, version: '2.4.0' })
+  return NextResponse.json({ success: true, sessions: summary, count: summary.length, version: '2.4.1' })
 }
 
 export async function POST(request: NextRequest) {

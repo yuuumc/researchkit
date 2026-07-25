@@ -17,7 +17,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   if (!session) {
     return NextResponse.json({ error: 'session not found' }, { status: 404 })
   }
-  return NextResponse.json({ success: true, session, version: '2.4.0' })
+  return NextResponse.json({ success: true, session, version: '2.4.1' })
 }
 
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
