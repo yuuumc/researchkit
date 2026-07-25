@@ -26,6 +26,7 @@
 import type { X402Config } from './config'
 import type { PaymentPayload, PaymentRequirements, SettlementResponse } from './payload'
 import { X402Error } from './payload'
+import { okxSign, okxStringify } from './okx-sign'
 
 interface VerifyResponse {
   isValid: boolean
@@ -43,15 +44,6 @@ interface SettleResponse {
   errorReason?: string
 }
 
-function okxSign(cfg: X402Config, method: 'POST' | 'GET', path: string, body: string, ts: string): string {
-  // OKX v5/v6 签名规范：base64(HMAC-SHA256(secret, ts + method + path + body))
-  // body 是 JSON 字符串（POST 时）或空字符串（GET 时）
-  const prehash = ts + method.toUpperCase() + path + body
-  // Node 18+ 内置 crypto；用同步 API
-  const { createHmac } = require('crypto') as typeof import('crypto')
-  return createHmac('sha256', cfg.okxApiSecret).update(prehash).digest('base64')
-}
-
 async function callFacilitator<TReq, TRes>(
   cfg: X402Config,
   op: 'verify' | 'settle',
@@ -59,7 +51,8 @@ async function callFacilitator<TReq, TRes>(
 ): Promise<TRes> {
   const url = `${cfg.facilitatorBase}/${op}`
   const path = new URL(url).pathname
-  const bodyStr = JSON.stringify(body)
+  // OKX 签名要求 body 是 Python json.dumps() 风格（字段排序 + 冒号/逗号后加空格）
+  const bodyStr = okxStringify(body)
   const ts = new Date().toISOString()
   const sign = okxSign(cfg, 'POST', path, bodyStr, ts)
 
