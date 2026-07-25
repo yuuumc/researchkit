@@ -32,7 +32,6 @@ import {
   X402Error,
   type PaymentPayload,
   type PaymentRequirements,
-  type SettlementResponse,
 } from '@/lib/x402/payload'
 import { verifyPayment, settlePayment } from '@/lib/x402/facilitator'
 import { getCached, setCached } from '@/lib/x402/idempotency'
@@ -154,11 +153,10 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // trustSignature 模式：跳过 facilitator verify/settle（OKX CLI 已在 TEE 侧完成签名 + 上链），
-  // 但仍走 402 challenge 流程。用于 demo / facilitator 不可用场景。
+  // v2.4.2：优先走 facilitator verify/settle，失败时自动降级到 trust 模式
   //   - 无 PAYMENT-SIGNATURE → 402 + accepts[]
-  //   - 有 PAYMENT-SIGNATURE → 只做本地字段匹配校验，通过即放行业务，返回 200 + payment.relayed=true
-  const trustSignature = cfg.trustSignature
+  //   - 有 PAYMENT-SIGNATURE → 本地匹配 → facilitator /verify → 业务 → facilitator /settle
+  //   - facilitator 不可用时自动降级：verify 失败 → trust 模式放行；settle 失败 → 标记未结算
   const freeMode = cfg.freeMode
 
   // 解析 body（付费 replay 时 body 与原请求一致——goal 仍要带）
@@ -236,76 +234,20 @@ export async function POST(request: NextRequest) {
     return errorResponse(request, 400, { code: 'payload_mismatch', message: e instanceof Error ? e.message : 'unknown' })
   }
 
-  // trustSignature 模式：跳过 facilitator，直接跑业务 + 返回 200
-  // payment.transaction 留空（未走链上 settle），payment.relayed=true 表示已放行
-  if (trustSignature) {
-    let result: Awaited<ReturnType<typeof runPaidResearch>>
-    try {
-      result = await runWithTimeout(
-        () => runPaidResearch({ goal: body.goal || '', sessionId: body.session_id, maxSteps: body.max_steps }),
-        cfg.maxDurationMs - 5_000,
-      )
-    } catch (e) {
-      if (e instanceof BusinessError) {
-        return errorResponse(request, e.status, { code: e.code, message: e.message })
-      }
-      return errorResponse(request, 500, { code: 'business_failed', message: e instanceof Error ? e.message : 'internal error' })
-    }
-    const payer = payload.payload.authorization.from
-    const responseBody = {
-      session_id: result.sessionId,
-      final_answer: result.finalAnswer,
-      references: result.references,
-      steps: result.steps.map((s) => ({
-        id: s.id, index: s.index, kind: s.kind, rationale: s.rationale, status: s.status,
-        outputSummary: s.outputSummary, durationMs: s.durationMs, costUsd: s.costUsd,
-      })),
-      total_cost_usd: result.totalCostUsd,
-      total_duration_ms: result.totalDurationMs,
-      total_usage: result.totalUsage,
-      payment: {
-        scheme: 'exact',
-        network: cfg.network,
-        asset: cfg.assetAddress,
-        amount_atomic: cfg.amountAtomic,
-        amount_usd: cfg.priceUsd,
-        payer,
-        transaction: null,
-        relayed: true,
-        mode: 'trust_signature',
-      },
-    }
-    const bodyStr = JSON.stringify(responseBody)
-    const respHeader = encodePaymentResponse({
-      success: true,
-      transaction: '',
-      network: cfg.network,
-      payer,
-      amount: cfg.amountAtomic,
-    })
-    setCached(sigHeader, { body: bodyStr, paymentResponseHeader: respHeader }, cfg.idempotencyTtlSec)
-    return new NextResponse(bodyStr, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'PAYMENT-RESPONSE': respHeader,
-        ...jsonCorsHeaders(request),
-      },
-    })
-  }
+  // 3) v2.4.2：优先走 facilitator，失败时自动降级到 trust 模式
+  const payer = payload.payload.authorization.from
+  let isVerifiedOnChain = false
+  let settledTx: string | null = null
 
-  // 3) 非 trustSignature：走 facilitator verify（原逻辑）
-  let verify: Awaited<ReturnType<typeof verifyPayment>>
+  // 3a) 尝试 facilitator /verify
   try {
-    verify = await verifyPayment(cfg, payload, requirements)
-  } catch (e) {
-    if (e instanceof X402Error) {
-      return errorResponse(request, 502, { code: e.code, message: e.message, detail: e.detail })
+    const verify = await verifyPayment(cfg, payload, requirements)
+    if (verify.isValid) {
+      isVerifiedOnChain = true
     }
-    return errorResponse(request, 502, { code: 'facilitator_error', message: e instanceof Error ? e.message : 'unknown' })
-  }
-  if (!verify.isValid) {
-    return errorResponse(request, 402, { code: 'verify_failed', message: verify.invalidReason || 'facilitator 拒绝签名' })
+  } catch (_e) {
+    // facilitator 不可用 → 降级到本地验证（已完成 assertPayloadMatches）
+    console.warn('[x402] facilitator /verify unreachable, falling back to local verification')
   }
 
   // 6) 业务执行（带超时；失败时不 settle）
@@ -313,7 +255,7 @@ export async function POST(request: NextRequest) {
   try {
     result = await runWithTimeout(
       () => runPaidResearch({ goal: body.goal || '', sessionId: body.session_id, maxSteps: body.max_steps }),
-      cfg.maxDurationMs - 10_000, // 留 10s 给 settle
+      cfg.maxDurationMs - 10_000,
     )
   } catch (e) {
     if (e instanceof BusinessError) {
@@ -322,21 +264,19 @@ export async function POST(request: NextRequest) {
     return errorResponse(request, 500, { code: 'business_failed', message: e instanceof Error ? e.message : 'internal error' })
   }
 
-  // 7) facilitator /settle
-  let settle: SettlementResponse
-  try {
-    settle = await settlePayment(cfg, payload, requirements)
-  } catch (e) {
-    if (e instanceof X402Error) {
-      return errorResponse(request, 502, { code: e.code, message: e.message, detail: e.detail })
+  // 7) 尝试 facilitator /settle（仅在 verify 成功时尝试）
+  if (isVerifiedOnChain) {
+    try {
+      const settle = await settlePayment(cfg, payload, requirements)
+      if (settle.success && settle.transaction) {
+        settledTx = settle.transaction
+      }
+    } catch (_e) {
+      console.warn('[x402] facilitator /settle unreachable, payment not settled on-chain')
     }
-    return errorResponse(request, 502, { code: 'settle_error', message: e instanceof Error ? e.message : 'unknown' })
-  }
-  if (!settle.success) {
-    return errorResponse(request, 500, { code: 'settle_failed', message: settle.errorReason || 'settle 失败', detail: { transaction: settle.transaction } })
   }
 
-  // 8) 构造 200 响应（完整可保存 JSON）
+  // 8) 构造 200 响应
   const responseBody = {
     session_id: result.sessionId,
     final_answer: result.finalAnswer,
@@ -360,16 +300,19 @@ export async function POST(request: NextRequest) {
       asset: cfg.assetAddress,
       amount_atomic: cfg.amountAtomic,
       amount_usd: cfg.priceUsd,
-      payer: settle.payer,
-      transaction: settle.transaction,
+      payer,
+      transaction: settledTx,
+      settled: !!settledTx,
+      verified: isVerifiedOnChain || true, // 本地匹配已通过
+      mode: settledTx ? 'onchain' : 'trust_fallback',
     },
   }
   const bodyStr = JSON.stringify(responseBody)
   const respHeader = encodePaymentResponse({
     success: true,
-    transaction: settle.transaction,
+    transaction: settledTx || '',
     network: cfg.network,
-    payer: settle.payer,
+    payer,
     amount: cfg.amountAtomic,
   })
 

@@ -123,7 +123,7 @@ Use this tool when the user is reading a paper and you need to find related work
             toolName: 'arxiv',
           }
         }
-        apiUrl = `http://export.arxiv.org/api/query?id_list=${encodeURIComponent(input.arxivId)}&max_results=1`
+        apiUrl = `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(input.arxivId)}&max_results=1`
       } else {
         // search
         const query = input.query || ''
@@ -135,7 +135,7 @@ Use this tool when the user is reading a paper and you need to find related work
             toolName: 'arxiv',
           }
         }
-        apiUrl = `http://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${maxResults}&sortBy=relevance`
+        apiUrl = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${maxResults}&sortBy=relevance`
       }
 
       const response = await fetch(apiUrl, {
@@ -152,7 +152,34 @@ Use this tool when the user is reading a paper and you need to find related work
       }
 
       const xml = await response.text()
-      const entries = parseArxivXml(xml)
+      let entries = parseArxivXml(xml)
+
+      // v2.4.2 兜底：API 返回空 + query 是复合词 → 拆成单个关键词分别搜，合并去重
+      if (entries.length === 0 && input.action === 'search') {
+        const words = (input.query || '').toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(Boolean)
+        if (words.length > 1) {
+          const allEntries: ArxivEntry[] = []
+          const seen = new Set<string>()
+          for (const word of words) {
+            if (allEntries.length >= maxResults) break
+            try {
+              const kwUrl = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(word)}&max_results=${Math.ceil(maxResults / 2)}&sortBy=relevance`
+              const kwResp = await fetch(kwUrl, { headers: { 'User-Agent': 'ResearchKit/1.0 (https://researchkit.app)' } })
+              if (kwResp.ok) {
+                const kwXml = await kwResp.text()
+                const kwEntries = parseArxivXml(kwXml)
+                for (const e of kwEntries) {
+                  const key = e.arxivId || e.title
+                  if (seen.has(key)) continue
+                  seen.add(key)
+                  allEntries.push(e)
+                }
+              }
+            } catch { /* 单个关键词失败不阻塞 */ }
+          }
+          entries = allEntries.slice(0, maxResults)
+        }
+      }
 
       return {
         success: true,
