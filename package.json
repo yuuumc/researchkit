@@ -13,7 +13,7 @@
     "verify:example-cache": "tsx scripts/verify-example-cache.ts"
   },
   "dependencies": {
-    "next": "14.2.5",
+    "next": "^14.2.35",
     "openai": "^4.52.0",
     "pdf-parse": "^2.4.5",
     "react": "^18",
