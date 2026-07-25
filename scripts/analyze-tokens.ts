@@ -6,7 +6,11 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 const BASE_URL = 'http://localhost:3000'
-const API_KEY = process.env.RESEARCHKIT_API_KEY || 'sk-155e462bbd5b409eb9b8e98544b19ce7'
+const API_KEY = process.env.RESEARCHKIT_API_KEY
+if (!API_KEY) {
+  console.error('ERROR: RESEARCHKIT_API_KEY env var is required. Copy .env.local.example to .env.local and fill it in.')
+  process.exit(1)
+}
 const FIXTURE_PATH = path.join(process.cwd(), 'fixtures', 'papers', 'en-001-attention-is-all-you-need.json')
 
 async function main() {
