@@ -113,6 +113,7 @@ export async function GET(request: NextRequest) {
           payTo: cfg.payTo,
           maxTimeoutSeconds: cfg.maxTimeoutSeconds,
           freeMode: cfg.freeMode,
+          trustSignature: cfg.trustSignature,
           x402_check_hint: 'POST a goal to receive 402 + PAYMENT-REQUIRED header; sign & replay with PAYMENT-SIGNATURE',
           accepts: requirements.accepts,
         },
