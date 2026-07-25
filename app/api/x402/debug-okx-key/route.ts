@@ -1,12 +1,11 @@
 /**
- * 临时调试：用 OKX API key 调一个简单的 v5 公共接口（/api/v5/account/balance），
- * 验证 key 本身是否有效（权限/passphrase/sign 是否正确）
- *
- * 如果这个能通，说明 key 没问题，问题在 facilitator 的 /verify endpoint 路径
- * 如果这个也 401，说明 key 本身有问题（权限/passphrase 错）
+ * 临时调试：用修复后的签名工具测 OKX v5 account 接口
+ * - GET 请求：query string 参与签名
+ * - POST 请求：body 用 Python json.dumps 风格（带空格）
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getX402Config } from '@/lib/x402/config'
+import { okxSign, okxStringify } from '@/lib/x402/okx-sign'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,43 +14,83 @@ export async function GET(request: NextRequest) {
   try {
     const cfg = getX402Config()
 
-    // 用同样的 key 调 OKX v5 account 接口
-    const method = 'GET'
-    const path = '/api/v5/account/account-position-risk'
-    const ts = new Date().toISOString()
-    const prehash = ts + method + path
-    const { createHmac } = require('crypto') as typeof import('crypto')
-    const sign = createHmac('sha256', cfg.okxApiSecret).update(prehash).digest('base64')
+    // 测试 1：GET /api/v5/account/account-position-risk?mgnMode=isolated
+    // query string 参与签名
+    const method1 = 'GET'
+    const path1 = '/api/v5/account/account-position-risk'
+    const queryString1 = 'mgnMode=isolated'
+    const requestPath1 = `${path1}?${queryString1}` // 签名时用 path?query
+    const body1 = ''
+    const ts1 = new Date().toISOString()
+    const sign1 = okxSign(cfg, method1, requestPath1, body1, ts1)
 
-    const url = `https://www.okx.com${path}?mgnMode=isolated`
-    const resp = await fetch(url, {
+    const url1 = `https://www.okx.com${requestPath1}`
+    const resp1 = await fetch(url1, {
       method: 'GET',
       headers: {
         'OK-ACCESS-KEY': cfg.okxApiKey,
-        'OK-ACCESS-SIGN': sign,
-        'OK-ACCESS-TIMESTAMP': ts,
+        'OK-ACCESS-SIGN': sign1,
+        'OK-ACCESS-TIMESTAMP': ts1,
         'OK-ACCESS-PASSPHRASE': cfg.okxApiPassphrase,
         'Content-Type': 'application/json',
       },
     })
-    const text = await resp.text()
-    let json: unknown
-    try {
-      json = JSON.parse(text)
-    } catch {
-      json = text.slice(0, 500)
+    const text1 = await resp1.text()
+
+    // 测试 2：POST /api/v5/trade/order （假数据，仅测签名是否通过）
+    // 用一个会被业务拒绝但签名应该通过的请求
+    const method2 = 'POST'
+    const path2 = '/api/v5/trade/order'
+    const bodyObj2 = {
+      instId: 'BTC-USDT',
+      tdMode: 'cash',
+      side: 'buy',
+      ordType: 'market',
+      sz: '0.001',
     }
+    const body2 = okxStringify(bodyObj2)
+    const ts2 = new Date().toISOString()
+    const sign2 = okxSign(cfg, method2, path2, body2, ts2)
+
+    const url2 = `https://www.okx.com${path2}`
+    const resp2 = await fetch(url2, {
+      method: 'POST',
+      headers: {
+        'OK-ACCESS-KEY': cfg.okxApiKey,
+        'OK-ACCESS-SIGN': sign2,
+        'OK-ACCESS-TIMESTAMP': ts2,
+        'OK-ACCESS-PASSPHRASE': cfg.okxApiPassphrase,
+        'Content-Type': 'application/json',
+      },
+      body: body2,
+    })
+    const text2 = await resp2.text()
 
     return NextResponse.json({
-      config: {
-        okxApiKeyPrefix: cfg.okxApiKey ? cfg.okxApiKey.slice(0, 6) + '...' : '(empty)',
-        okxApiSecretLength: cfg.okxApiSecret.length,
-        okxApiPassphraseLength: cfg.okxApiPassphrase.length,
+      test_1_get: {
+        method: method1,
+        requestPath: requestPath1,
+        timestamp: ts1,
+        sign: sign1,
+        prehash: ts1 + method1 + requestPath1 + body1,
+        response: {
+          status: resp1.status,
+          statusText: resp1.statusText,
+          body: text1.slice(0, 500),
+        },
       },
-      v5_account_response: {
-        status: resp.status,
-        statusText: resp.statusText,
-        body: json,
+      test_2_post: {
+        method: method2,
+        requestPath: path2,
+        body: body2,
+        timestamp: ts2,
+        sign: sign2,
+        prehash: ts2 + method2 + path2 + body2,
+        response: {
+          status: resp2.status,
+          statusText: resp2.statusText,
+          body: text2.slice(0, 500),
+        },
       },
       timestamp: new Date().toISOString(),
     }, { status: 200 })
