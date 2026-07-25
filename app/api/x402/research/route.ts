@@ -62,6 +62,12 @@ function jsonCorsHeaders(request: NextRequest): Record<string, string> {
 function paymentRequiredResponse(request: NextRequest, cfg: ReturnType<typeof getX402Config>, resourceUrl: string): NextResponse {
   const requirements = buildPaymentRequirements(resourceUrl, cfg)
   const headerVal = encodePaymentRequired(requirements)
+  // Debug: show what payment-related headers we actually received
+  const incomingHeaders = Object.fromEntries(
+    Array.from(request.headers.keys())
+      .filter((k) => k.toLowerCase().includes('payment') || k.toLowerCase() === 'x-payment')
+      .map((k) => [k, request.headers.get(k)]),
+  )
   const body = {
     error: 'Payment Required',
     x402Version: 2,
@@ -70,6 +76,12 @@ function paymentRequiredResponse(request: NextRequest, cfg: ReturnType<typeof ge
     instructions: {
       how_to_pay_onchainos: 'onchainos payment quote https://<this-host>/api/x402/research --method POST',
       hint: 'POST with Content-Type: application/json body {"goal":"..."}, repeat with header "PAYMENT-SIGNATURE: <b64>"',
+    },
+    _debug: {
+      received_payment_headers: incomingHeaders,
+      all_header_keys: request.headers.keys().toArray(),
+      trustSignature: cfg.trustSignature,
+      freeMode: cfg.freeMode,
     },
   }
   return new NextResponse(JSON.stringify(body), {
@@ -192,7 +204,23 @@ export async function POST(request: NextRequest) {
     payload = decodePaymentSignature(sigHeader)
   } catch (e) {
     if (e instanceof X402Error) {
-      return paymentRequiredResponse(request, cfg, resourceUrl)
+      // 调试：把 decode 错误详情附在 402 body 里，便于排查
+      const errBody = {
+        error: 'Payment Required (signature decode failed)',
+        x402Version: 2,
+        decode_error: { code: e.code, message: e.message, detail: e.detail },
+        sig_header_preview: sigHeader.slice(0, 60) + '...',
+        resource: requirements.resource,
+        accepts: requirements.accepts,
+      }
+      return new NextResponse(JSON.stringify(errBody), {
+        status: 402,
+        headers: {
+          'Content-Type': 'application/json',
+          'PAYMENT-REQUIRED': encodePaymentRequired(requirements),
+          ...jsonCorsHeaders(request),
+        },
+      })
     }
     return errorResponse(request, 400, { code: 'invalid_signature', message: e instanceof Error ? e.message : 'signature parse failed' })
   }
