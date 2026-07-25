@@ -325,7 +325,7 @@ async function executeStep(
     if (planned.kind === 'arxiv') {
       const result = await callTool('arxiv', { action: 'search', query: planned.query, maxResults: 5 }, 'AgentLoop')
       if (!result.result.success) throw new Error(result.result.error || 'arxiv failed')
-      const papers = (result.result.output as any)?.papers || []
+      const papers = (result.result.output as any)?.entries || (result.result.output as any)?.papers || []
       const summary = papers
         .slice(0, 5)
         .map((p: any, i: number) => `[${i + 1}] ${p.title} (${p.year || 'n.d.'}) — ${p.authors?.slice(0, 3).join(', ') || ''}\n   ${p.abstract?.slice(0, 200) || ''}`)
