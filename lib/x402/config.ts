@@ -29,7 +29,7 @@
 
 import type { PaymentRequirements, AcceptedScheme } from './payload'
 
-const USDT0_XLAYER_DEFAULT = '0x1e4a5963ab79e612984b2e88b8d96053bfd975d8'
+const USDT0_XLAYER_DEFAULT = '0x779ded0c9e1022225f8e0630b35a9b54be713736'
 
 export interface X402Config {
   enabled: boolean
