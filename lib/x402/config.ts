@@ -145,6 +145,7 @@ export function buildAccepts(cfg: X402Config): AcceptedScheme {
     amount: cfg.amountAtomic,
     payTo: cfg.payTo,
     maxTimeoutSeconds: cfg.maxTimeoutSeconds,
+    decimals: cfg.assetDecimals,
     extra: {
       name: cfg.eip712Name,
       version: cfg.eip712Version,

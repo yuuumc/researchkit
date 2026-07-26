@@ -23,6 +23,7 @@ export interface AcceptedScheme {
   amount: string
   payTo: string
   maxTimeoutSeconds: number
+  decimals: number
   extra: {
     name: string
     version: string

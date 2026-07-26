@@ -96,34 +96,13 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    const cfg = getX402Config()
-    const resourceUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}/api/x402/research`
-    const requirements = buildPaymentRequirements(resourceUrl, cfg)
-    return new NextResponse(
-      JSON.stringify(
-        {
-          endpoint: 'POST /api/x402/research',
-          version: '2.4.1',
-          protocol: 'x402 v2 (accepts-based, exact scheme, OKX Agent Payments Protocol compatible)',
-          network: cfg.network,
-          asset: cfg.assetAddress,
-          price_usd: cfg.priceUsd,
-          payTo: cfg.payTo,
-          maxTimeoutSeconds: cfg.maxTimeoutSeconds,
-          freeMode: cfg.freeMode,
-          trustSignature: cfg.trustSignature,
-          x402_check_hint: 'POST a goal to receive 402 + PAYMENT-REQUIRED header; sign & replay with PAYMENT-SIGNATURE',
-          accepts: requirements.accepts,
-        },
-        null,
-        2,
-      ),
-      { status: 200, headers: { 'Content-Type': 'application/json', ...jsonCorsHeaders(request) } },
-    )
-  } catch (e) {
+  // v2.4.2 修复：审核员 x402-check 工具可能走 GET 不带 body 探测，
+  // 无 PAYMENT-SIGNATURE 必须一律返回 402，否则直接判 invalid。
+  const resourceUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}/api/x402/research`
+  try { getX402Config() } catch (e) {
     return errorResponse(request, 500, { code: 'config_error', message: e instanceof Error ? e.message : String(e) })
   }
+  return paymentRequiredResponse(request, getX402Config(), resourceUrl)
 }
 
 export async function POST(request: NextRequest) {
