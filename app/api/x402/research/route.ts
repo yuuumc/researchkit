@@ -97,13 +97,38 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  // v2.4.2 修复：审核员 x402-check 工具可能走 GET 不带 body 探测，
-  // 无 PAYMENT-SIGNATURE 必须一律返回 402，否则直接判 invalid。
+  // v2.4.2：免费模式 → 200 + endpoint 介绍；付费模式 → 402 + accepts[]
+  // OKX 官方文档：https://web3.okx.com/zh-hans/onchainos/dev-docs/okxai/howtomcp
+  //   免费型：应直接返回 HTTP 200 和结果
+  //   x402 付费型：不带支付头时应返回 HTTP 402
   const resourceUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}/api/x402/research`
-  try { getX402Config() } catch (e) {
+  let cfg: ReturnType<typeof getX402Config>
+  try {
+    cfg = getX402Config()
+  } catch (e) {
     return errorResponse(request, 500, { code: 'config_error', message: e instanceof Error ? e.message : String(e) })
   }
-  return paymentRequiredResponse(request, getX402Config(), resourceUrl)
+  if (cfg.freeMode) {
+    const body = {
+      name: 'ResearchKit OS',
+      version: '2.4.2',
+      mode: 'free',
+      description: 'Multi-agent research pipeline — turns any paper/URL into a structured Knowledge Card',
+      endpoint: resourceUrl,
+      method: 'POST',
+      body_schema: {
+        goal: { type: 'string', required: true, description: 'Research goal in natural language' },
+        session_id: { type: 'string', required: false, description: 'Resume existing session' },
+        locale: { type: 'string', required: false, description: 'Output locale (en/zh/...)' },
+        max_steps: { type: 'number', required: false, min: 1, max: 4, description: 'Max planning steps (default 4, capped 4)' },
+      },
+    }
+    return new NextResponse(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...jsonCorsHeaders(request) },
+    })
+  }
+  return paymentRequiredResponse(request, cfg, resourceUrl)
 }
 
 export async function POST(request: NextRequest) {
