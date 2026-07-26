@@ -24,39 +24,31 @@ import type { X402Config } from './config'
  */
 export function okxStringify(obj: unknown): string {
   if (obj === null || obj === undefined) return ''
-  // 自定义 replacer + 排序
-  const sortKeys = (val: unknown): unknown => {
-    if (Array.isArray(val)) {
-      return val.map(sortKeys)
-    }
-    if (val && typeof val === 'object') {
-      const sorted: Record<string, unknown> = {}
-      Object.keys(val as Record<string, unknown>)
-        .sort()
-        .forEach((k) => {
-          sorted[k] = sortKeys((val as Record<string, unknown>)[k])
-        })
-      return sorted
-    }
-    return val
+  // Python json.dumps() 默认 separators=(', ', ': ')，字段按字母序
+  // 不能简单用 JSON.stringify + 正则替换，会破坏字符串里的 : 和 ,（如 URL）
+  return serializeSorted(obj)
+}
+
+function serializeSorted(val: unknown): string {
+  if (val === null) return 'null'
+  if (typeof val === 'boolean') return String(val)
+  if (typeof val === 'number') {
+    if (Number.isFinite(val)) return String(val)
+    return 'null'
   }
-  // JSON.stringify 默认无空格，手动加上
-  // 用 4 空格缩进后正则替换太脆弱，改用 space 参数 + 后处理
-  // 实际上 JSON.stringify(_, _, 1) 会产生换行 + 1 空格缩进，不是我们要的
-  // Python json.dumps() 默认 separators=(', ', ': ')，即逗号后 1 空格、冒号后 1 空格
-  // JS 实现方式：JSON.stringify 后正则替换
-  const sortedObj = sortKeys(obj)
-  const compact = JSON.stringify(sortedObj)
-  // 在每个 : 和 , 后加一个空格（字符串内部的 : 和 , 不动，因为它们在引号内）
-  // 简单方法：用 replacer 让 JSON.stringify 自己加空格
-  // JSON.stringify(obj, null, 0)  → 无空格
-  // 我们要的效果：{"a": 1, "b": 2}
-  // 用正则：匹配 : 后非空白，加空格；匹配 , 后非空白，加空格
-  // 但这会破坏字符串内部的 : 和 ,
-  // 更安全：手写序列化器
-  return compact
-    .replace(/:(?!\s)/g, ': ')
-    .replace(/,(?!\s)/g, ', ')
+  if (typeof val === 'string') return JSON.stringify(val) // 自带转义，不动
+  if (Array.isArray(val)) {
+    if (val.length === 0) return '[]'
+    const items = val.map(serializeSorted).join(', ')
+    return `[${items}]`
+  }
+  if (typeof val === 'object') {
+    const keys = Object.keys(val).sort()
+    if (keys.length === 0) return '{}'
+    const pairs = keys.map((k) => `${JSON.stringify(k)}: ${serializeSorted((val as Record<string, unknown>)[k])}`)
+    return `{${pairs.join(', ')}}`
+  }
+  return 'null'
 }
 
 /**
