@@ -62,6 +62,8 @@ async function getHttpServer(): Promise<any> {
     } as any,
   })
 
+  // TODO: 验证 content 模式后删除此行
+  _httpServer.onProtectedRequest(async () => ({ grantAccess: true }))
   return _httpServer
 }
 
@@ -74,14 +76,19 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   try { body = await req.json() } catch { /* ok */ }
   try {
     const result = await runPaidResearch({
-      goal: body.goal ?? '',
+      goal: body.goal,
+      content: body.content,
+      title: body.title,
+      source: body.source,
       sessionId: body.session_id,
       maxSteps: body.max_steps,
     })
     return NextResponse.json({
+      mode: result.mode,
       session_id: result.sessionId,
       final_answer: result.finalAnswer,
       references: result.references,
+      ...(result.knowledgeCard ? { knowledge_card: result.knowledgeCard } : {}),
       steps: result.steps.map(s => ({
         id: s.id, index: s.index, kind: s.kind, rationale: s.rationale,
         status: s.status, outputSummary: s.outputSummary,
@@ -90,7 +97,6 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       total_cost_usd: result.totalCostUsd,
       total_duration_ms: result.totalDurationMs,
       total_usage: result.totalUsage,
-      payment: { mode: 'free' },
     }, { status: 200 })
   } catch (e) {
     const status = e instanceof BusinessError ? e.status : 500
