@@ -596,7 +596,7 @@ researchkit/
 
 **v2.3.3** is a Patch release — built on top of the example cache + demo replay engine, it adds settings module effectiveness fixes (apiKey/defaultTemperature/defaultMaxTokens dead configs, Output Language in PDF/batch, Preset in Explain/Chat/Compare), Cost dashboard integration for PDF/batch modes, Knowledge Graph flicker fix (v2.3.1 backport: hoisted @keyframes, removed transition/animation conflict, merged useEffects, stabilized tree reference with `useMemo`, made Path Trace breadcrumb always visible), and a dev environment timeout fix (58s `Promise.race` was hardcoded; now only enforced under `process.env.VERCEL`). See [release notes](https://github.com/yuuumc/researchkit/releases/tag/v2.3.3) for full details.
 
-**v2.3.2** is a Patch release — security hardening based on `ResearchKit-2.3.1-审查报告.md`. Day 1: C1 Critical (API key moved out of cookie) + H1-H5 High (tool whitelist, SSRF guard, rate limit, stack trace sanitization, pluginId validation). Day 2: M2/M3/L1/L2/L3 cleanup (redirect policy, JSON truncation marker, dead code removal). See [release notes](./releases/v2.3.2-release-notes.md) for full details.
+**v2.3.2** is a Patch release — security hardening based on the v2.3.1 audit report. Day 1: C1 Critical (API key moved out of cookie) + H1-H5 High (tool whitelist, SSRF guard, rate limit, stack trace sanitization, pluginId validation). Day 2: M2/M3/L1/L2/L3 cleanup (redirect policy, JSON truncation marker, dead code removal). See [release notes](./releases/v2.3.2-release-notes.md) for full details.
 
 **v2.3.1** is a Patch release — security hardening (API key never shown in plain, danger styling, double confirmation), Vercel deployment fixes (58s timeout guard, MAX_ITERATIONS=0 on Vercel), and plugin marketplace improvements (deduped community plugins, built-in shown as installed). See [release notes](./releases/v2.3.1-release-notes.md) for full details.
 
@@ -604,103 +604,103 @@ researchkit/
 
 ---
 
-## v2.4.3 — x402 付费闸门部署指南
+## v2.4.3 — x402 Paid Gateway Deployment Guide
 
-### 是什么
+### What it is
 
-`POST /api/x402/research` —— 外部买家（OKX Wallet / onchainos CLI）走标准 x402 v2 协议付费调用 ResearchKit 的一次性研究 Agent。
+`POST /api/x402/research` — external buyers (OKX Wallet / onchainos CLI) follow the standard x402 v2 protocol to paid-call ResearchKit's one-shot research Agent.
 
-- 未付费：HTTP 402 + `PAYMENT-REQUIRED` 头（base64 JSON，含 accepts 列表 + Bazaar `outputSchema.input`）
-- 付费 replay：买家用 EIP-3009 签名 + `PAYMENT-SIGNATURE` 头重发 → 服务端 verify → 业务执行 → settle → HTTP 200 + 完整 JSON body + `PAYMENT-RESPONSE` 头（含链上 tx hash）
-- 协议契约：x402 v2 accepts-based + exact scheme + EIP-3009 `transferWithAuthorization` + OKX facilitator
-- 不修改 stage-3 性能优化（在另一 worktree 推进），只在外面包闸门
+- Unpaid: HTTP 402 + `PAYMENT-REQUIRED` header (base64 JSON, contains accepts list + Bazaar `outputSchema.input`)
+- Paid replay: buyer signs EIP-3009 + resends with `PAYMENT-SIGNATURE` header → server verifies → business executes → settles → HTTP 200 + full JSON body + `PAYMENT-RESPONSE` header (contains onchain tx hash)
+- Protocol contract: x402 v2 accepts-based + exact scheme + EIP-3009 `transferWithAuthorization` + OKX facilitator
+- Does not modify stage-3 performance optimizations (in another worktree), only wraps the gateway
 
-### 部署前必须准备
+### Prerequisites
 
-1. **OKX API 凭证**（HMAC 鉴权用）
-   - 打开 https://www.okx.com/account/my-api 创建 API key
-   - 权限勾"读取"，**不要**勾"交易"（降低泄露风险）
-   - 拿到三个值：`OKX_API_KEY` / `OKX_API_SECRET` / `OKX_API_PASSPHRASE`
-2. **收款地址**：你的 X Layer EVM 钱包地址（0x...）填到 `X402_PAYTO`
-3. **自有域名**（如 demo.researchkit.xyz）
-   - Vercel → Settings → Domains → 添加
-   - DNS 加 CNAME 到 `cname.vercel-dns.com`，证书自动签发
-   - `CORS_ALLOW_ORIGINS` 加入新域名（如需浏览器侧调试）
+1. **OKX API credentials** (for HMAC auth)
+   - Open https://www.okx.com/account/my-api to create an API key
+   - Grant "Read" permission, **do not** grant "Trade" (reduce leak risk)
+   - Get three values: `OKX_API_KEY` / `OKX_API_SECRET` / `OKX_API_PASSPHRASE`
+2. **Receiving address**: your X Layer EVM wallet address (0x...) → `X402_PAYTO`
+3. **Custom domain** (e.g. demo.researchkit.xyz)
+   - Vercel → Settings → Domains → Add
+   - Add CNAME to `cname.vercel-dns.com`, certificate auto-issued
+   - Add new domain to `CORS_ALLOW_ORIGINS` (if browser-side debugging needed)
 
-### Vercel 环境变量
+### Vercel environment variables
 
-在 Vercel 项目 → Settings → Environment Variables 填入（参考 `.env.local.example` 的 x402 段）：
+Fill in Vercel project → Settings → Environment Variables (see `.env.local.example` x402 section):
 
-| 变量 | 必填 | 默认 | 说明 |
+| Variable | Required | Default | Description |
 |------|------|------|------|
-| `X402_PAYTO` | ✅ | — | X Layer 收款地址 |
-| `OKX_API_KEY` | ✅ | — | OKX API key（只读） |
+| `X402_PAYTO` | ✅ | — | X Layer receiving address |
+| `OKX_API_KEY` | ✅ | — | OKX API key (read-only) |
 | `OKX_API_SECRET` | ✅ | — | OKX API secret |
 | `OKX_API_PASSPHRASE` | ✅ | — | OKX API passphrase |
-| `X402_PRICE_USD` | — | 0.005 | 单次价格 |
-| `X402_ASSET_ADDRESS` | — | USDT0 on X Layer | 代币合约 |
+| `X402_PRICE_USD` | — | 0.005 | Price per call |
+| `X402_ASSET_ADDRESS` | — | USDT0 on X Layer | Token contract |
 | `X402_NETWORK` | — | eip155:196 | X Layer mainnet |
 | `X402_EIP712_NAME` | — | USDT0 | EIP-712 domain |
 | `X402_EIP712_VERSION` | — | 2 | EIP-712 version |
-| `X402_FACILITATOR_BASE` | — | OKX 官方 | 一般不改 |
-| `X402_MAX_DURATION_MS` | — | 55000 | 业务预算（Vercel 60s 上限下） |
-| `X402_FREE_MODE` | — | false | true = 不收钱但仍走 x402 流程（demo 用） |
-| `X402_DISABLED` | — | false | true = 整个闸门关闭，回 v2.4.0 行为 |
+| `X402_FACILITATOR_BASE` | — | OKX official | Generally unchanged |
+| `X402_MAX_DURATION_MS` | — | 55000 | Business budget (under Vercel 60s limit) |
+| `X402_FREE_MODE` | — | false | true = no charge but still goes through x402 flow (for demo) |
+| `X402_DISABLED` | — | false | true = entire gateway disabled, revert to v2.4.0 behavior |
 
-### 部署后验证（外部买家测试矩阵）
+### Post-deployment verification (external buyer test matrix)
 
-用 onchainos CLI（已装好）模拟外部买家：
+Use onchainos CLI (already installed) to simulate an external buyer:
 
 ```bash
-# 1) 裸 POST 应得 402
+# 1) Bare POST should return 402
 curl -i -X POST https://demo.researchkit.xyz/api/x402/research \
   -H 'Content-Type: application/json' \
   -d '{"goal":"summarize x402 protocol"}'
-# 预期：HTTP/1.1 402 + PAYMENT-REQUIRED 头（base64 字符串）+ JSON body 含 accepts[]
+# Expected: HTTP/1.1 402 + PAYMENT-REQUIRED header (base64 string) + JSON body containing accepts[]
 
-# 2) x402-check（平台自动）
+# 2) x402-check (automatic by platform)
 onchainos agent x402-check --endpoint https://demo.researchkit.xyz/api/x402/research
-# 预期：valid=true 或 inputRequired=true + fields 列表（属正常）
+# Expected: valid=true or inputRequired=true + fields list (normal)
 
-# 3) quote → pay → 自动 replay
+# 3) quote → pay → auto replay
 onchainos payment quote https://demo.researchkit.xyz/api/x402/research \
   --method POST --param goal='summarize x402 protocol'
-# 按提示确认 → 自动签名 + 提交
-# 预期：HTTP 200 + 完整 JSON（final_answer / references / steps / payment.transaction）
+# Confirm as prompted → auto sign + submit
+# Expected: HTTP 200 + full JSON (final_answer / references / steps / payment.transaction)
 
-# 4) 同签名重复 replay
-# 用上一步拿到的 PAYMENT-SIGNATURE 手动重发
-# 预期：HTTP 200 + X-Idempotent-Replay: true 头 + 链上无第二笔扣款
+# 4) Same signature repeated replay
+# Manually resend with PAYMENT-SIGNATURE from previous step
+# Expected: HTTP 200 + X-Idempotent-Replay: true header + no second onchain deduction
 
-# 5) 超长 goal / 触发超时
-onchainos payment quote ... --param goal='<5000字研究目标>'
-# 预期：4xx / 5xx，买家钱包无扣款记录
+# 5) Overly long goal / trigger timeout
+onchainos payment quote ... --param goal='<5000-char research goal>'
+# Expected: 4xx / 5xx, buyer wallet no deduction
 
-# 6) 错误 token
-# 用非 USDT0 的 token 签名 → 平台拒
-# 预期：402 + verify_failed
+# 6) Wrong token
+# Sign with non-USDT0 token → platform rejects
+# Expected: 402 + verify_failed
 
-# 7) 拿到的 transaction hash 到 X Layer explorer 查
+# 7) Check the transaction hash on X Layer explorer
 # https://www.okx.com/web3/explorer/xlayer/tx/<hash>
-# 预期：transferWithAuthorization from 买家地址 to X402_PAYTO，amount=5000（即 0.005 USDT）
+# Expected: transferWithAuthorization from buyer address to X402_PAYTO, amount=5000 (i.e. 0.005 USDT)
 ```
 
-### 失败语义速查
+### Failure semantics quick reference
 
-| 现象 | 原因 | 处置 |
+| Symptom | Cause | Action |
 |------|------|------|
-| 402 + `verify_failed` | 签名不对 / 过期 | 让买家重新 quote |
-| 402 + `scheme_mismatch` / `payto_mismatch` / `amount_mismatch` | 买家签了别家的 402 挑战 | 检查 accepts[] 字段 |
-| 502 + `facilitator_unreachable` | OKX 端点不通 / 鉴权失败 | 检查 OKX_API_* 与网络 |
-| 500 + `settle_failed` | 链上 revert | 查 tx hash，可能 gas 不足 |
-| 504 + `timeout` | 业务超过预算 | 缩短 goal / 升 Vercel Pro |
-| 200 + `X-Idempotent-Replay: true` | 同签名重复 | 正常 |
+| 402 + `verify_failed` | Invalid/expired signature | Ask buyer to re-quote |
+| 402 + `scheme_mismatch` / `payto_mismatch` / `amount_mismatch` | Buyer signed another party's 402 challenge | Check accepts[] fields |
+| 502 + `facilitator_unreachable` | OKX endpoint unreachable / auth failed | Check OKX_API_* and network |
+| 500 + `settle_failed` | Onchain revert | Check tx hash, possibly insufficient gas |
+| 504 + `timeout` | Business exceeded budget | Shorten goal / upgrade Vercel Pro |
+| 200 + `X-Idempotent-Replay: true` | Same signature repeated | Normal |
 
-### v2.5 计划
+### v2.5 roadmap
 
-- 内存缓存迁 Upstash Redis（持久 + 跨实例）
-- `aggr_deferred` scheme 支持（订阅场景）
-- 链上记账扩展：每次 settle 写 `lib/onchain-ledger.ts` 一笔
+- Migrate in-memory cache to Upstash Redis (persistent + cross-instance)
+- `aggr_deferred` scheme support (subscription scenarios)
+- Onchain accounting extension: write each settle to `lib/onchain-ledger.ts`
 
 ---
 
