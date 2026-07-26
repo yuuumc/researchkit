@@ -34,6 +34,7 @@ import {
   type PaymentRequirements,
 } from '@/lib/x402/payload'
 import { verifyPayment, settlePayment } from '@/lib/x402/facilitator'
+import { settleOnChain } from '@/lib/x402/settle-onchain'
 import { getCached, setCached } from '@/lib/x402/idempotency'
 import { runPaidResearch, BusinessError } from '@/lib/x402/run-paid'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
@@ -243,7 +244,8 @@ export async function POST(request: NextRequest) {
     return errorResponse(request, 500, { code: 'business_failed', message: e instanceof Error ? e.message : 'internal error' })
   }
 
-  // 7) 尝试 facilitator /settle（仅在 verify 成功时尝试）
+  // 7) 结算：facilitator → 链上直签 → trust 降级
+  // 优先 facilitator，失败时直接调 USDT0.transferWithAuthorization 上链
   if (isVerifiedOnChain) {
     try {
       const settle = await settlePayment(cfg, payload, requirements)
@@ -251,7 +253,21 @@ export async function POST(request: NextRequest) {
         settledTx = settle.transaction
       }
     } catch (_e) {
-      console.warn('[x402] facilitator /settle unreachable, payment not settled on-chain')
+      console.warn('[x402] facilitator /settle unreachable, trying on-chain settle')
+    }
+  }
+
+  // facilitator 未结算 → 尝试直接上链（EIP-3009，需要 X402_GAS_PRIVATE_KEY）
+  if (!settledTx) {
+    try {
+      const onchain = await settleOnChain(payload)
+      if (onchain.success && onchain.transaction) {
+        settledTx = onchain.transaction
+      } else {
+        console.warn('[x402] on-chain settle returned:', onchain.errorReason || 'unknown')
+      }
+    } catch (_e) {
+      console.warn('[x402] on-chain settle threw:', _e instanceof Error ? _e.message : String(_e))
     }
   }
 

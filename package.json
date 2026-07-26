@@ -17,7 +17,8 @@
     "openai": "^4.52.0",
     "pdf-parse": "^2.4.5",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "viem": "^2.55.8"
   },
   "devDependencies": {
     "@types/node": "^20",
