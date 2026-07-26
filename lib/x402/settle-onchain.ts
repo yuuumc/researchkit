@@ -71,7 +71,7 @@ export async function settleOnChain(
   const value = BigInt(auth.value)
   const validAfter = BigInt(auth.validAfter)
   const validBefore = BigInt(auth.validBefore)
-  const nonce = `0x${Buffer.from(auth.nonce, 'utf-8').toString('hex')}` as `0x${string}`
+  const nonce = (auth.nonce.startsWith('0x') ? auth.nonce : `0x${auth.nonce}`) as `0x${string}`
 
   try {
     const chain = { ...xLayer, rpcUrls: { default: { http: [rpcUrl] } } }
