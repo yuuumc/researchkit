@@ -250,9 +250,8 @@ export async function POST(request: NextRequest) {
     if (verify.isValid) {
       isVerifiedOnChain = true
     }
-  } catch (_e) {
-    // facilitator 不可用 → 降级到本地验证（已完成 assertPayloadMatches）
-    console.warn('[x402] facilitator /verify unreachable, falling back to local verification')
+  } catch (e) {
+    console.warn('[x402] facilitator /verify error:', e instanceof Error ? e.message : String(e))
   }
 
   // 6) 业务执行（带超时；失败时不 settle）

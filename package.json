@@ -13,6 +13,8 @@
     "verify:example-cache": "tsx scripts/verify-example-cache.ts"
   },
   "dependencies": {
+    "@okxweb3/x402-core": "^0.1.0",
+    "@okxweb3/x402-evm": "^0.2.1",
     "next": "^14.2.35",
     "openai": "^4.52.0",
     "pdf-parse": "^2.4.5",
