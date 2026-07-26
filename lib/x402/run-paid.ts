@@ -1,5 +1,5 @@
 /**
- * v2.4.1 — 付费 replay 的同步业务执行
+ * v2.4.2 — 付费 replay 的同步业务执行
  *
  * 与 `/api/agent/run` 共享 `runAgent`，但：
  *   - 不走 SSE、不调 onStage/onAgentToken

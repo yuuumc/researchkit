@@ -1,5 +1,5 @@
 /**
- * v2.4.1 — x402 协议层 payload 编码/解码
+ * v2.4.2 — x402 协议层 payload 编码/解码
  *
  * 协议参考：
  *   - x402 v2 (accepts-based) — Coinbase x402 / x402.org

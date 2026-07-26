@@ -1,5 +1,5 @@
 /**
- * v2.4.1 — OKX Facilitator 客户端
+ * v2.4.2 — OKX Facilitator 客户端
  *
  * OKX 官方 x402 facilitator 端点（来源：GitHub ShieldSuite PR #1 + OKX dev-docs/payments）：
  *   POST {base}/verify  → 验证 PAYMENT-SIGNATURE（无 gas，仅检查签名/到期/匹配）

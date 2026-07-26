@@ -1,7 +1,7 @@
 {
   "tab": {
     "label": "Agent 运行",
-    "hint": "v2.4.1 — 输入研究目标，观察 Planner / Step 1-N / Synthesizer 的执行流。"
+    "hint": "v2.4.2 — 输入研究目标，观察 Planner / Step 1-N / Synthesizer 的执行流。"
   },
   "form": {
     "goalLabel": "研究目标",

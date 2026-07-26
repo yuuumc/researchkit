@@ -1,5 +1,5 @@
 /**
- * v2.4.1 — x402 付费 Agent 端点
+ * v2.4.2 — x402 付费 Agent 端点
  *
  * POST /api/x402/research
  *

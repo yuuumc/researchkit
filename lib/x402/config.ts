@@ -1,5 +1,5 @@
 /**
- * v2.4.1 — x402 配置中心
+ * v2.4.2 — x402 配置中心
  *
  * 所有 x402 协议相关环境变量集中解析，缺关键值时抛出可读错误。
  * 环境变量列表（全部在 .env.local.example 里有占位）：
@@ -170,7 +170,7 @@ export function buildAccepts(cfg: X402Config): AcceptedScheme {
 export function buildPaymentRequirements(resourceUrl: string, cfg: X402Config): PaymentRequirements {
   return {
     x402Version: 2,
-    resource: { url: resourceUrl, description: 'ResearchKit multi-step research agent (v2.4.1). One-shot per call.' },
+    resource: { url: resourceUrl, description: 'ResearchKit multi-step research agent (v2.4.2). One-shot per call.' },
     accepts: [buildAccepts(cfg)],
   }
 }
