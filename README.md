@@ -4,20 +4,20 @@
 > chat with it, compare it, explain it, anchor it onchain.
 > Built for **OKX AI Genesis Hackathon** — ASP #6853 on [OKX.AI](https://www.okx.ai/agents/6853).
 
-![version](https://img.shields.io/badge/version-v2.4.2-blue)
+![version](https://img.shields.io/badge/version-v2.4.3-blue)
 ![status](https://img.shields.io/badge/status-live-brightgreen)
 ![i18n](https://img.shields.io/badge/i18n-zh--CN%20%2F%20en--US-orange)
 ![tests](https://img.shields.io/badge/regression-10%2F10-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 🌐 **Live demo**: https://www.researchkit.online
-📦 **Latest release**: [v2.4.2 — x402 paid endpoint (OKX Agent Payments Protocol)](https://github.com/yuuumc/researchkit/releases/tag/v2.4.2)
+📦 **Latest release**: [v2.4.3 — x402 paid endpoint (OKX Agent Payments Protocol, official OKX Payment SDK)](https://github.com/yuuumc/researchkit/releases/tag/v2.4.3)
 
 📖 **Docs**: [CHANGELOG](./docs/CHANGELOG.md) · [v2.4.0 Release Notes](./releases/v2.4.0-release-notes.md) · [v2.4.0 Architecture](./docs/v2.4.0-architecture.md) · [Branching](./docs/BRANCHING.md)
 
 ---
 
-## Quick Stats (v2.4.2)
+## Quick Stats (v2.4.3)
 
 | Metric | Value |
 |---|---|
@@ -578,7 +578,7 @@ researchkit/
 | Service type | A2MCP (x402 paid, 0.005 USDT/call) |
 | Endpoint | `https://www.researchkit.online/api/x402/research` |
 | Network | X Layer |
-| Version | v2.4.2 (x402 paid endpoint + multi-step research Agent + session memory + i18n, 2026-07-26) |
+| Version | v2.4.3 (x402 paid endpoint + OKX Payment SDK + multi-step research Agent + session memory + i18n, 2026-07-26) |
 | Onchain Mode | `mock (demo)` — 6 swappable interfaces stubbed, real SDK in D23/D24 roadmap |
 | Onchain OS TX | _mock_ (deterministic hash derived from KC content + wallet, never broadcast) |
 
@@ -604,7 +604,7 @@ researchkit/
 
 ---
 
-## v2.4.2 — x402 付费闸门部署指南
+## v2.4.3 — x402 付费闸门部署指南
 
 ### 是什么
 
