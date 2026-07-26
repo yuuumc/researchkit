@@ -62,8 +62,6 @@ async function getHttpServer(): Promise<any> {
     } as any,
   })
 
-  // TODO: 验证 content 模式后删除此行
-  _httpServer.onProtectedRequest(async () => ({ grantAccess: true }))
   return _httpServer
 }
 
