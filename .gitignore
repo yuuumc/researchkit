@@ -62,3 +62,6 @@ releases/demo-video/*.mp4
 自定义*.txt
 v2.1方案优化建议.txt
 其他功能.txt
+
+.vercel
+.env*

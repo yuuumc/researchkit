@@ -9,6 +9,7 @@
  */
 
 import { createWalletClient, createPublicClient, http, type Address } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 import { xLayer } from 'viem/chains'
 import type { PaymentPayload } from './payload'
 
@@ -79,7 +80,7 @@ export async function settleOnChain(
     const walletClient = createWalletClient({
       chain,
       transport: http(rpcUrl),
-      account: privateKey as `0x${string}`,
+      account: privateKeyToAccount(privateKey as `0x${string}`),
     })
 
     const hash = await walletClient.writeContract({
