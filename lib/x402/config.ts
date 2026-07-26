@@ -95,7 +95,7 @@ export function getX402Config(): X402Config {
   const maxTimeoutSeconds = readNum(process.env.X402_MAX_TIMEOUT_SECONDS, 300)
   const eip712Name = (process.env.X402_EIP712_NAME || 'USDT0').trim()
   const eip712Version = (process.env.X402_EIP712_VERSION || '2').trim()
-  const facilitatorBase = (process.env.X402_FACILITATOR_BASE || 'https://web3.okx.com/api/v6/pay/x402').replace(/\/+$/, '')
+  const facilitatorBase = (process.env.X402_FACILITATOR_BASE || 'https://web3.okx.com').replace(/\/+$/, '')
 
   const okxApiKey = (process.env.OKX_API_KEY || '').trim()
   const okxApiSecret = (process.env.OKX_API_SECRET || '').trim()

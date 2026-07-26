@@ -7,11 +7,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { OKXFacilitatorClient } from '@okxweb3/x402-core'
 import { ExactEvmScheme } from '@okxweb3/x402-evm/exact/server'
-import {
-  x402ResourceServer,
-  x402HTTPResourceServer,
-  withX402FromHTTPServer,
-} from '@okxweb3/x402-next'
+import { x402ResourceServer, x402HTTPResourceServer } from '@okxweb3/x402-core/server'
+import type { HTTPAdapter } from '@okxweb3/x402-core/http'
+
+class NextAdapter implements HTTPAdapter {
+  private _body: any; private _read = false
+  constructor(private req: NextRequest) {}
+  getHeader(n: string) { return this.req.headers.get(n) ?? undefined }
+  getMethod() { return this.req.method }
+  getPath() { return this.req.nextUrl.pathname }
+  getUrl() { return this.req.url }
+  getAcceptHeader() { return this.req.headers.get('accept') ?? '*/*' }
+  getUserAgent() { return this.req.headers.get('user-agent') ?? '' }
+  async getBody() { if (this._read) return this._body; this._read = true; try { this._body = await this.req.json() } catch { this._body = {} }; return this._body }
+}
 import { getX402Config } from '@/lib/x402/config'
 import { runPaidResearch, BusinessError } from '@/lib/x402/run-paid'
 
@@ -38,7 +47,7 @@ async function getHttpServer(): Promise<any> {
 
   const resourceServer = new x402ResourceServer(facilitator)
   resourceServer.register('eip155:196', new (ExactEvmScheme as any)())
-  await resourceServer.initialize()
+  try { await resourceServer.initialize() } catch (e) { throw new Error(`[x402] facilitator init failed: ${(e as Error).message}`) }
 
   _httpServer = new x402HTTPResourceServer(resourceServer, {
     '*': {
@@ -52,9 +61,6 @@ async function getHttpServer(): Promise<any> {
       }],
     } as any,
   })
-
-  // 免费模式：放行所有请求
-  _httpServer.onProtectedRequest(async () => ({ grantAccess: true }))
 
   return _httpServer
 }
@@ -101,19 +107,31 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204 })
 }
 
-// GET / POST 都由 withX402FromHTTPServer 包装
-// freeMode 下自动放行，直接进入 handler
-const _wrappedGet: any = null
-const _wrappedPost: any = null
-
 export async function GET(req: NextRequest) {
-  const server = await getHttpServer()
-  const wrap = withX402FromHTTPServer(handler, server as any)
-  return wrap(req)
+  try {
+    const server = await getHttpServer()
+    const result = await server.processHTTPRequest({
+      adapter: new NextAdapter(req),
+      path: req.nextUrl.pathname,
+      method: 'GET',
+    })
+    if (result.type === 'no-payment-required' || result.type === 'payment-verified') return handler(req)
+    const h = { ...(result as any)?.response?.headers ?? {} } as Record<string, string>
+    return new NextResponse(JSON.stringify((result as any)?.response?.body ?? {}), { status: 402, headers: h })
+  } catch (e) { return NextResponse.json({ error: 'payment gateway unavailable' }, { status: 503 }) }
 }
 
 export async function POST(req: NextRequest) {
-  const server = await getHttpServer()
-  const wrap = withX402FromHTTPServer(handler, server as any)
-  return wrap(req)
+  try {
+    const server = await getHttpServer()
+    const result = await server.processHTTPRequest({
+      adapter: new NextAdapter(req),
+      path: req.nextUrl.pathname,
+      method: 'POST',
+      paymentHeader: req.headers.get('PAYMENT-SIGNATURE') ?? req.headers.get('x-payment') ?? undefined,
+    })
+    if (result.type === 'no-payment-required' || result.type === 'payment-verified') return handler(req)
+    const h = { ...(result as any)?.response?.headers ?? {} } as Record<string, string>
+    return new NextResponse(JSON.stringify((result as any)?.response?.body ?? {}), { status: 402, headers: h })
+  } catch (e) { return NextResponse.json({ error: 'payment gateway unavailable' }, { status: 503 }) }
 }
