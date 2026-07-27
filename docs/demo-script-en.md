@@ -4,7 +4,7 @@
 **Voiceover language**: English
 **Demo content**: Analyze one English paper (Transformer / "Attention Is All You Need")
 **Live URL**: https://researchkit-mu.vercel.app
-**ASP**: https://www.okx.ai/agents/6853
+**ASP**: https://www.okx.ai/agents/9665
 
 ---
 
@@ -77,7 +77,7 @@
 **Screen**:
 - Click "Download Markdown" button (show file appearing in browser download bar)
 - Click "Copy Obsidian" button (show "Copied!" pulse animation)
-- Final frame (hold 3 seconds): ResearchKit OS logo + "Built for OKX AI Genesis Hackathon #OKXAI" + URL `researchkit-mu.vercel.app` + ASP URL `okx.ai/agents/6853`
+- Final frame (hold 3 seconds): ResearchKit OS logo + "Built for OKX AI Genesis Hackathon #OKXAI" + URL `researchkit-mu.vercel.app` + ASP URL `okx.ai/agents/9665`
 
 ---
 
@@ -140,9 +140,9 @@ The judges care about the product, not the live performance. A polished pre-reco
 
 | Field | Value |
 |---|---|
-| ASP ID | #6853 |
+| ASP ID | #9665 |
 | Service name | Paper Analysis Service |
 | Service type | A2MCP (free, 0 USDT) |
 | Endpoint | `https://researchkit-mu.vercel.app/api/research/multi-agent-stream` |
 | Network | X Layer |
-| ASP URL | https://www.okx.ai/agents/6853 |
+| ASP URL | https://www.okx.ai/agents/9665 |

@@ -59,6 +59,26 @@ async function getHttpServer(): Promise<any> {
         price: `$${cfg.priceUsd}`,
         maxTimeoutSeconds: cfg.maxTimeoutSeconds,
       }],
+      unpaidResponseBody: async () => ({
+        contentType: 'application/json',
+        body: {
+          error: 'Payment Required',
+          x402Version: 2,
+          resource: {
+            url: 'https://www.researchkit.online/api/x402/research',
+            description: 'ResearchKit multi-step research agent (v2.4.3). One-shot per call.',
+          },
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:196',
+            asset: cfg.assetAddress,
+            amount: cfg.amountAtomic,
+            decimals: cfg.assetDecimals,
+            payTo: cfg.payTo,
+            maxTimeoutSeconds: cfg.maxTimeoutSeconds,
+          }],
+        },
+      }),
     } as any,
   })
 

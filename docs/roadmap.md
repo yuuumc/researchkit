@@ -23,7 +23,7 @@ See [CHANGELOG.md](./CHANGELOG.md) for the full record. Highlights:
 - ✅ 6-agent OS architecture (Planner / Reader / Analyzer / Terminology / KnowledgeBuilder / Recommendation)
 - ✅ Adaptive prompting based on input type
 - ✅ Locale-aware two-stage reasoning
-- ✅ ASP #6853 listed on OKX.AI Marketplace
+- ✅ ASP #9665 listed on OKX.AI Marketplace
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "name": "researchkit-os",
   "version": "2.4.3",
-  "description": "AI Research Operating System — multi-step research Agent (v2.4.3) with x402 paid endpoint (OKX Agent Payments Protocol compatible, official OKX Payment SDK integrated). Multi-agent pipeline + session memory + MCP/ASP integration. Built for OKX AI Genesis Hackathon (ASP #6853).",
+  "description": "AI Research Operating System — multi-step research Agent (v2.4.3) with x402 paid endpoint (OKX Agent Payments Protocol compatible, official OKX Payment SDK integrated). Multi-agent pipeline + session memory + MCP/ASP integration. Built for OKX AI Genesis Hackathon (ASP #9665).",
   "private": true,
   "scripts": {
     "dev": "next dev",

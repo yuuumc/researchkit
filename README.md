@@ -2,7 +2,7 @@
 
 > Multi-agent research pipeline that turns any paper into a structured knowledge card —
 > chat with it, compare it, explain it, anchor it onchain.
-> Built for **OKX AI Genesis Hackathon** — ASP #6853 on [OKX.AI](https://www.okx.ai/agents/6853).
+> Built for **OKX AI Genesis Hackathon** — ASP #9665 on [OKX.AI](https://www.okx.ai/agents/9665).
 
 ![version](https://img.shields.io/badge/version-v2.4.3-blue)
 ![status](https://img.shields.io/badge/status-live-brightgreen)
@@ -346,7 +346,7 @@ Hot-pluggable + idempotent + never throws. Plugin states persisted to localStora
 - **Test Runner**: Native node fetch + SSE parsing (zero heavy deps, no jest/vitest)
 - **Visualization**: Custom Knowledge Graph + Agent Timeline + Cost Dashboard + LiveThoughts + ScrollToTop
 - **Deploy**: Vercel (`researchkit-mu.vercel.app`)
-- **Onchain OS**: ASP registered on X Layer (ASP ID #6853)
+- **Onchain OS**: ASP registered on X Layer (ASP ID #9665)
 
 ---
 
@@ -573,7 +573,7 @@ researchkit/
 
 | Field | Value |
 |---|---|
-| ASP ID | #6853 |
+| ASP ID | #9665 |
 | ASP Name | ResearchKit OS |
 | Service type | A2MCP (x402 paid, 0.005 USDT/call) |
 | Endpoint | `https://www.researchkit.online/api/x402/research` |
