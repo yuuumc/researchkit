@@ -54,6 +54,7 @@ async function getHttpServer(): Promise<any> {
     'POST /api/x402/research': {
       resource: 'https://www.researchkit.online/api/x402/research',
       description: 'ResearchKit multi-step research agent (v2.4.3). One-shot per call.',
+      mimeType: 'application/json',
       accepts: [{
         scheme: 'exact',
         network: 'eip155:196' as any,
