@@ -21,7 +21,8 @@ class NextAdapter implements HTTPAdapter {
   getUserAgent() { return this.req.headers.get('user-agent') ?? '' }
   async getBody() { if (this._read) return this._body; this._read = true; try { this._body = await this.req.json() } catch { this._body = {} }; return this._body }
 }
-import { getX402Config } from '@/lib/x402/config'
+import { getX402Config, buildPaymentRequirements } from '@/lib/x402/config'
+import { b64encode } from '@/lib/x402/payload'
 import { runPaidResearch, BusinessError } from '@/lib/x402/run-paid'
 
 export const dynamic = 'force-dynamic'
@@ -112,18 +113,15 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204 })
 }
 
-export async function GET(req: NextRequest) {
-  try {
-    const server = await getHttpServer()
-    const result = await server.processHTTPRequest({
-      adapter: new NextAdapter(req),
-      path: req.nextUrl.pathname,
-      method: 'GET',
-    })
-    if (result.type === 'no-payment-required' || result.type === 'payment-verified') return handler(req)
-    const h = { ...(result as any)?.response?.headers ?? {} } as Record<string, string>
-    return new NextResponse(JSON.stringify((result as any)?.response?.body ?? {}), { status: 402, headers: h })
-  } catch (e) { return NextResponse.json({ error: 'payment gateway unavailable' }, { status: 503 }) }
+export async function GET() {
+  // GET 必须返回 402，平台 x402-check 用 GET 探测端点
+  const cfg = getX402Config()
+  const reqs = buildPaymentRequirements('https://www.researchkit.online/api/x402/research', cfg)
+  const hdr = b64encode(JSON.stringify(reqs))
+  return new NextResponse(JSON.stringify({ error: 'Payment Required', x402Version: 2, resource: reqs.resource, accepts: reqs.accepts }), {
+    status: 402,
+    headers: { 'Content-Type': 'application/json', 'PAYMENT-REQUIRED': hdr },
+  })
 }
 
 export async function POST(req: NextRequest) {
