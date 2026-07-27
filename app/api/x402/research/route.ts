@@ -50,7 +50,7 @@ function getMw(): any {
         maxTimeoutSeconds: cfg.maxTimeoutSeconds,
       }],
     } as any,
-  }, resourceServer)
+  }, resourceServer, {}, null, true)
 
   return _mw
 }
