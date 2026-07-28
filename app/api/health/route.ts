@@ -5,8 +5,17 @@
 
 import { NextResponse } from 'next/server'
 import { listTools } from '@/lib/tools/registry'
+import { getResourceServer } from '@/lib/x402/gate'
+
+let warm: Promise<unknown> | null = null
+
+async function warmup() {
+  if (!warm) warm = getResourceServer().catch(() => null)
+  return warm
+}
 
 export async function GET() {
+  warmup() // fire-and-forget 暖机
   const tools = listTools()
   return NextResponse.json({
     success: true,

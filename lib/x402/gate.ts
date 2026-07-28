@@ -57,7 +57,7 @@ class NextAdapter implements HTTPAdapter {
 let _resourceServer: any = null
 const _httpServers: Map<number, any> = new Map()
 
-async function getResourceServer(): Promise<any> {
+export async function getResourceServer(): Promise<any> {
   if (_resourceServer) return _resourceServer
 
   const cfg = getX402Config()
