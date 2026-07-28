@@ -74,7 +74,7 @@ export async function getResourceServer(): Promise<any> {
   try {
     await rs.initialize()
   } catch (e) {
-    throw new Error(`[x402:gate] facilitator init failed: ${(e as Error).message}`)
+    console.error(`[x402:gate] facilitator init failed (non-fatal): ${(e as Error).message}`)
   }
 
   _resourceServer = rs
