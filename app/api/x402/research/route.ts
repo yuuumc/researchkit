@@ -13,8 +13,21 @@ const { GET, POST, OPTIONS } = withX402(
   { priceUsd: 0.005, description: 'ResearchKit multi-step research agent (v2.4.4). One-shot per call.' },
   async (body) => {
     try {
+      // 平台可能传 serviceParams 而非 goal，做兼容解析
+      let goal = body?.goal
+      let content = body?.content
+      if (!goal && !content && body?.serviceParams) {
+        const sp = String(body.serviceParams)
+        if (sp.startsWith('研究目标：') || sp.startsWith('content:')) {
+          goal = sp.replace(/^(研究目标：|content:)/, '').trim()
+        } else if (sp.length >= 200) {
+          content = sp
+        } else {
+          goal = sp
+        }
+      }
       const result = await runPaidResearch({
-        goal: body?.goal, content: body?.content, title: body?.title, source: body?.source,
+        goal, content, title: body?.title, source: body?.source,
         sessionId: body?.session_id, maxSteps: body?.max_steps,
       })
       return NextResponse.json({
